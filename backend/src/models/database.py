@@ -29,6 +29,7 @@ class Tenant(Base):
     
     # Relationships
     document_types = relationship("DocumentType", back_populates="tenant", cascade="all, delete-orphan")
+    document_categories = relationship("DocumentCategory", back_populates="tenant", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")
     templates = relationship("Template", back_populates="tenant", cascade="all, delete-orphan")
 
@@ -82,6 +83,42 @@ class Template(Base):
         return f"<Template(id={self.id}, name='{self.name}', version={self.version})>"
 
 
+class DocumentCategory(Base):
+    """Document category model"""
+    __tablename__ = "document_categories"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    color = Column(String(7), default="#3b82f6")  # Hex color
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    tenant = relationship("Tenant", back_populates="document_categories")
+    documents = relationship("Document", back_populates="category")
+
+    def __repr__(self):
+        return f"<DocumentCategory(id={self.id}, name='{self.name}')>"
+
+
+class DocumentTag(Base):
+    """Document tag model for many-to-many tagging"""
+    __tablename__ = "document_tags"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    tag_name = Column(String(50), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    document = relationship("Document", back_populates="tags")
+
+    def __repr__(self):
+        return f"<DocumentTag(id={self.id}, tag='{self.tag_name}')>"
+
+
 class Document(Base):
     """Document model"""
     __tablename__ = "documents"
@@ -93,7 +130,21 @@ class Document(Base):
     file_size = Column(Integer)
     mime_type = Column(String(100))
     document_type_id = Column(UUID(as_uuid=True), ForeignKey("document_types.id"))
+    category_id = Column(UUID(as_uuid=True), ForeignKey("document_categories.id"))
+    
+    # Content and processing
     raw_content = Column(Text)
+    thumbnail_s3_key = Column(String(500))
+    
+    # Async extraction tracking
+    extraction_status = Column(String(50), default="pending")
+    extraction_error = Column(Text)
+    page_count = Column(Integer)
+    character_count = Column(Integer)
+    word_count = Column(Integer)
+    extraction_completed_at = Column(DateTime(timezone=True))
+    
+    # Status tracking
     status = Column(String(50), default="uploaded")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -101,6 +152,8 @@ class Document(Base):
     # Relationships
     tenant = relationship("Tenant", back_populates="documents")
     document_type = relationship("DocumentType", back_populates="documents")
+    category = relationship("DocumentCategory", back_populates="documents")
+    tags = relationship("DocumentTag", back_populates="document", cascade="all, delete-orphan")
     extractions = relationship("Extraction", back_populates="document", cascade="all, delete-orphan")
 
     def __repr__(self):

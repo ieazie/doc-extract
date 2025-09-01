@@ -10,6 +10,8 @@ import logging
 from .config import settings, get_cors_origins
 from .models.database import create_tables
 from .api import health
+from .api import documents
+from .api import categories
 
 # Configure logging
 logging.basicConfig(
@@ -90,9 +92,10 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health.router)
+app.include_router(documents.router, prefix="/api")
+app.include_router(categories.router, prefix="/api")
 
 # TODO: Include other routers as they are implemented
-# app.include_router(documents.router)
 # app.include_router(templates.router)
 # app.include_router(extractions.router)
 

@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     ollama_model: str = Field(default="gemma3:4b", env="OLLAMA_MODEL")
     
     # File Upload Settings
-    max_file_size: int = Field(default=52428800, env="MAX_FILE_SIZE")  # 50MB
+    max_file_size: int = Field(default=20971520, env="MAX_FILE_SIZE")  # 20MB
     allowed_file_types: Set[str] = {
         'application/pdf',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
