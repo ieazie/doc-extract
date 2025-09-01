@@ -60,6 +60,13 @@ class BackgroundTaskService:
                 db, document_id, extraction_result
             )
             
+            # Auto-detect document type if not set
+            if not document.document_type_id and extraction_result.get("raw_content"):
+                await self._auto_detect_document_type(
+                    db, document_id, extraction_result["raw_content"], 
+                    document.original_filename, document.mime_type
+                )
+            
             # Auto-detect category if not set
             if not document.category_id and extraction_result.get("raw_content"):
                 await self._auto_detect_category(
@@ -121,6 +128,51 @@ class BackgroundTaskService:
         except Exception as e:
             logger.error(f"Failed to update document {document_id}: {e}")
             db.rollback()
+
+    async def _auto_detect_document_type(
+        self,
+        db: Session,
+        document_id: UUID,
+        text_content: str,
+        filename: str,
+        mime_type: str
+    ) -> None:
+        """
+        Auto-detect and assign document type
+        
+        Args:
+            db: Database session
+            document_id: Document identifier
+            text_content: Extracted text content
+            filename: Original filename
+            mime_type: File MIME type
+        """
+        try:
+            # Detect document type using document processor
+            detected_type = await self.document_processor.detect_document_type(
+                text_content, filename, mime_type
+            )
+            
+            if detected_type:
+                # Find the document type in the database
+                from ..models.database import DocumentType
+                
+                document = db.query(Document).filter(Document.id == document_id).first()
+                if not document:
+                    return
+                
+                doc_type = db.query(DocumentType).filter(
+                    DocumentType.tenant_id == document.tenant_id,
+                    DocumentType.name == detected_type
+                ).first()
+                
+                if doc_type:
+                    document.document_type_id = doc_type.id
+                    db.commit()
+                    logger.info(f"Auto-assigned document type '{detected_type}' to document {document_id}")
+                
+        except Exception as e:
+            logger.warning(f"Auto-type detection failed for document {document_id}: {e}")
 
     async def _auto_detect_category(
         self, 

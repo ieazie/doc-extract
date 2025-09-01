@@ -627,6 +627,69 @@ class DocumentProcessor:
         
         return f"{size_bytes:.1f} {size_names[i]}"
 
+    async def detect_document_type(self, text: str, filename: str, mime_type: str) -> str:
+        """
+        Auto-detect document type based on content, filename, and MIME type
+        
+        Args:
+            text: Document text content
+            filename: Original filename
+            mime_type: File MIME type
+            
+        Returns:
+            Detected document type name
+        """
+        text_lower = text.lower()
+        filename_lower = filename.lower()
+        
+        # Define document type keywords and patterns
+        type_patterns = {
+            'invoice': {
+                'keywords': ['invoice', 'bill', 'payment', 'amount due', 'total', 'tax', 'subtotal', 'invoice number', 'billing'],
+                'filename_patterns': ['invoice', 'bill', 'receipt'],
+                'score_multiplier': 1.0
+            },
+            'contract': {
+                'keywords': ['agreement', 'contract', 'terms', 'conditions', 'party', 'whereas', 'hereby', 'executed', 'binding'],
+                'filename_patterns': ['contract', 'agreement', 'terms'],
+                'score_multiplier': 1.0
+            },
+            'insurance_policy': {
+                'keywords': ['policy', 'coverage', 'premium', 'deductible', 'claim', 'insured', 'beneficiary', 'policy number'],
+                'filename_patterns': ['policy', 'insurance', 'coverage'],
+                'score_multiplier': 1.0
+            }
+        }
+        
+        # Score each document type
+        type_scores = {}
+        for doc_type, patterns in type_patterns.items():
+            score = 0
+            
+            # Score based on content keywords
+            for keyword in patterns['keywords']:
+                if keyword in text_lower:
+                    score += text_lower.count(keyword) * patterns['score_multiplier']
+            
+            # Score based on filename patterns (higher weight)
+            for pattern in patterns['filename_patterns']:
+                if pattern in filename_lower:
+                    score += 3 * patterns['score_multiplier']
+            
+            type_scores[doc_type] = score
+        
+        # Return type with highest score, or default based on file type
+        if type_scores and max(type_scores.values()) > 0:
+            return max(type_scores, key=type_scores.get)
+        
+        # Default fallback based on MIME type
+        if mime_type == 'application/pdf':
+            return 'contract'  # PDFs often contracts
+        elif 'word' in mime_type or 'document' in mime_type:
+            return 'contract'  # Word docs often contracts
+        else:
+            return 'invoice'  # Default fallback
+
     async def detect_document_category(self, text: str, filename: str) -> Optional[str]:
         """
         Simple heuristic-based document category detection
