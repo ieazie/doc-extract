@@ -274,3 +274,227 @@ GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
 GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO postgres;
 
+-- Phase 3: Template Management Foundation - Database Schema
+-- Phase 3: Template Management Foundation - Database Schema
+-- This schema supports basic template management and prepares for Phase 5 advanced features
+
+-- Templates table - core template definitions
+CREATE TABLE IF NOT EXISTS templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    document_type_id UUID REFERENCES document_types(id) ON DELETE SET NULL,
+    
+    -- Schema definition (JSON structure defining what to extract)
+    schema_definition JSONB NOT NULL DEFAULT '{}',
+    
+    -- Prompt configuration for extraction
+    prompt_config JSONB NOT NULL DEFAULT '{
+        "system_prompt": "",
+        "instructions": "",
+        "output_format": "json"
+    }',
+    
+    -- Extraction settings (for Phase 4)
+    extraction_settings JSONB DEFAULT '{
+        "max_chunk_size": 4000,
+        "extraction_passes": 1,
+        "confidence_threshold": 0.8
+    }',
+    
+    -- Template status and versioning
+    is_active BOOLEAN DEFAULT true,
+    version INTEGER DEFAULT 1,
+    
+    -- Generation metadata (for Phase 5)
+    generation_method VARCHAR(50) DEFAULT 'manual', -- manual, auto_sample, auto_description
+    generation_source JSONB DEFAULT '{}', -- stores source info for auto-generation
+    
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Constraints
+    CONSTRAINT templates_name_tenant_unique UNIQUE(tenant_id, name),
+    CONSTRAINT templates_version_positive CHECK(version > 0)
+);
+
+-- Template examples - few-shot learning examples
+CREATE TABLE IF NOT EXISTS template_examples (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+    
+    -- Example content
+    name VARCHAR(255) NOT NULL,
+    document_snippet TEXT NOT NULL,
+    expected_output JSONB NOT NULL,
+    
+    -- Validation status
+    is_validated BOOLEAN DEFAULT false,
+    validation_notes TEXT,
+    
+    -- Metadata
+    source_document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
+    created_by_user VARCHAR(255), -- for future user management
+    
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Template versions - for version control (Phase 5)
+CREATE TABLE IF NOT EXISTS template_versions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+    version_number INTEGER NOT NULL,
+    
+    -- Versioned content (snapshot of template at this version)
+    schema_definition JSONB NOT NULL,
+    prompt_config JSONB NOT NULL,
+    extraction_settings JSONB,
+    
+    -- Version metadata
+    change_summary TEXT,
+    created_by_user VARCHAR(255),
+    
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Constraints
+    CONSTRAINT template_versions_unique UNIQUE(template_id, version_number),
+    CONSTRAINT template_versions_positive CHECK(version_number > 0)
+);
+
+-- Template usage tracking (for analytics in later phases)
+CREATE TABLE IF NOT EXISTS template_usage (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    
+    -- Usage details
+    extraction_status VARCHAR(50) DEFAULT 'pending', -- pending, completed, failed
+    confidence_score DECIMAL(3,2), -- 0.00 to 1.00
+    processing_time_ms INTEGER,
+    
+    -- Results reference (for Phase 4)
+    extraction_id UUID, -- will reference extractions table in Phase 4
+    
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_templates_tenant_id ON templates(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_templates_document_type ON templates(document_type_id);
+CREATE INDEX IF NOT EXISTS idx_templates_active ON templates(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_template_examples_template_id ON template_examples(template_id);
+CREATE INDEX IF NOT EXISTS idx_template_versions_template_id ON template_versions(template_id);
+CREATE INDEX IF NOT EXISTS idx_template_usage_template_id ON template_usage(template_id);
+CREATE INDEX IF NOT EXISTS idx_template_usage_document_id ON template_usage(document_id);
+
+-- Triggers for updated_at timestamps
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_templates_updated_at BEFORE UPDATE ON templates
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_template_examples_updated_at BEFORE UPDATE ON template_examples
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_template_usage_updated_at BEFORE UPDATE ON template_usage
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Insert default templates for common document types
+INSERT INTO templates (tenant_id, name, description, document_type_id, schema_definition, prompt_config)
+SELECT 
+    '00000000-0000-0000-0000-000000000001' as tenant_id,
+    'Basic ' || dt.name || ' Template' as name,
+    'Default template for extracting data from ' || dt.description as description,
+    dt.id as document_type_id,
+    CASE dt.name
+        WHEN 'invoice' THEN '{
+            "invoice_number": {"type": "text", "required": true, "description": "Invoice identification number"},
+            "invoice_date": {"type": "date", "required": true, "description": "Date the invoice was issued"},
+            "total_amount": {"type": "number", "required": true, "description": "Total amount due"},
+            "vendor_name": {"type": "text", "required": false, "description": "Name of the vendor/supplier"},
+            "line_items": {"type": "array", "required": false, "description": "List of invoice line items"}
+        }'::jsonb
+        WHEN 'contract' THEN '{
+            "contract_number": {"type": "text", "required": false, "description": "Contract identification number"},
+            "effective_date": {"type": "date", "required": true, "description": "Date the contract becomes effective"},
+            "expiration_date": {"type": "date", "required": false, "description": "Date the contract expires"},
+            "parties": {"type": "array", "required": true, "description": "Parties involved in the contract"},
+            "contract_value": {"type": "number", "required": false, "description": "Total contract value"}
+        }'::jsonb
+        WHEN 'insurance_policy' THEN '{
+            "policy_number": {"type": "text", "required": true, "description": "Insurance policy number"},
+            "policy_holder": {"type": "text", "required": true, "description": "Name of the policy holder"},
+            "coverage_amount": {"type": "number", "required": false, "description": "Coverage amount"},
+            "premium_amount": {"type": "number", "required": false, "description": "Premium amount"},
+            "effective_date": {"type": "date", "required": true, "description": "Policy effective date"},
+            "expiration_date": {"type": "date", "required": true, "description": "Policy expiration date"}
+        }'::jsonb
+        ELSE '{}'::jsonb
+    END as schema_definition,
+    jsonb_build_object(
+        'system_prompt', 'You are an expert at extracting structured data from ' || dt.description || ' documents.',
+        'instructions', 'Extract the specified fields from the document. Be precise and only extract data that is clearly visible in the document. Return the data in valid JSON format.',
+        'output_format', 'json'
+    ) as prompt_config
+FROM document_types dt
+WHERE dt.tenant_id = '00000000-0000-0000-0000-000000000001'
+ON CONFLICT (tenant_id, name) DO NOTHING;
+
+-- Add some example template examples
+INSERT INTO template_examples (template_id, name, document_snippet, expected_output, is_validated)
+SELECT 
+    t.id,
+    'Sample ' || dt.name || ' Example',
+    CASE dt.name
+        WHEN 'invoice' THEN 'Invoice #INV-2024-001
+Date: January 15, 2024
+Bill To: ABC Company
+Amount Due: $1,250.00'
+        WHEN 'contract' THEN 'SERVICE AGREEMENT
+Contract #: SA-2024-001
+Effective Date: January 1, 2024
+Between: Company A and Company B'
+        WHEN 'insurance_policy' THEN 'INSURANCE POLICY
+Policy Number: POL-2024-001
+Policy Holder: John Smith
+Coverage: $100,000
+Premium: $1,200 annually'
+        ELSE 'Sample document content'
+    END as document_snippet,
+    CASE dt.name
+        WHEN 'invoice' THEN '{
+            "invoice_number": "INV-2024-001",
+            "invoice_date": "2024-01-15",
+            "total_amount": 1250.00,
+            "vendor_name": null
+        }'::jsonb
+        WHEN 'contract' THEN '{
+            "contract_number": "SA-2024-001",
+            "effective_date": "2024-01-01",
+            "parties": ["Company A", "Company B"]
+        }'::jsonb
+        WHEN 'insurance_policy' THEN '{
+            "policy_number": "POL-2024-001",
+            "policy_holder": "John Smith",
+            "coverage_amount": 100000,
+            "premium_amount": 1200
+        }'::jsonb
+        ELSE '{}'::jsonb
+    END as expected_output,
+    true as is_validated
+FROM templates t
+JOIN document_types dt ON t.document_type_id = dt.id
+WHERE t.tenant_id = '00000000-0000-0000-0000-000000000001';

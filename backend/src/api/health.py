@@ -11,7 +11,7 @@ from datetime import datetime
 from ..models.database import get_db
 from ..config import settings, get_s3_config
 
-router = APIRouter(prefix="/health", tags=["health"])
+router = APIRouter(tags=["health"])
 
 
 @router.get("/")

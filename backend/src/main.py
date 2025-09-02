@@ -12,6 +12,7 @@ from .models.database import create_tables
 from .api import health
 from .api import documents
 from .api import categories
+from .api import templates
 
 # Configure logging
 logging.basicConfig(
@@ -94,6 +95,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(documents.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
+app.include_router(templates.router, prefix="/api/templates")
 
 # TODO: Include other routers as they are implemented
 # app.include_router(templates.router)

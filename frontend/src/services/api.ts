@@ -84,8 +84,10 @@ class ApiClient {
   private client: AxiosInstance;
 
   constructor() {
+    // Use environment variable or fallback to localhost for development
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+      baseURL: apiBaseUrl,
       timeout: 30000, // 30 seconds for file uploads
       headers: {
         'Content-Type': 'application/json',
@@ -138,7 +140,7 @@ class ApiClient {
   }
 
   async getDetailedHealth(): Promise<HealthStatus> {
-    const response = await this.client.get('/health/detailed');
+    const response = await this.client.get('/detailed');
     return response.data;
   }
 
@@ -349,6 +351,149 @@ class ApiClient {
     uncategorized_count: number;
   }> {
     const response = await this.client.get('/api/categories/stats/usage');
+    return response.data;
+  }
+
+  // Template Endpoints
+  async getTemplates(
+    page: number = 1,
+    perPage: number = 10,
+    search?: string,
+    documentTypeId?: string,
+    isActive?: boolean
+  ): Promise<{
+    templates: Array<{
+      id: string;
+      name: string;
+      document_type_name?: string;
+      schema: Record<string, any>;
+      is_active: boolean;
+      version: number;
+      created_at: string;
+      updated_at: string;
+    }>;
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+  }> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString(),
+    });
+    
+    if (search) params.append('search', search);
+    if (documentTypeId) params.append('document_type_id', documentTypeId);
+    if (isActive !== undefined) params.append('is_active', isActive.toString());
+    
+    const response = await this.client.get(`/api/templates/?${params.toString()}`);
+    return response.data;
+  }
+
+  async getTemplate(templateId: string): Promise<{
+    id: string;
+    name: string;
+    document_type_id?: string;
+    document_type_name?: string;
+    schema: Record<string, any>;
+    prompt_config: Record<string, any>;
+    extraction_settings: Record<string, any>;
+    few_shot_examples: Array<Record<string, any>>;
+    is_active: boolean;
+    version: number;
+    created_at: string;
+    updated_at: string;
+  }> {
+    const response = await this.client.get(`/api/templates/${templateId}`);
+    return response.data;
+  }
+
+  async createTemplate(templateData: {
+    name: string;
+    document_type_id?: string;
+    schema: Record<string, any>;
+    prompt_config: {
+      system_prompt: string;
+      instructions: string;
+      output_format: string;
+    };
+    extraction_settings?: {
+      max_chunk_size: number;
+      extraction_passes: number;
+      confidence_threshold: number;
+    };
+    few_shot_examples?: Array<Record<string, any>>;
+  }): Promise<{
+    id: string;
+    name: string;
+    document_type_id?: string;
+    document_type_name?: string;
+    schema: Record<string, any>;
+    prompt_config: Record<string, any>;
+    extraction_settings: Record<string, any>;
+    few_shot_examples: Array<Record<string, any>>;
+    is_active: boolean;
+    version: number;
+    created_at: string;
+    updated_at: string;
+  }> {
+    const response = await this.client.post('/api/templates/', templateData);
+    return response.data;
+  }
+
+  async updateTemplate(
+    templateId: string,
+    templateData: Partial<{
+      name: string;
+      document_type_id?: string;
+      schema: Record<string, any>;
+      prompt_config: {
+        system_prompt: string;
+        instructions: string;
+        output_format: string;
+      };
+      extraction_settings: {
+        max_chunk_size: number;
+        extraction_passes: number;
+        confidence_threshold: number;
+      };
+      few_shot_examples: Array<Record<string, any>>;
+      is_active: boolean;
+    }>
+  ): Promise<{
+    id: string;
+    name: string;
+    document_type_id?: string;
+    document_type_name?: string;
+    schema: Record<string, any>;
+    prompt_config: Record<string, any>;
+    extraction_settings: Record<string, any>;
+    few_shot_examples: Array<Record<string, any>>;
+    is_active: boolean;
+    version: number;
+    created_at: string;
+    updated_at: string;
+  }> {
+    const response = await this.client.put(`/api/templates/${templateId}`, templateData);
+    return response.data;
+  }
+
+  async deleteTemplate(templateId: string): Promise<void> {
+    await this.client.delete(`/api/templates/${templateId}`);
+  }
+
+  async testTemplate(templateId: string, testDocument: string): Promise<{
+    status: string;
+    message: string;
+    extracted_data: Record<string, any>;
+    confidence_score: number;
+    processing_time_ms: number;
+    template_id: string;
+    note: string;
+  }> {
+    const response = await this.client.post(`/api/templates/${templateId}/test`, {
+      test_document: testDocument
+    });
     return response.data;
   }
 

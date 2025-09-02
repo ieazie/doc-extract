@@ -1,7 +1,7 @@
 """
 SQLAlchemy models for the Document Extraction Platform
 """
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Boolean, DECIMAL, ForeignKey
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -56,31 +56,6 @@ class DocumentType(Base):
     def __repr__(self):
         return f"<DocumentType(id={self.id}, name='{self.name}')>"
 
-
-class Template(Base):
-    """Template model for extraction configurations"""
-    __tablename__ = "templates"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    document_type_id = Column(UUID(as_uuid=True), ForeignKey("document_types.id", ondelete="CASCADE"), nullable=False)
-    name = Column(String(255), nullable=False)
-    version = Column(Integer, default=1)
-    schema = Column(JSONB, nullable=False)
-    prompt_config = Column(JSONB, nullable=False)
-    few_shot_examples = Column(JSONB, default=[])
-    extraction_settings = Column(JSONB, default={})
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
-    # Relationships
-    tenant = relationship("Tenant", back_populates="templates")
-    document_type = relationship("DocumentType", back_populates="templates")
-    extractions = relationship("Extraction", back_populates="template")
-
-    def __repr__(self):
-        return f"<Template(id={self.id}, name='{self.name}', version={self.version})>"
 
 
 class DocumentCategory(Base):
@@ -206,6 +181,145 @@ class ExtractionField(Base):
 
     def __repr__(self):
         return f"<ExtractionField(id={self.id}, field_name='{self.field_name}')>"
+
+
+# ============================================================================
+# PHASE 3: TEMPLATE MANAGEMENT MODELS
+# ============================================================================
+
+class Template(Base):
+    """Template model for data extraction schemas and prompts"""
+    __tablename__ = "templates"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    document_type_id = Column(UUID(as_uuid=True), ForeignKey("document_types.id", ondelete="CASCADE"))
+    name = Column(String(255), nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    
+    # Template configuration (matching existing schema)
+    schema = Column(JSONB, nullable=False, default={})  # Field definitions
+    prompt_config = Column(JSONB, nullable=False, default={})  # Prompt settings
+    few_shot_examples = Column(JSONB, default=[])  # Examples array
+    extraction_settings = Column(JSONB, default={})  # Processing settings
+    
+    # Status and metadata
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    tenant = relationship("Tenant", back_populates="templates")
+    document_type = relationship("DocumentType", back_populates="templates")
+    template_examples = relationship("TemplateExample", back_populates="template", cascade="all, delete-orphan")
+    template_versions = relationship("TemplateVersion", back_populates="template", cascade="all, delete-orphan")
+    template_usage = relationship("TemplateUsage", back_populates="template", cascade="all, delete-orphan")
+    extractions = relationship("Extraction", back_populates="template")
+    
+    # Table constraints
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'name', 'version', name='templates_tenant_id_name_version_key'),
+        CheckConstraint('version > 0', name='templates_version_positive'),
+    )
+
+    def __repr__(self):
+        return f"<Template(id={self.id}, name='{self.name}', version={self.version})>"
+
+
+class TemplateExample(Base):
+    """Template examples for few-shot learning"""
+    __tablename__ = "template_examples"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    template_id = Column(UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), nullable=False)
+    
+    # Example content
+    name = Column(String(255), nullable=False)
+    document_snippet = Column(Text, nullable=False)
+    expected_output = Column(JSONB, nullable=False)
+    
+    # Validation status
+    is_validated = Column(Boolean, default=False)
+    validation_notes = Column(Text)
+    
+    # Metadata
+    source_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"))
+    created_by_user = Column(String(255))  # For future user management
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    template = relationship("Template", back_populates="template_examples")
+    source_document = relationship("Document")
+
+    def __repr__(self):
+        return f"<TemplateExample(id={self.id}, name='{self.name}')>"
+
+
+class TemplateVersion(Base):
+    """Template version history for version control"""
+    __tablename__ = "template_versions"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    template_id = Column(UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), nullable=False)
+    version_number = Column(Integer, nullable=False)
+    
+    # Versioned content (snapshots)
+    schema_definition = Column(JSONB, nullable=False)
+    prompt_config = Column(JSONB, nullable=False)
+    extraction_settings = Column(JSONB)
+    
+    # Version metadata
+    change_summary = Column(Text)
+    created_by_user = Column(String(255))
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    template = relationship("Template", back_populates="template_versions")
+    
+    # Table constraints
+    __table_args__ = (
+        UniqueConstraint('template_id', 'version_number', name='template_versions_unique'),
+        CheckConstraint('version_number > 0', name='template_versions_positive'),
+    )
+
+    def __repr__(self):
+        return f"<TemplateVersion(id={self.id}, template_id={self.template_id}, version={self.version_number})>"
+
+
+class TemplateUsage(Base):
+    """Template usage tracking for analytics"""
+    __tablename__ = "template_usage"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    template_id = Column(UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), nullable=False)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    
+    # Usage details
+    extraction_status = Column(String(50), default="pending")  # pending, completed, failed
+    confidence_score = Column(DECIMAL(3, 2))  # 0.00 to 1.00
+    processing_time_ms = Column(Integer)
+    
+    # Results reference (for Phase 4)
+    extraction_id = Column(UUID(as_uuid=True))  # Will reference extractions table in Phase 4
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    template = relationship("Template", back_populates="template_usage")
+    document = relationship("Document")
+
+    def __repr__(self):
+        return f"<TemplateUsage(id={self.id}, status='{self.extraction_status}')>"
+
+
+# ============================================================================
 
 
 # Dependency to get database session
