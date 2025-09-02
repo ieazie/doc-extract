@@ -296,7 +296,22 @@ async def list_templates(
             query = query.filter(Template.name.ilike(f"%{search}%"))
         
         if document_type_id:
-            query = query.filter(Template.document_type_id == uuid.UUID(document_type_id))
+            # Check if it's a UUID or a name
+            try:
+                # Try to parse as UUID first
+                doc_type_uuid = uuid.UUID(document_type_id)
+                query = query.filter(Template.document_type_id == doc_type_uuid)
+            except ValueError:
+                # If not a UUID, treat as name and look it up
+                doc_type = db.query(DocumentType).filter(
+                    and_(
+                        DocumentType.name == document_type_id,
+                        DocumentType.tenant_id == tenant_id
+                    )
+                ).first()
+                if not doc_type:
+                    raise HTTPException(status_code=400, detail=f"Invalid document type: {document_type_id}")
+                query = query.filter(Template.document_type_id == doc_type.id)
         
         if is_active is not None:
             query = query.filter(Template.is_active == is_active)
