@@ -35,7 +35,7 @@ services:
       
       # Ollama Configuration
       - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=gemma3:4b
+      - OLLAMA_MODEL=gemma2:2b
       
       # Application Settings
       - DEBUG=true
@@ -116,6 +116,12 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 6G
     # Uncomment for GPU support
     # deploy:
     #   resources:

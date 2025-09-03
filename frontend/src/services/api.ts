@@ -140,7 +140,7 @@ class ApiClient {
   }
 
   async getDetailedHealth(): Promise<HealthStatus> {
-    const response = await this.client.get('/detailed');
+    const response = await this.client.get('/health/detailed');
     return response.data;
   }
 
@@ -255,20 +255,7 @@ class ApiClient {
     return response.headers.location;
   }
 
-  async getDocumentContent(documentId: string): Promise<{
-    document_id: string;
-    filename: string;
-    content: string;
-    metadata: {
-      page_count?: number;
-      character_count?: number;
-      word_count?: number;
-      extraction_completed_at?: string;
-    };
-  }> {
-    const response = await this.client.get(`/api/documents/${documentId}/content`);
-    return response.data;
-  }
+
 
   async getProcessingStats(): Promise<ProcessingStats> {
     const response = await this.client.get('/api/documents/stats/processing');
@@ -494,6 +481,107 @@ class ApiClient {
     const response = await this.client.post(`/api/templates/${templateId}/test`, {
       test_document: testDocument
     });
+    return response.data;
+  }
+
+  // Extraction Endpoints
+  async createExtraction(extractionData: {
+    document_id: string;
+    template_id: string;
+  }): Promise<{
+    id: string;
+    document_id: string;
+    template_id: string;
+    status: string;
+    results?: Record<string, any>;
+    confidence_score?: number;
+    processing_time_ms?: number;
+    error_message?: string;
+    document_name?: string;
+    template_name?: string;
+    created_at: string;
+    updated_at: string;
+  }> {
+    const response = await this.client.post('/api/extractions/', extractionData);
+    return response.data;
+  }
+
+  async getExtractions(params: {
+    page?: number;
+    per_page?: number;
+    status?: string;
+    document_id?: string;
+    template_id?: string;
+  } = {}): Promise<{
+    extractions: Array<{
+      id: string;
+      document_id: string;
+      template_id: string;
+      status: string;
+      results?: Record<string, any>;
+      confidence_score?: number;
+      processing_time_ms?: number;
+      error_message?: string;
+      document_name?: string;
+      template_name?: string;
+      created_at: string;
+      updated_at: string;
+    }>;
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+  }> {
+    const response = await this.client.get('/api/extractions/', { params });
+    return response.data;
+  }
+
+  async getExtraction(extractionId: string): Promise<{
+    id: string;
+    document_id: string;
+    template_id: string;
+    status: string;
+    results?: Record<string, any>;
+    confidence_score?: number;
+    processing_time_ms?: number;
+    error_message?: string;
+    document_name?: string;
+    template_name?: string;
+    created_at: string;
+    updated_at: string;
+  }> {
+    const response = await this.client.get(`/api/extractions/${extractionId}`);
+    return response.data;
+  }
+
+  async deleteExtraction(extractionId: string): Promise<void> {
+    await this.client.delete(`/api/extractions/${extractionId}`);
+  }
+
+  // Document Content Endpoints
+  async getDocumentContent(documentId: string): Promise<{
+    document_id: string;
+    filename: string;
+    content: string;
+    metadata: {
+      page_count?: number;
+      character_count?: number;
+      word_count?: number;
+      extraction_completed_at?: string;
+    };
+  }> {
+    const response = await this.client.get(`/api/documents/content/${documentId}`);
+    return response.data;
+  }
+
+  async getDocumentPreview(documentId: string): Promise<{
+    document_id: string;
+    filename: string;
+    mime_type?: string;
+    preview_url?: string;
+    has_preview: boolean;
+  }> {
+    const response = await this.client.get(`/api/documents/preview/${documentId}`);
     return response.data;
   }
 

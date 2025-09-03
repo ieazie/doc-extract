@@ -362,52 +362,51 @@ async def list_templates(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list templates: {str(e)}")
 
-# Temporarily commented out to debug routing issue
-# @router.get("/{template_id}", response_model=TemplateResponse)
-# async def get_template(
-#     template_id: str,
-#     db: Session = Depends(get_db)
-# ):
-#     """Get a specific template by ID"""
-#     try:
-#         tenant_id = get_tenant_id(db)
-#         
-#         template = db.query(Template).filter(
-#             and_(
-#                 Template.id == uuid.UUID(template_id),
-#                 Template.tenant_id == tenant_id
-#             )
-#         ).first()
-#         
-#         if not template:
-#             raise HTTPException(status_code=404, detail="Template not found")
-#         
-#         # Get document type name
-#         doc_type_name = None
-#         if template.document_type_id:
-#             doc_type = db.query(DocumentType).filter(DocumentType.id == template.document_type_id).first()
-#             doc_type_name = doc_type.name if doc_type else None
-#         
-#         return TemplateResponse(
-#             id=str(template.id),
-#             tenant_id=str(template.tenant_id),
-#             name=template.name,
-#             document_type_id=str(template.document_type_id) if template.document_type_id else None,
-#             document_type_name=doc_type_name,
-#             schema=template.schema,
-#             prompt_config=template.prompt_config,
-#             extraction_settings=template.extraction_settings,
-#             few_shot_examples=template.few_shot_examples,
-#             is_active=template.is_active,
-#             version=template.version,
-#             created_at=template.created_at.isoformat(),
-#             updated_at=template.updated_at.isoformat()
-#         )
-#         
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to get template: {str(e)}")
+@router.get("/{template_id}", response_model=TemplateResponse)
+async def get_template(
+    template_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get a specific template by ID"""
+    try:
+        tenant_id = get_tenant_id(db)
+        
+        template = db.query(Template).filter(
+            and_(
+                Template.id == uuid.UUID(template_id),
+                Template.tenant_id == tenant_id
+            )
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        # Get document type name
+        doc_type_name = None
+        if template.document_type_id:
+            doc_type = db.query(DocumentType).filter(DocumentType.id == template.document_type_id).first()
+            doc_type_name = doc_type.name if doc_type else None
+        
+        return TemplateResponse(
+            id=str(template.id),
+            tenant_id=str(template.tenant_id),
+            name=template.name,
+            document_type_id=str(template.document_type_id) if template.document_type_id else None,
+            document_type_name=doc_type_name,
+            schema=template.schema,
+            prompt_config=template.prompt_config,
+            extraction_settings=template.extraction_settings,
+            few_shot_examples=template.few_shot_examples,
+            is_active=template.is_active,
+            version=template.version,
+            created_at=template.created_at.isoformat(),
+            updated_at=template.updated_at.isoformat()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get template: {str(e)}")
 
 @router.put("/{template_id}", response_model=TemplateResponse)
 async def update_template(

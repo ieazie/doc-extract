@@ -683,3 +683,152 @@ async def get_document_content(
     except Exception as e:
         logger.error(f"Content retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get content: {str(e)}")
+
+
+@router.get("/preview/{document_id}")
+async def get_document_preview(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    tenant_id: UUID = Depends(get_current_tenant_id)
+):
+    """
+    Get document preview (thumbnail/preview image) for display in results viewer
+    
+    - **document_id**: Document UUID
+    """
+    try:
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.tenant_id == tenant_id
+        ).first()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # If we have a thumbnail/preview, return a proxy URL
+        if document.thumbnail_s3_key:
+            # Use a proxy endpoint instead of presigned URL to avoid signature issues
+            # Add timestamp to prevent caching issues
+            import time
+            timestamp = int(time.time())
+            preview_url = f"http://localhost:8000/api/documents/preview-image/{document_id}?t={timestamp}"
+            
+            return {
+                "document_id": document_id,
+                "filename": document.original_filename,
+                "mime_type": document.mime_type,
+                "preview_url": preview_url,
+                "has_preview": True
+            }
+        else:
+            # No preview available, return document info for fallback display
+            return {
+                "document_id": document_id,
+                "filename": document.original_filename,
+                "mime_type": document.mime_type,
+                "preview_url": None,
+                "has_preview": False
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Preview retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get preview: {str(e)}")
+
+
+@router.get("/preview-image/{document_id}")
+async def get_document_preview_image(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    tenant_id: UUID = Depends(get_current_tenant_id)
+):
+    """
+    Proxy endpoint to serve document preview images directly
+    
+    - **document_id**: Document UUID
+    """
+    from fastapi.responses import Response
+    
+    try:
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.tenant_id == tenant_id
+        ).first()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        if not document.thumbnail_s3_key:
+            raise HTTPException(status_code=404, detail="Preview not available")
+        
+        # Get the image content from S3
+        image_content = await s3_service.get_document_content(document.thumbnail_s3_key)
+        
+        # Return the image with appropriate headers
+        return Response(
+            content=image_content,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "public, max-age=3600",  # Cache for 1 hour
+                "Content-Disposition": f"inline; filename=\"{document.original_filename}_preview.jpg\""
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Preview image retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get preview image: {str(e)}")
+
+
+@router.post("/regenerate-preview/{document_id}")
+async def regenerate_document_preview(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    tenant_id: UUID = Depends(get_current_tenant_id)
+):
+    """
+    Regenerate document preview with improved quality
+    
+    - **document_id**: Document UUID
+    """
+    try:
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.tenant_id == tenant_id
+        ).first()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        if not document.s3_key:
+            raise HTTPException(status_code=400, detail="Document file not available")
+        
+        # Get document content from S3
+        document_content = await s3_service.get_document_content(document.s3_key)
+        
+        # Regenerate preview using document processor
+        from ..core.document_processor import DocumentProcessor
+        processor = DocumentProcessor()
+        
+        # Generate new preview
+        preview_result = await processor._generate_pdf_thumbnail(document_content, document_id)
+        
+        # Update document with new preview
+        document.thumbnail_s3_key = preview_result["s3_key"]
+        db.commit()
+        
+        return {
+            "message": "Preview regenerated successfully",
+            "document_id": str(document_id),
+            "preview_s3_key": preview_result["s3_key"],
+            "preview_size": preview_result["size"],
+            "preview_dimensions": preview_result["dimensions"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Preview regeneration failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to regenerate preview: {str(e)}")

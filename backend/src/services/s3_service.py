@@ -30,6 +30,8 @@ class S3Service:
                 region_name=settings.aws_region
             )
             self.bucket_name = settings.s3_bucket_name
+            # Store the external endpoint URL for presigned URLs
+            self.external_endpoint_url = settings.aws_endpoint_url.replace('minio:9000', 'localhost:9000') if 'minio:9000' in settings.aws_endpoint_url else settings.aws_endpoint_url
             self._ensure_bucket_exists()
         except Exception as e:
             logger.error(f"Failed to initialize S3 service: {e}")
@@ -230,6 +232,10 @@ class S3Service:
                 ExpiresIn=expires_in
             )
             
+            # Replace internal Docker hostname with localhost for external access
+            if 'minio:9000' in url:
+                url = url.replace('minio:9000', 'localhost:9000')
+            
             logger.debug(f"Generated download URL for {s3_key}, expires in {expires_in}s")
             return url
             
@@ -238,6 +244,55 @@ class S3Service:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to generate download URL: {e}"
+            )
+
+    async def get_external_download_url(
+        self, 
+        s3_key: str, 
+        expires_in: int = 3600,
+        filename: Optional[str] = None
+    ) -> str:
+        """
+        Generate presigned URL for external access (frontend)
+        
+        Args:
+            s3_key: S3 object key
+            expires_in: URL expiration time in seconds
+            filename: Optional filename for download
+            
+        Returns:
+            Presigned download URL with external hostname
+        """
+        try:
+            # Create a separate client with external endpoint for presigned URLs
+            external_client = boto3.client(
+                's3',
+                endpoint_url=self.external_endpoint_url,
+                aws_access_key_id=settings.aws_access_key_id,
+                aws_secret_access_key=settings.aws_secret_access_key,
+                region_name=settings.aws_region
+            )
+            
+            params = {'Bucket': self.bucket_name, 'Key': s3_key}
+            
+            # Add content disposition for custom filename
+            if filename:
+                params['ResponseContentDisposition'] = f'attachment; filename="{filename}"'
+            
+            url = external_client.generate_presigned_url(
+                'get_object',
+                Params=params,
+                ExpiresIn=expires_in
+            )
+            
+            logger.debug(f"Generated external download URL for {s3_key}, expires in {expires_in}s")
+            return url
+            
+        except ClientError as e:
+            logger.error(f"Failed to generate external download URL: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate external download URL: {e}"
             )
 
     async def get_document_content(self, s3_key: str) -> bytes:

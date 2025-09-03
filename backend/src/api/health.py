@@ -78,6 +78,23 @@ async def detailed_health_check(db: Session = Depends(get_db)):
         }
         overall_healthy = False
     
+    # Check LangExtract Service
+    try:
+        from ..services.langextract_service import get_langextract_service
+        langextract_service = get_langextract_service()
+        langextract_health = await langextract_service.health_check()
+        
+        health_status["services"]["langextract"] = langextract_health
+        
+        if langextract_health["status"] != "healthy":
+            overall_healthy = False
+    except Exception as e:
+        health_status["services"]["langextract"] = {
+            "status": "unhealthy",
+            "message": f"LangExtract service check failed: {str(e)}"
+        }
+        overall_healthy = False
+    
     # Check MinIO/S3
     try:
         s3_config = get_s3_config()

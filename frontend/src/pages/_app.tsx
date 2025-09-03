@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { GlobalStyle } from '@/styles/GlobalStyle';
 import { theme } from '@/styles/theme';
+import Navigation from '../components/navigation/Navigation';
 
 function MyApp({ Component, pageProps }: AppProps) {
   // Create a new QueryClient instance for each app instance
@@ -22,6 +23,7 @@ function MyApp({ Component, pageProps }: AppProps) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <GlobalStyle />
+        <Navigation />
         <Component {...pageProps} />
       </ThemeProvider>
     </QueryClientProvider>

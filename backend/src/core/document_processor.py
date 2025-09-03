@@ -407,14 +407,14 @@ class DocumentProcessor:
         document_id: UUID
     ) -> Dict[str, Any]:
         """
-        Generate thumbnail from PDF first page
+        Generate full-page preview from PDF first page
         
         Args:
             pdf_content: PDF content as bytes
             document_id: Document identifier
             
         Returns:
-            Thumbnail generation result
+            Preview generation result
         """
         try:
             doc = fitz.open(stream=pdf_content, filetype="pdf")
@@ -425,40 +425,46 @@ class DocumentProcessor:
             # Get first page
             page = doc[0]
             
-            # Render page as image with appropriate resolution
-            mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
-            pix = page.get_pixmap(matrix=mat)
+            # Render page as image with very high resolution for crisp preview
+            # Use higher DPI for better quality
+            mat = fitz.Matrix(4, 4)  # 4x zoom for very high quality preview
+            pix = page.get_pixmap(matrix=mat, alpha=False)
             
             # Convert to PIL Image
             img_data = pix.tobytes("png")
             img = Image.open(io.BytesIO(img_data))
             
-            # Resize to thumbnail size while maintaining aspect ratio
-            thumbnail_size = (300, 400)  # width, height
-            img.thumbnail(thumbnail_size, Image.Resampling.LANCZOS)
+            # For full-page preview, we want high resolution but reasonable file size
+            # Max width: 1200px for better quality, maintain aspect ratio
+            max_width = 1200
+            if img.width > max_width:
+                ratio = max_width / img.width
+                new_height = int(img.height * ratio)
+                img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
             
-            # Save thumbnail as JPEG
-            thumbnail_buffer = io.BytesIO()
-            img.save(thumbnail_buffer, format='JPEG', quality=85, optimize=True)
-            thumbnail_data = thumbnail_buffer.getvalue()
+            # Save as very high-quality JPEG
+            preview_buffer = io.BytesIO()
+            img.save(preview_buffer, format='JPEG', quality=95, optimize=True)
+            preview_data = preview_buffer.getvalue()
             
-            # Upload thumbnail to S3
+            # Upload preview to S3
             tenant_id = UUID(str(document_id).split('-')[0] + '-0000-0000-0000-000000000000')  # Simplified
-            thumbnail_s3_key = await self.s3_service.upload_thumbnail(
-                thumbnail_data, document_id, tenant_id, "jpg"
+            preview_s3_key = await self.s3_service.upload_thumbnail(
+                preview_data, document_id, tenant_id, "jpg"
             )
             
             doc.close()
             
             return {
-                "s3_key": thumbnail_s3_key,
-                "size": len(thumbnail_data),
+                "s3_key": preview_s3_key,
+                "size": len(preview_data),
                 "dimensions": img.size,
-                "format": "JPEG"
+                "format": "JPEG",
+                "type": "full_page_preview"
             }
             
         except Exception as e:
-            logger.error(f"PDF thumbnail generation failed: {e}")
+            logger.error(f"PDF preview generation failed: {e}")
             raise e
 
     async def _generate_generic_thumbnail(
