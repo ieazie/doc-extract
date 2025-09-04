@@ -347,7 +347,7 @@ class ApiClient {
     perPage: number = 10,
     search?: string,
     documentTypeId?: string,
-    isActive?: boolean
+    status?: string
   ): Promise<{
     templates: Array<{
       id: string;
@@ -355,6 +355,7 @@ class ApiClient {
       document_type_name?: string;
       schema: Record<string, any>;
       is_active: boolean;
+      status?: 'draft' | 'published' | 'archived';
       version: number;
       created_at: string;
       updated_at: string;
@@ -371,7 +372,7 @@ class ApiClient {
     
     if (search) params.append('search', search);
     if (documentTypeId) params.append('document_type_id', documentTypeId);
-    if (isActive !== undefined) params.append('is_active', isActive.toString());
+    if (status) params.append('status', status);
     
     const response = await this.client.get(`/api/templates/?${params.toString()}`);
     return response.data;
@@ -397,6 +398,7 @@ class ApiClient {
 
   async createTemplate(templateData: {
     name: string;
+    description?: string;
     document_type_id?: string;
     schema: Record<string, any>;
     prompt_config: {
@@ -410,9 +412,11 @@ class ApiClient {
       confidence_threshold: number;
     };
     few_shot_examples?: Array<Record<string, any>>;
+    status?: string;
   }): Promise<{
     id: string;
     name: string;
+    description?: string;
     document_type_id?: string;
     document_type_name?: string;
     schema: Record<string, any>;
@@ -420,6 +424,7 @@ class ApiClient {
     extraction_settings: Record<string, any>;
     few_shot_examples: Array<Record<string, any>>;
     is_active: boolean;
+    status: string;
     version: number;
     created_at: string;
     updated_at: string;

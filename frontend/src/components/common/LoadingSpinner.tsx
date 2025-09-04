@@ -16,9 +16,9 @@ const SpinnerContainer = styled.div`
   padding: 2rem;
 `;
 
-const Spinner = styled.div`
-  width: 2rem;
-  height: 2rem;
+const Spinner = styled.div<{ $size?: number }>`
+  width: ${props => props.$size ? `${props.$size}px` : '2rem'};
+  height: ${props => props.$size ? `${props.$size}px` : '2rem'};
   border: 3px solid #f3f4f6;
   border-top: 3px solid #3b82f6;
   border-radius: 50%;
@@ -33,13 +33,14 @@ const LoadingText = styled.div`
 
 interface LoadingSpinnerProps {
   text?: string;
+  size?: number;
 }
 
-export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ text = 'Loading...' }) => {
+export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ text = 'Loading...', size }) => {
   return (
     <SpinnerContainer>
-      <Spinner />
-      <LoadingText>{text}</LoadingText>
+      <Spinner $size={size} />
+      {text && <LoadingText>{text}</LoadingText>}
     </SpinnerContainer>
   );
 };

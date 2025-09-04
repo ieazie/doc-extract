@@ -13,6 +13,7 @@ export interface TemplateBase {
   document_type_name?: string;
   schema: Record<string, SchemaField>;
   is_active: boolean;
+  status?: 'draft' | 'published' | 'archived';
   version: number;
   created_at: string;
   updated_at: string;

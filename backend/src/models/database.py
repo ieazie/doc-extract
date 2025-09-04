@@ -195,6 +195,8 @@ class Template(Base):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     document_type_id = Column(UUID(as_uuid=True), ForeignKey("document_types.id", ondelete="CASCADE"))
     name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(20), default='draft', nullable=False)
     version = Column(Integer, default=1, nullable=False)
     
     # Template configuration (matching existing schema)

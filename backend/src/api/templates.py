@@ -50,11 +50,13 @@ class ExtractionSettings(BaseModel):
 class TemplateCreate(BaseModel):
     """Template creation request"""
     name: str = Field(..., min_length=1, max_length=255, description="Template name")
+    description: Optional[str] = Field(None, description="Template description")
     document_type_id: Optional[str] = Field(None, description="Associated document type ID")
     schema: dict = Field(..., description="Field schema definition")
     prompt_config: PromptConfig
     extraction_settings: Optional[ExtractionSettings] = Field(default_factory=ExtractionSettings)
     few_shot_examples: Optional[List[dict]] = Field(default_factory=list, description="Example documents and outputs")
+    status: str = Field(default="draft", description="Template status: draft, published, archived")
 
     @validator('schema')
     def validate_schema(cls, v):
@@ -67,25 +69,29 @@ class TemplateCreate(BaseModel):
 class TemplateUpdate(BaseModel):
     """Template update request"""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
     document_type_id: Optional[str] = None
     schema: Optional[dict] = None
     prompt_config: Optional[PromptConfig] = None
     extraction_settings: Optional[ExtractionSettings] = None
     few_shot_examples: Optional[List[dict]] = None
     is_active: Optional[bool] = None
+    status: Optional[str] = Field(None, description="Template status: draft, published, archived")
 
 class TemplateResponse(BaseModel):
     """Template response model"""
     id: str
     tenant_id: str
     name: str
-    document_type_id: Optional[str]
-    document_type_name: Optional[str]
+    description: Optional[str] = None
+    document_type_id: Optional[str] = None
+    document_type_name: Optional[str] = None
     schema: dict
     prompt_config: dict
     extraction_settings: dict
     few_shot_examples: List[dict]
     is_active: bool
+    status: str
     version: int
     created_at: str
     updated_at: str
@@ -234,10 +240,12 @@ async def create_template(
             tenant_id=tenant_id,
             document_type_id=uuid.UUID(document_type_id) if document_type_id else None,
             name=template_data.name,
+            description=template_data.description,
             schema=template_data.schema,
             prompt_config=template_data.prompt_config.dict(),
             extraction_settings=template_data.extraction_settings.dict() if template_data.extraction_settings else {},
-            few_shot_examples=template_data.few_shot_examples or []
+            few_shot_examples=template_data.few_shot_examples or [],
+            status=template_data.status
         )
         
         db.add(template)
@@ -255,6 +263,7 @@ async def create_template(
             id=str(template.id),
             tenant_id=str(template.tenant_id),
             name=template.name,
+            description=template.description,
             document_type_id=str(template.document_type_id) if template.document_type_id else None,
             document_type_name=doc_type_name,
             schema=template.schema,
@@ -262,6 +271,7 @@ async def create_template(
             extraction_settings=template.extraction_settings,
             few_shot_examples=template.few_shot_examples,
             is_active=template.is_active,
+            status=template.status or "draft",
             version=template.version,
             created_at=template.created_at.isoformat(),
             updated_at=template.updated_at.isoformat()
@@ -336,6 +346,7 @@ async def list_templates(
                 id=str(template.id),
                 tenant_id=str(template.tenant_id),
                 name=template.name,
+                description=template.description,
                 document_type_id=str(template.document_type_id) if template.document_type_id else None,
                 document_type_name=doc_type_name,
                 schema=template.schema,
@@ -343,6 +354,7 @@ async def list_templates(
                 extraction_settings=template.extraction_settings,
                 few_shot_examples=template.few_shot_examples,
                 is_active=template.is_active,
+                status=template.status or "draft",
                 version=template.version,
                 created_at=template.created_at.isoformat(),
                 updated_at=template.updated_at.isoformat()
@@ -391,6 +403,7 @@ async def get_template(
             id=str(template.id),
             tenant_id=str(template.tenant_id),
             name=template.name,
+            description=template.description,
             document_type_id=str(template.document_type_id) if template.document_type_id else None,
             document_type_name=doc_type_name,
             schema=template.schema,
@@ -398,6 +411,7 @@ async def get_template(
             extraction_settings=template.extraction_settings,
             few_shot_examples=template.few_shot_examples,
             is_active=template.is_active,
+            status=template.status or "draft",
             version=template.version,
             created_at=template.created_at.isoformat(),
             updated_at=template.updated_at.isoformat()
@@ -474,6 +488,7 @@ async def update_template(
             id=str(template.id),
             tenant_id=str(template.tenant_id),
             name=template.name,
+            description=template.description,
             document_type_id=str(template.document_type_id) if template.document_type_id else None,
             document_type_name=doc_type_name,
             schema=template.schema,
@@ -481,6 +496,7 @@ async def update_template(
             extraction_settings=template.extraction_settings,
             few_shot_examples=template.few_shot_examples,
             is_active=template.is_active,
+            status=template.status or "draft",
             version=template.version,
             created_at=template.created_at.isoformat(),
             updated_at=template.updated_at.isoformat()

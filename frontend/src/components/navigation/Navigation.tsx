@@ -43,7 +43,7 @@ const NavLinks = styled.div`
   align-items: center;
 `;
 
-const NavLink = styled(Link)<{ active: boolean }>`
+const NavLink = styled(Link)<{ $active: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -53,7 +53,7 @@ const NavLink = styled(Link)<{ active: boolean }>`
   font-weight: 500;
   transition: all 0.2s;
   
-  ${props => props.active ? `
+  ${props => props.$active ? `
     background: #eff6ff;
     color: #3b82f6;
   ` : `
@@ -93,17 +93,17 @@ export const Navigation: React.FC = () => {
         </Logo>
         
         <NavLinks>
-          <NavLink href="/" active={isActive('/')}>
+          <NavLink href="/" $active={isActive('/')}>
             <Home size={16} />
             Dashboard
           </NavLink>
           
-          <NavLink href="/extractions" active={isActive('/extractions')}>
+          <NavLink href="/extractions" $active={isActive('/extractions')}>
             <Zap size={16} />
             Extractions
           </NavLink>
           
-          <NavLink href="/templates" active={isActive('/templates')}>
+          <NavLink href="/templates" $active={isActive('/templates')}>
             <Settings size={16} />
             Templates
           </NavLink>

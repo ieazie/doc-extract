@@ -110,8 +110,8 @@ const TemplateTitle = styled.h3`
   font-weight: 600;
 `;
 
-const TemplateStatus = styled.span<{ active: boolean }>`
-  background: ${props => props.active ? '#27ae60' : '#e74c3c'};
+const TemplateStatus = styled.span<{ $active: boolean }>`
+  background: ${props => props.$active ? '#27ae60' : '#e74c3c'};
   color: white;
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
@@ -222,17 +222,17 @@ const Pagination = styled.div`
   margin-top: 2rem;
 `;
 
-const PageButton = styled.button<{ active?: boolean }>`
+const PageButton = styled.button<{ $active?: boolean }>`
   padding: 0.5rem 1rem;
   border: 1px solid #ddd;
-  background: ${props => props.active ? '#3498db' : 'white'};
-  color: ${props => props.active ? 'white' : '#6c757d'};
+  background: ${props => props.$active ? '#3498db' : 'white'};
+  color: ${props => props.$active ? 'white' : '#6c757d'};
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
   
   &:hover:not(:disabled) {
-    background: ${props => props.active ? '#2980b9' : '#f8f9fa'};
+    background: ${props => props.$active ? '#2980b9' : '#f8f9fa'};
   }
   
   &:disabled {
@@ -264,6 +264,36 @@ const LoadingSpinner = styled.div`
   color: #6c757d;
 `;
 
+const StatusBadge = styled.span<{ $status: 'draft' | 'published' | 'archived' }>`
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  
+  ${props => {
+    switch (props.$status) {
+      case 'draft':
+        return `
+          background: #fef3c7;
+          color: #92400e;
+        `;
+      case 'published':
+        return `
+          background: #d1fae5;
+          color: #065f46;
+        `;
+      case 'archived':
+        return `
+          background: #f3f4f6;
+          color: #6b7280;
+        `;
+    }
+  }}
+`;
+
 interface TemplateListProps {
   onEditTemplate: (template: TemplateBase) => void;
   onCreateTemplate: () => void;
@@ -280,7 +310,7 @@ const TemplateList: React.FC<TemplateListProps> = ({ onEditTemplate, onCreateTem
   // Fetch templates
   const { data: templatesData, isLoading, error } = useQuery({
     queryKey: ['templates', page, search, documentTypeFilter, statusFilter],
-    queryFn: () => apiClient.getTemplates(page, 10, search, documentTypeFilter, statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined),
+    queryFn: () => apiClient.getTemplates(page, 10, search, documentTypeFilter, statusFilter || undefined),
   });
 
   // Delete template mutation
@@ -347,13 +377,6 @@ const TemplateList: React.FC<TemplateListProps> = ({ onEditTemplate, onCreateTem
 
   return (
     <TemplateListContainer>
-      <Header>
-        <h1>Template Management</h1>
-        <CreateButton onClick={onCreateTemplate}>
-          + Create Template
-        </CreateButton>
-      </Header>
-
       <SearchAndFilters>
         <SearchInput
           type="text"
@@ -377,8 +400,9 @@ const TemplateList: React.FC<TemplateListProps> = ({ onEditTemplate, onCreateTem
           onChange={(e) => handleFilterChange('status', e.target.value)}
         >
           <option value="">All Status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+          <option value="archived">Archived</option>
         </FilterSelect>
       </SearchAndFilters>
 
@@ -397,9 +421,9 @@ const TemplateList: React.FC<TemplateListProps> = ({ onEditTemplate, onCreateTem
               <TemplateCard key={template.id}>
                 <TemplateHeader>
                   <TemplateTitle>{template.name}</TemplateTitle>
-                  <TemplateStatus active={template.is_active}>
-                    {template.is_active ? 'Active' : 'Inactive'}
-                  </TemplateStatus>
+                  <StatusBadge $status={(template.status as 'draft' | 'published' | 'archived') || 'draft'}>
+                    {(template.status as 'draft' | 'published' | 'archived') || 'draft'}
+                  </StatusBadge>
                 </TemplateHeader>
 
                 <TemplateMeta>
@@ -451,7 +475,7 @@ const TemplateList: React.FC<TemplateListProps> = ({ onEditTemplate, onCreateTem
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
                 <PageButton
                   key={pageNum}
-                  active={pageNum === page}
+                  $active={pageNum === page}
                   onClick={() => setPage(pageNum)}
                 >
                   {pageNum}
