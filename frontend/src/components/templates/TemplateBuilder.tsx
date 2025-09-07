@@ -50,7 +50,6 @@ interface TemplateBuilderProps {
 
 // Styled Components
 const BuilderContainer = styled.div`
-  padding: 1rem;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -58,10 +57,19 @@ const BuilderContainer = styled.div`
 `;
 
 const Section = styled.div`
-  margin-bottom: 1rem;
+  margin-bottom: 0;
   border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
+  border-radius: 0;
   background: white;
+  
+  &:first-child {
+    border-top: none;
+  }
+  
+  &:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+  }
 `;
 
 const SectionHeader = styled.div`
@@ -72,7 +80,6 @@ const SectionHeader = styled.div`
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
-  border-radius: 0.5rem 0.5rem 0 0;
   
   &:hover {
     background: #f3f4f6;
