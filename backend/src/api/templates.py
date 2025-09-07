@@ -93,6 +93,7 @@ class TemplateResponse(BaseModel):
     is_active: bool
     status: str
     version: int
+    test_document_id: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -273,6 +274,7 @@ async def create_template(
             is_active=template.is_active,
             status=template.status or "draft",
             version=template.version,
+            test_document_id=str(template.test_document_id) if template.test_document_id else None,
             created_at=template.created_at.isoformat(),
             updated_at=template.updated_at.isoformat()
         )
@@ -413,6 +415,7 @@ async def get_template(
             is_active=template.is_active,
             status=template.status or "draft",
             version=template.version,
+            test_document_id=str(template.test_document_id) if template.test_document_id else None,
             created_at=template.created_at.isoformat(),
             updated_at=template.updated_at.isoformat()
         )
@@ -498,6 +501,7 @@ async def update_template(
             is_active=template.is_active,
             status=template.status or "draft",
             version=template.version,
+            test_document_id=str(template.test_document_id) if template.test_document_id else None,
             created_at=template.created_at.isoformat(),
             updated_at=template.updated_at.isoformat()
         )

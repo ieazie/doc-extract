@@ -25,6 +25,7 @@ export interface Document {
   character_count?: number;
   word_count?: number;
   has_thumbnail: boolean;
+  is_test_document: boolean;
   created_at: string;
   updated_at: string;
   extraction_completed_at?: string;
@@ -235,6 +236,36 @@ class ApiClient {
 
   async deleteDocument(documentId: string): Promise<void> {
     await this.client.delete(`/api/documents/${documentId}`);
+  }
+
+  async uploadTestDocument(
+    file: File, 
+    options?: { onUploadProgress?: (progress: number) => void }
+  ): Promise<Document> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('is_test_document', 'true'); // Mark as test document
+    
+    const config: AxiosRequestConfig = {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    };
+
+    if (options?.onUploadProgress) {
+      config.onUploadProgress = (progressEvent) => {
+        if (progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          options.onUploadProgress!(progress);
+        }
+      };
+    }
+
+    // Upload the document
+    const uploadResponse = await this.client.post('/api/documents/upload', formData, config);
+    const uploadData: DocumentUploadResponse = uploadResponse.data;
+    
+    // Fetch the actual document data
+    const document = await this.getDocument(uploadData.document_id);
+    return document;
   }
 
   async getDocumentDownloadUrl(documentId: string): Promise<string> {
@@ -647,6 +678,7 @@ class ApiClient {
     
     return statusIcons[status] || '📄';
   }
+
 }
 
 // Export singleton instance

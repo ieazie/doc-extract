@@ -197,7 +197,14 @@ const ActionButton = styled.button<{ variant?: 'primary' | 'secondary' | 'danger
       default: return 'white';
     }
   }};
-  color: ${props => props.variant === 'secondary' ? '#6c757d' : 'white'};
+  color: ${props => {
+    switch (props.variant) {
+      case 'primary': return 'white';
+      case 'danger': return 'white';
+      case 'secondary': return '#6c757d';
+      default: return '#374151';
+    }
+  }};
   border-radius: 6px;
   font-size: 0.875rem;
   cursor: pointer;
@@ -446,9 +453,11 @@ const TemplateList: React.FC<TemplateListProps> = ({ onEditTemplate, onCreateTem
                 </SchemaPreview>
 
                 <TemplateActions>
-                  <ActionButton onClick={() => onEditTemplate(template)}>
-                    Edit
-                  </ActionButton>
+                  {template.status === 'draft' && (
+                    <ActionButton onClick={() => onEditTemplate(template)}>
+                      Edit
+                    </ActionButton>
+                  )}
                   <ActionButton variant="primary" onClick={() => setTestingTemplate(template)}>
                     Test
                   </ActionButton>

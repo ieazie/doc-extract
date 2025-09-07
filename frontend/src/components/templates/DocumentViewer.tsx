@@ -19,12 +19,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 // Types
-interface Document {
-  id: string;
-  filename: string;
-  file_size: number;
-  content_type: string;
-  upload_date: string;
+import { Document as ApiDocument } from '../../services/api';
+
+interface Document extends ApiDocument {
   file?: File;
 }
 
@@ -255,9 +252,9 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
       setError(null);
 
       try {
-        console.log('Loading document:', document.filename);
+        console.log('Loading document:', document.original_filename);
         
-        if (document.file && document.content_type.includes('pdf')) {
+        if (document.file && document.mime_type?.includes('pdf')) {
           // Use the actual uploaded file
           const fileUrl = URL.createObjectURL(document.file);
           
@@ -269,7 +266,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
           
           // Clean up URL
           URL.revokeObjectURL(fileUrl);
-        } else if (document.file && (document.content_type.includes('text') || document.content_type.includes('document'))) {
+        } else if (document.file && (document.mime_type?.includes('text') || document.mime_type?.includes('document'))) {
           // Handle text files
           const text = await document.file.text();
           setTextContent(text);
@@ -309,9 +306,16 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
         const scale = zoom;
         const viewport = page.getViewport({ scale });
         
-        // Set canvas dimensions
+        // Set canvas dimensions to match viewport
         canvas.width = viewport.width;
         canvas.height = viewport.height;
+        
+        // Set canvas display size (CSS pixels)
+        const displayWidth = Math.min(viewport.width, 800); // Max width of 800px
+        const displayHeight = (viewport.height * displayWidth) / viewport.width;
+        
+        canvas.style.width = `${displayWidth}px`;
+        canvas.style.height = `${displayHeight}px`;
         
         // Get canvas context
         const ctx = canvas.getContext('2d');
@@ -319,6 +323,18 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
         
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Set high DPI rendering
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        const scaledWidth = viewport.width * devicePixelRatio;
+        const scaledHeight = viewport.height * devicePixelRatio;
+        
+        canvas.width = scaledWidth;
+        canvas.height = scaledHeight;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        
+        ctx.scale(devicePixelRatio, devicePixelRatio);
         
         // Render the page
         const renderContext = {
@@ -366,7 +382,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
   };
 
   const handleZoomIn = () => {
-    const newZoom = Math.min(zoom + 0.25, 3.0);
+    const newZoom = Math.min(zoom + 0.25, 2.0);
     setZoom(newZoom);
     onZoomChange?.(newZoom);
   };
@@ -379,7 +395,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
 
   const handleDownload = () => {
     // TODO: Implement document download
-    console.log('Downloading document:', document.filename);
+    console.log('Downloading document:', document.original_filename);
   };
 
   const handleRotate = () => {
@@ -472,11 +488,10 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
           <CanvasContainer>
             <Canvas
               ref={canvasRef}
-              width={800}
-              height={1000}
               style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: 'top left'
+                maxWidth: '100%',
+                height: 'auto',
+                display: 'block'
               }}
             />
           </CanvasContainer>
@@ -488,11 +503,10 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
           <CanvasContainer>
             <Canvas
               ref={canvasRef}
-              width={800}
-              height={1000}
               style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: 'top left'
+                maxWidth: '100%',
+                height: 'auto',
+                display: 'block'
               }}
             />
           </CanvasContainer>

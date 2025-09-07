@@ -55,17 +55,8 @@ const TemplatesPage: React.FC = () => {
     router.push('/templates/new');
   };
 
-  const handleEditTemplate = async (template: TemplateBase) => {
-    try {
-      const fullTemplate = await apiClient.getTemplate(template.id);
-      setEditingTemplate(fullTemplate);
-      setCurrentView('edit');
-    } catch (error) {
-      console.error('Failed to fetch template details:', error);
-      // Fallback to basic template for now
-      setEditingTemplate(template as any);
-      setCurrentView('edit');
-    }
+  const handleEditTemplate = (template: TemplateBase) => {
+    router.push(`/templates/builder?id=${template.id}`);
   };
 
   const handleSave = () => {

@@ -121,6 +121,7 @@ class Document(Base):
     
     # Status tracking
     status = Column(String(50), default="uploaded")
+    is_test_document = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
@@ -149,6 +150,7 @@ class Extraction(Base):
     error_message = Column(Text)
     reviewed_by = Column(String(100))
     reviewed_at = Column(DateTime(timezone=True))
+    is_test_extraction = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
@@ -207,6 +209,7 @@ class Template(Base):
     
     # Status and metadata
     is_active = Column(Boolean, default=True)
+    test_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

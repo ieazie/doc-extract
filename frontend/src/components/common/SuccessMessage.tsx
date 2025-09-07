@@ -41,3 +41,4 @@ export const SuccessMessage: React.FC<SuccessMessageProps> = ({ message }) => {
 };
 
 export default SuccessMessage;
+

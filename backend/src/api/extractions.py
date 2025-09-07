@@ -159,8 +159,8 @@ async def list_extractions(
     try:
         tenant_id = get_tenant_id(db)
         
-        # Build query with joins
-        query = db.query(Extraction).join(Document).join(Template).filter(
+        # Build query with joins - use left join for Template to avoid filtering issues
+        query = db.query(Extraction).join(Document).outerjoin(Template).filter(
             Document.tenant_id == tenant_id
         )
         
@@ -370,3 +370,4 @@ async def process_extraction(
             pass
     finally:
         db.close()
+

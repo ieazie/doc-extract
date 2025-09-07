@@ -39,6 +39,7 @@ class DocumentResponse(BaseModel):
     character_count: Optional[int]
     word_count: Optional[int]
     has_thumbnail: bool
+    is_test_document: bool
     created_at: str
     updated_at: str
     extraction_completed_at: Optional[str]
@@ -96,6 +97,7 @@ async def upload_document(
     document_type_id: Optional[str] = Form(None),
     category_id: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),  # Comma-separated tags
+    is_test_document: Optional[bool] = Form(False),
     db: Session = Depends(get_db),
     tenant_id: UUID = Depends(get_current_tenant_id)
 ):
@@ -149,7 +151,8 @@ async def upload_document(
             document_type_id=doc_type_uuid,
             category_id=category_uuid,
             status=upload_result["status"],
-            extraction_status=upload_result["extraction_status"]
+            extraction_status=upload_result["extraction_status"],
+            is_test_document=is_test_document or False
         )
         
         db.add(document)
@@ -291,6 +294,7 @@ async def list_documents(
                 character_count=doc.character_count,
                 word_count=doc.word_count,
                 has_thumbnail=bool(doc.thumbnail_s3_key),
+                is_test_document=doc.is_test_document,
                 created_at=doc.created_at.isoformat(),
                 updated_at=doc.updated_at.isoformat(),
                 extraction_completed_at=doc.extraction_completed_at.isoformat() if doc.extraction_completed_at else None
@@ -355,6 +359,7 @@ async def get_document(
             character_count=document.character_count,
             word_count=document.word_count,
             has_thumbnail=bool(document.thumbnail_s3_key),
+            is_test_document=document.is_test_document,
             created_at=document.created_at.isoformat(),
             updated_at=document.updated_at.isoformat(),
             extraction_completed_at=document.extraction_completed_at.isoformat() if document.extraction_completed_at else None

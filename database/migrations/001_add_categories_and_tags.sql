@@ -95,3 +95,4 @@ LEFT JOIN document_tags dt_tags ON d.id = dt_tags.document_id
 GROUP BY d.id, d.original_filename, d.file_size, d.status, d.extraction_status, 
          dt.name, dc.name, dc.color, d.page_count, d.character_count, d.word_count,
          d.created_at, d.extraction_completed_at;
+

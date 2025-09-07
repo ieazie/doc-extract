@@ -149,3 +149,4 @@ export const colors = {
 };
 
 export default { getThemeColor, colors };
+

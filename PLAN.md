@@ -145,26 +145,36 @@ A comprehensive document extraction platform that uses LangExtract and local LLM
 
 ---
 
-### Phase 5: Integrated Template Builder & Extraction Playground
-**Goal**: Visual template creation with real-time preview and integrated extraction testing
+### Phase 5: Advanced Template Builder
+**Goal**: Visual template creation with real-time preview
 
-#### Phase 5A: Core Infrastructure (1-2 weeks)
-- Create `/templates/new` route with tabbed interface
-- Build DocumentViewer component using PDF.js
-- Enhance template creation to work with document preview
-- Add draft/published state to template system
+#### 5.1 Schema Builder UI
+- Visual drag-and-drop field creation interface
+- Field type selection with validation rules
+- Nested object support with tree view
+- Field relationship mapping
+- Schema validation with real-time feedback
 
-#### Phase 5B: Integration & Polish (1-2 weeks)
-- Integrate schema builder with document preview
-- Add template testing with live extraction
-- Clean up dashboard (remove extraction functionality)
-- Add draft management to template list
+#### 5.2 Document Annotation
+- Visual field mapping on document preview
+- Source location selection with highlighting
+- Interactive example creation
+- Annotation tools (highlight, select, annotate)
+- Multi-page document navigation
 
-#### Phase 5C: Testing & Refinement (1 week)
-- End-to-end testing of new workflow
-- Performance optimization for PDF rendering
-- UI/UX polish and responsive design
-- Documentation and user guidance
+#### 5.3 Prompt Engineering Interface
+- Advanced prompt editor with syntax highlighting
+- Few-shot example builder with document context
+- Template testing with live extraction preview
+- Prompt optimization suggestions and best practices
+- A/B testing framework for prompt variations
+
+#### 5.4 Template Testing
+- Real-time extraction preview with sample documents
+- Template validation with comprehensive error checking
+- Performance metrics (speed, accuracy, confidence)
+- Comparative testing between template versions
+- Automated quality scoring
 
 **Deliverable**: Professional template builder with visual interface and real-time feedback
 
