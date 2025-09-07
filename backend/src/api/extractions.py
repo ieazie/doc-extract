@@ -5,7 +5,7 @@ Handles document extraction using LangExtract + Gemma
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 import uuid
 import logging
 
@@ -153,6 +153,7 @@ async def list_extractions(
     status: Optional[str] = Query(None, description="Filter by status"),
     document_id: Optional[str] = Query(None, description="Filter by document"),
     template_id: Optional[str] = Query(None, description="Filter by template"),
+    search: Optional[str] = Query(None, description="Search in document and template names"),
     db: Session = Depends(get_db)
 ):
     """List extractions with pagination and filtering"""
@@ -160,7 +161,7 @@ async def list_extractions(
         tenant_id = get_tenant_id(db)
         
         # Build query with joins - use left join for Template to avoid filtering issues
-        query = db.query(Extraction).join(Document).outerjoin(Template).filter(
+        query = db.query(Extraction).join(Document).outerjoin(Template, Extraction.template_id == Template.id).filter(
             Document.tenant_id == tenant_id
         )
         
@@ -173,6 +174,16 @@ async def list_extractions(
         
         if template_id:
             query = query.filter(Extraction.template_id == uuid.UUID(template_id))
+        
+        if search:
+            search_term = f"%{search}%"
+            # Search in document names and template names
+            query = query.filter(
+                or_(
+                    Document.original_filename.ilike(search_term),
+                    Template.name.ilike(search_term)
+                )
+            )
         
         # Get total count
         total = query.count()

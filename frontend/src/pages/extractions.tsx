@@ -2,9 +2,8 @@
  * Extractions Page
  * Professional table-based interface for managing document extractions
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { 
   Play, 
   Eye, 
@@ -23,6 +22,8 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { SuccessMessage } from '../components/common/SuccessMessage';
 import { ExtractionResultsModal } from '../components/extractions/ExtractionResultsModal';
+import { Table, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table/Table';
+import { StatusBadge, ActionButton, ActionGroup } from '../components/table/Table.styled';
 
 // Styled Components
 const PageContainer = styled.div`
@@ -54,58 +55,6 @@ const HeaderActions = styled.div`
   align-items: center;
 `;
 
-const FilterBar = styled.div`
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 0.5rem;
-  border: 1px solid #e5e7eb;
-`;
-
-const FilterGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-`;
-
-const FilterLabel = styled.label`
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #374151;
-`;
-
-const FilterSelect = styled.select`
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  background: white;
-  font-size: 0.875rem;
-  min-width: 120px;
-  
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-`;
-
-const SearchInput = styled.input`
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  background: white;
-  font-size: 0.875rem;
-  min-width: 200px;
-  
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-`;
-
 const RefreshButton = styled.button`
   display: flex;
   align-items: center;
@@ -130,190 +79,22 @@ const RefreshButton = styled.button`
   }
 `;
 
-const ExtractionsTable = styled.div`
-  background: white;
-  border-radius: 0.5rem;
-  border: 1px solid #e5e7eb;
-  overflow: hidden;
-`;
+// Custom hook for debounced search
+const useDebounce = (value: string, delay: number) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
 
-const TableHeader = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 2fr 2fr 1fr 1fr 1fr 1fr 1fr;
-  gap: 1rem;
-  padding: 1rem;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: #374151;
-`;
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
 
-const TableRow = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 2fr 2fr 1fr 1fr 1fr 1fr 1fr;
-  gap: 1rem;
-  padding: 1rem;
-  border-bottom: 1px solid #f3f4f6;
-  align-items: center;
-  transition: background-color 0.2s;
-  
-  &:hover {
-    background: #f9fafb;
-  }
-  
-  &:last-child {
-    border-bottom: none;
-  }
-`;
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
 
-const StatusBadge = styled.span<{ status: string }>`
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  
-  ${props => {
-    switch (props.status) {
-      case 'pending':
-        return `
-          background: #fef3c7;
-          color: #92400e;
-        `;
-      case 'processing':
-        return `
-          background: #dbeafe;
-          color: #1e40af;
-        `;
-      case 'completed':
-        return `
-          background: #d1fae5;
-          color: #065f46;
-        `;
-      case 'failed':
-        return `
-          background: #fee2e2;
-          color: #991b1b;
-        `;
-      default:
-        return `
-          background: #f3f4f6;
-          color: #374151;
-        `;
-    }
-  }}
-`;
-
-const ActionButton = styled.button<{ variant?: 'primary' | 'secondary' | 'danger' }>`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border: none;
-  border-radius: 0.375rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  ${props => {
-    switch (props.variant) {
-      case 'primary':
-        return `
-          background: #3b82f6;
-          color: white;
-          &:hover { background: #2563eb; }
-        `;
-      case 'danger':
-        return `
-          background: #ef4444;
-          color: white;
-          &:hover { background: #dc2626; }
-        `;
-      default:
-        return `
-          background: #f3f4f6;
-          color: #6b7280;
-          &:hover { background: #e5e7eb; }
-        `;
-    }
-  }}
-`;
-
-const ActionGroup = styled.div`
-  display: flex;
-  gap: 0.5rem;
-`;
-
-const PaginationContainer = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 1.5rem;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 0.5rem;
-  border: 1px solid #e5e7eb;
-`;
-
-const PaginationInfo = styled.div`
-  font-size: 0.875rem;
-  color: #6b7280;
-`;
-
-const PaginationControls = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-`;
-
-const PaginationButton = styled.button<{ disabled?: boolean }>`
-  padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  background: white;
-  color: #374151;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover:not(:disabled) {
-    background: #f9fafb;
-    border-color: #9ca3af;
-  }
-  
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-const EmptyState = styled.div`
-  text-align: center;
-  padding: 3rem;
-  color: #6b7280;
-`;
-
-const EmptyStateIcon = styled.div`
-  font-size: 3rem;
-  margin-bottom: 1rem;
-  opacity: 0.5;
-`;
-
-const EmptyStateTitle = styled.h3`
-  font-size: 1.125rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  color: #374151;
-`;
-
-const EmptyStateDescription = styled.p`
-  font-size: 0.875rem;
-  margin: 0;
-`;
+  return debouncedValue;
+};
 
 // Main Component
 const ExtractionsPage: React.FC = () => {
@@ -323,55 +104,88 @@ const ExtractionsPage: React.FC = () => {
     page: 1,
     per_page: 10
   });
+  const [searchInput, setSearchInput] = useState('');
   const [selectedExtractionId, setSelectedExtractionId] = useState<string | null>(null);
   const [resultsModalOpen, setResultsModalOpen] = useState<boolean>(false);
+  
+  // Data state
+  const [extractionsData, setExtractionsData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Debounce search input with 600ms delay to reduce API calls
+  const debouncedSearch = useDebounce(searchInput, 600);
 
-  const queryClient = useQueryClient();
-
-  // Fetch extractions
-  const { 
-    data: extractionsData, 
-    isLoading, 
-    error, 
-    refetch 
-  } = useQuery(
-    ['extractions', filters],
-    () => apiClient.getExtractions(filters),
-    {
-      refetchInterval: 5000, // Poll every 5 seconds for status updates
-      keepPreviousData: true
+  // Sync debounced search with filters - simple debounced update
+  useEffect(() => {
+    if (debouncedSearch !== filters.search) {
+      setFilters(prev => ({
+        ...prev,
+        search: debouncedSearch,
+        page: 1 // Reset to first page when search changes
+      }));
     }
-  );
+  }, [debouncedSearch, filters.search]);
 
-  // Delete extraction mutation
-  const deleteExtractionMutation = useMutation(
-    (extractionId: string) => apiClient.deleteExtraction(extractionId),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['extractions']);
+  // Fetch data when filters change (including initial load)
+  useEffect(() => {
+    const fetchExtractions = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        const data = await apiClient.getExtractions(filters);
+        setExtractionsData(data);
+      } catch (err) {
+        setError('Failed to load extractions');
+        console.error('Error fetching extractions:', err);
+      } finally {
+        setIsLoading(false);
       }
+    };
+    
+    fetchExtractions();
+  }, [filters.status, filters.search, filters.page, filters.per_page]);
+
+
+  // Delete extraction function
+  const deleteExtraction = async (extractionId: string) => {
+    try {
+      await apiClient.deleteExtraction(extractionId);
+      // Refresh the data after successful deletion
+      const data = await apiClient.getExtractions(filters);
+      setExtractionsData(data);
+    } catch (err) {
+      console.error('Error deleting extraction:', err);
+      // You could add a toast notification here
     }
-  );
+  };
 
   const handleFilterChange = (key: string, value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value,
-      page: 1 // Reset to first page when filtering
-    }));
+    if (key === 'search') {
+      // For search, update the input state (debounced search will handle the actual filtering)
+      setSearchInput(value);
+    } else {
+      // For other filters, update immediately
+      setFilters(prev => ({
+        ...prev,
+        [key]: value,
+        page: 1 // Reset to first page when filtering
+      }));
+    }
   };
 
   const handlePageChange = (page: number) => {
     setFilters(prev => ({ ...prev, page }));
   };
 
-  const handleDeleteExtraction = async (extractionId: string) => {
+  const handlePerPageChange = (perPage: number) => {
+    setFilters(prev => ({ ...prev, per_page: perPage, page: 1 }));
+  };
+
+  const handleDeleteExtraction = (extractionId: string) => {
     if (window.confirm('Are you sure you want to delete this extraction?')) {
-      try {
-        await deleteExtractionMutation.mutateAsync(extractionId);
-      } catch (error) {
-        console.error('Failed to delete extraction:', error);
-      }
+      deleteExtraction(extractionId);
     }
   };
 
@@ -400,24 +214,143 @@ const ExtractionsPage: React.FC = () => {
     return `${(ms / 1000).toFixed(1)}s`;
   };
 
-  if (isLoading && !extractionsData) {
-    return (
-      <PageContainer>
-        <LoadingSpinner />
-      </PageContainer>
-    );
-  }
+  // Column definitions for the table
+  const columns: ColumnDefinition[] = [
+    {
+      key: 'id',
+      label: 'ID',
+      render: (value) => (
+        <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+          {value.slice(0, 8)}...
+        </span>
+      )
+    },
+    {
+      key: 'document_name',
+      label: 'Document',
+      render: (value, row) => (
+        <div>
+          <div style={{ fontWeight: 500 }}>{value}</div>
+          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            {row.document_id.slice(0, 8)}...
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'template_name',
+      label: 'Template',
+      render: (value, row) => (
+        <div>
+          <div style={{ fontWeight: 500 }}>{value}</div>
+          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            {row.template_id.slice(0, 8)}...
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (value) => <StatusBadge status={value}>{value}</StatusBadge>
+    },
+    {
+      key: 'confidence_score',
+      label: 'Confidence',
+      render: (value) => {
+        if (!value) return <span style={{ color: '#9ca3af' }}>-</span>;
+        return (
+          <span style={{ 
+            color: value > 0.8 ? '#059669' : 
+                   value > 0.6 ? '#d97706' : '#dc2626'
+          }}>
+            {(value * 100).toFixed(0)}%
+          </span>
+        );
+      }
+    },
+    {
+      key: 'processing_time_ms',
+      label: 'Duration',
+      render: (value) => {
+        if (!value) return <span style={{ color: '#9ca3af' }}>-</span>;
+        return formatDuration(value);
+      }
+    },
+    {
+      key: 'created_at',
+      label: 'Created',
+      render: (value) => (
+        <span style={{ fontSize: '0.875rem' }}>
+          {formatDate(value)}
+        </span>
+      )
+    }
+  ];
 
-  if (error) {
-    return (
-      <PageContainer>
-        <ErrorMessage message="Failed to load extractions" />
-      </PageContainer>
-    );
-  }
+  // Filter definitions
+  const filterDefinitions: FilterDefinition[] = [
+    {
+      key: 'status',
+      label: 'Status',
+      type: 'select',
+      options: [
+        { value: 'pending', label: 'Pending' },
+        { value: 'processing', label: 'Processing' },
+        { value: 'completed', label: 'Completed' },
+        { value: 'failed', label: 'Failed' }
+      ]
+    },
+    {
+      key: 'search',
+      label: 'Search',
+      type: 'search',
+      placeholder: 'Search documents or templates (min 2 chars)...'
+    }
+  ];
 
+  // Use extractions data
   const extractions = extractionsData?.extractions || [];
-  const totalPages = extractionsData?.total_pages || 0;
+  const isSearchingOrLoading = isLoading;
+
+  // Pagination configuration
+  const paginationConfig: PaginationConfig = {
+    page: filters.page,
+    perPage: filters.per_page,
+    total: extractionsData?.total || 0,
+    totalPages: extractionsData?.total_pages || 0,
+    onPageChange: handlePageChange,
+    onPerPageChange: handlePerPageChange,
+    mode: 'server'
+  };
+
+  // Actions render function
+  const renderActions = (row: any) => (
+    <ActionGroup>
+      <ActionButton
+        title="View Results"
+        onClick={() => handleViewResults(row.id)}
+      >
+        <Eye size={16} />
+      </ActionButton>
+      <ActionButton
+        title="Download Results"
+        onClick={() => {
+          // TODO: Implement download results
+          console.log('Download results for:', row.id);
+        }}
+      >
+        <Download size={16} />
+      </ActionButton>
+      <ActionButton
+        variant="danger"
+        title="Delete Extraction"
+        onClick={() => handleDeleteExtraction(row.id)}
+      >
+        <Trash2 size={16} />
+      </ActionButton>
+    </ActionGroup>
+  );
 
   return (
     <PageContainer>
@@ -427,181 +360,40 @@ const ExtractionsPage: React.FC = () => {
           Extractions
         </PageTitle>
         <HeaderActions>
-          <RefreshButton onClick={() => refetch()} disabled={isLoading}>
+          <RefreshButton onClick={async () => {
+            const data = await apiClient.getExtractions(filters);
+            setExtractionsData(data);
+          }} disabled={isLoading}>
             <RefreshCw size={16} />
             Refresh
           </RefreshButton>
         </HeaderActions>
       </PageHeader>
 
-      <FilterBar>
-        <FilterGroup>
-          <FilterLabel>Status</FilterLabel>
-          <FilterSelect
-            value={filters.status}
-            onChange={(e) => handleFilterChange('status', e.target.value)}
-          >
-            <option value="">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="processing">Processing</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-          </FilterSelect>
-        </FilterGroup>
-
-        <FilterGroup>
-          <FilterLabel>Search</FilterLabel>
-          <SearchInput
-            type="text"
-            placeholder="Search documents or templates..."
-            value={filters.search}
-            onChange={(e) => handleFilterChange('search', e.target.value)}
-          />
-        </FilterGroup>
-
-        <FilterGroup>
-          <FilterLabel>Per Page</FilterLabel>
-          <FilterSelect
-            value={filters.per_page}
-            onChange={(e) => handleFilterChange('per_page', e.target.value)}
-          >
-            <option value="10">10</option>
-            <option value="25">25</option>
-            <option value="50">50</option>
-          </FilterSelect>
-        </FilterGroup>
-      </FilterBar>
-
-      {extractions.length === 0 ? (
-        <EmptyState>
-          <EmptyStateIcon>
-            <FileText size={48} />
-          </EmptyStateIcon>
-          <EmptyStateTitle>No extractions found</EmptyStateTitle>
-          <EmptyStateDescription>
-            {filters.status || filters.search 
-              ? 'Try adjusting your filters to see more results.'
-              : 'Upload documents and create templates to start extracting data.'
-            }
-          </EmptyStateDescription>
-        </EmptyState>
-      ) : (
-        <>
-          <ExtractionsTable>
-            <TableHeader>
-              <div>ID</div>
-              <div>Document</div>
-              <div>Template</div>
-              <div>Status</div>
-              <div>Confidence</div>
-              <div>Duration</div>
-              <div>Created</div>
-              <div>Actions</div>
-            </TableHeader>
-
-            {extractions.map((extraction) => (
-              <TableRow key={extraction.id}>
-                <div style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                  {extraction.id.slice(0, 8)}...
-                </div>
-                <div>
-                  <div style={{ fontWeight: 500 }}>{extraction.document_name}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                    {extraction.document_id.slice(0, 8)}...
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontWeight: 500 }}>{extraction.template_name}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                    {extraction.template_id.slice(0, 8)}...
-                  </div>
-                </div>
-                <div>
-                  <StatusBadge status={extraction.status}>
-                    {extraction.status}
-                  </StatusBadge>
-                </div>
-                <div>
-                  {extraction.confidence_score ? (
-                    <span style={{ 
-                      color: extraction.confidence_score > 0.8 ? '#059669' : 
-                             extraction.confidence_score > 0.6 ? '#d97706' : '#dc2626'
-                    }}>
-                      {(extraction.confidence_score * 100).toFixed(0)}%
-                    </span>
-                  ) : (
-                    <span style={{ color: '#9ca3af' }}>-</span>
-                  )}
-                </div>
-                <div>
-                  {extraction.processing_time_ms ? (
-                    formatDuration(extraction.processing_time_ms)
-                  ) : (
-                    <span style={{ color: '#9ca3af' }}>-</span>
-                  )}
-                </div>
-                <div style={{ fontSize: '0.875rem' }}>
-                  {formatDate(extraction.created_at)}
-                </div>
-                <div>
-                  <ActionGroup>
-                    <ActionButton
-                      title="View Results"
-                      onClick={() => handleViewResults(extraction.id)}
-                    >
-                      <Eye size={16} />
-                    </ActionButton>
-                    <ActionButton
-                      title="Download Results"
-                      onClick={() => {
-                        // TODO: Implement download results
-                        console.log('Download results for:', extraction.id);
-                      }}
-                    >
-                      <Download size={16} />
-                    </ActionButton>
-                    <ActionButton
-                      variant="danger"
-                      title="Delete Extraction"
-                      onClick={() => handleDeleteExtraction(extraction.id)}
-                    >
-                      <Trash2 size={16} />
-                    </ActionButton>
-                  </ActionGroup>
-                </div>
-              </TableRow>
-            ))}
-          </ExtractionsTable>
-
-          <PaginationContainer>
-            <PaginationInfo>
-              Showing {((filters.page - 1) * filters.per_page) + 1} to{' '}
-              {Math.min(filters.page * filters.per_page, extractionsData?.total || 0)} of{' '}
-              {extractionsData?.total || 0} extractions
-            </PaginationInfo>
-            
-            <PaginationControls>
-              <PaginationButton
-                disabled={filters.page <= 1}
-                onClick={() => handlePageChange(filters.page - 1)}
-              >
-                Previous
-              </PaginationButton>
-              
-              <span style={{ padding: '0 1rem', fontSize: '0.875rem' }}>
-                Page {filters.page} of {totalPages}
-              </span>
-              
-              <PaginationButton
-                disabled={filters.page >= totalPages}
-                onClick={() => handlePageChange(filters.page + 1)}
-              >
-                Next
-              </PaginationButton>
-            </PaginationControls>
-          </PaginationContainer>
-        </>
-      )}
+      <Table
+        data={extractions}
+        columns={columns}
+        filters={filterDefinitions}
+        filterValues={{
+          status: filters.status,
+          search: searchInput
+        }}
+        pagination={paginationConfig}
+        loading={isLoading && !extractionsData}
+        error={error ? 'Failed to load extractions' : undefined}
+        emptyState={{
+          icon: <FileText size={48} />,
+          title: 'No extractions found',
+          description: filters.status || (searchInput && searchInput.length >= 2)
+            ? 'Try adjusting your filters to see more results.'
+            : 'Upload documents and create templates to start extracting data.'
+        }}
+        actions={renderActions}
+        onFilterChange={handleFilterChange}
+        isSearching={isSearchingOrLoading}
+        searchMinLength={2}
+      />
+      
 
       {selectedExtractionId && (
         <ExtractionResultsModal

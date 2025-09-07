@@ -126,7 +126,7 @@ const PanelTitle = styled.h2`
 
 const PanelContent = styled.div`
   flex: 1;
-  padding: 2rem;
+  padding: 0;
   overflow: auto;
 `;
 

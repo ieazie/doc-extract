@@ -85,8 +85,16 @@ class ApiClient {
   private client: AxiosInstance;
 
   constructor() {
-    // Use environment variable or fallback to localhost for development
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    // Determine the correct API URL based on environment
+    let apiBaseUrl;
+    if (typeof window === 'undefined') {
+      // Server-side (Next.js SSR) - use Docker service name
+      apiBaseUrl = 'http://backend:8000';
+    } else {
+      // Client-side (browser) - use localhost
+      apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    }
+    
     this.client = axios.create({
       baseURL: apiBaseUrl,
       timeout: 30000, // 30 seconds for file uploads
@@ -548,6 +556,7 @@ class ApiClient {
     status?: string;
     document_id?: string;
     template_id?: string;
+    search?: string;
   } = {}): Promise<{
     extractions: Array<{
       id: string;
