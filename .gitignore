@@ -229,7 +229,7 @@ ollama_data/
 # Uploaded files and documents (development)
 uploads/
 storage/
-documents/
+/documents/
 
 # ML Models and large files (but not backend/src/models/)
 *.bin

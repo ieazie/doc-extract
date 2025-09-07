@@ -294,6 +294,9 @@ async def list_templates(
     search: Optional[str] = Query(None, description="Search by template name"),
     document_type_id: Optional[str] = Query(None, description="Filter by document type"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    status: Optional[str] = Query(None, description="Filter by template status (draft, published, archived)"),
+    sort_by: str = Query("created_at", description="Sort field"),
+    sort_order: str = Query("desc", description="Sort order (asc/desc)"),
     db: Session = Depends(get_db)
 ):
     """List templates with pagination and filtering"""
@@ -327,6 +330,16 @@ async def list_templates(
         
         if is_active is not None:
             query = query.filter(Template.is_active == is_active)
+        
+        if status:
+            query = query.filter(Template.status == status)
+        
+        # Apply sorting
+        sort_column = getattr(Template, sort_by, Template.created_at)
+        if sort_order.lower() == "asc":
+            query = query.order_by(sort_column.asc())
+        else:
+            query = query.order_by(sort_column.desc())
         
         # Get total count
         total = query.count()
@@ -465,6 +478,8 @@ async def update_template(
         # Update fields
         if template_data.name is not None:
             template.name = template_data.name
+        if template_data.description is not None:
+            template.description = template_data.description
         if template_data.document_type_id is not None:
             template.document_type_id = uuid.UUID(template_data.document_type_id) if template_data.document_type_id else None
         if template_data.schema is not None:
@@ -477,6 +492,8 @@ async def update_template(
             template.few_shot_examples = template_data.few_shot_examples
         if template_data.is_active is not None:
             template.is_active = template_data.is_active
+        if template_data.status is not None:
+            template.status = template_data.status
         
         db.commit()
         db.refresh(template)
