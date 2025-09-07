@@ -245,6 +245,15 @@ export const Table = <T extends Record<string, any>>({
 
   const totalColumns = columns.length + (actions ? 1 : 0);
 
+  // Generate grid template columns based on column widths
+  const getGridTemplateColumns = () => {
+    const columnWidths = columns.map(col => col.width || '1fr');
+    if (actions) {
+      return [...columnWidths, 'auto'].join(' ');
+    }
+    return columnWidths.join(' ');
+  };
+
   return (
     <div className={className}>
       {/* Filters */}
@@ -301,7 +310,7 @@ export const Table = <T extends Record<string, any>>({
 
       {/* Table */}
       <TableContainer>
-        <TableHeader $columns={totalColumns}>
+        <TableHeader $columns={totalColumns} style={{ gridTemplateColumns: getGridTemplateColumns() }}>
           {columns.map(column => (
             <div key={column.key} style={{ textAlign: column.align || 'left' }}>
               {column.label}
@@ -311,7 +320,7 @@ export const Table = <T extends Record<string, any>>({
         </TableHeader>
 
         {isSearching ? (
-          <TableRow $columns={totalColumns}>
+          <TableRow $columns={totalColumns} style={{ gridTemplateColumns: getGridTemplateColumns() }}>
             <TableCell style={{ textAlign: 'center', gridColumn: `1 / ${totalColumns + 1}` }}>
               <div style={{ padding: '2rem', color: '#6b7280' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
@@ -329,7 +338,7 @@ export const Table = <T extends Record<string, any>>({
             </TableCell>
           </TableRow>
         ) : processedData.length === 0 && filters.some(f => f.type === 'search' && filterValues[f.key] && filterValues[f.key].length > 0 && filterValues[f.key].length < searchMinLength) ? (
-          <TableRow $columns={totalColumns}>
+          <TableRow $columns={totalColumns} style={{ gridTemplateColumns: getGridTemplateColumns() }}>
             <TableCell style={{ textAlign: 'center', gridColumn: `1 / ${totalColumns + 1}` }}>
               <div style={{ padding: '2rem', color: '#6b7280' }}>
                 <div>Type at least {searchMinLength} characters to search</div>
@@ -338,7 +347,7 @@ export const Table = <T extends Record<string, any>>({
           </TableRow>
         ) : (
           processedData.map((row, index) => (
-            <TableRow key={index} $columns={totalColumns}>
+            <TableRow key={index} $columns={totalColumns} style={{ gridTemplateColumns: getGridTemplateColumns() }}>
               {columns.map(column => (
                 <TableCell key={column.key} style={{ textAlign: column.align || 'left' }}>
                   {renderCell(column, row, index)}

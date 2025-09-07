@@ -84,7 +84,7 @@ export const TableContainer = styled.div`
   background: white;
   border-radius: 0.5rem;
   border: 1px solid #e5e7eb;
-  overflow: hidden;
+  overflow: visible;
 `;
 
 export const TableHeader = styled.div<{ $columns: number }>`

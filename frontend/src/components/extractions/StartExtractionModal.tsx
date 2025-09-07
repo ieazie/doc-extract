@@ -231,7 +231,7 @@ export const StartExtractionModal: React.FC<StartExtractionModalProps> = ({
     error: templatesError 
   } = useQuery(
     ['templates', { isActive: true }],
-    () => apiClient.getTemplates(1, 100, undefined, undefined, 'true'),
+    () => apiClient.getTemplates(1, 100, undefined, undefined, true),
     {
       enabled: isOpen
     }
@@ -344,4 +344,3 @@ export const StartExtractionModal: React.FC<StartExtractionModalProps> = ({
 };
 
 export default StartExtractionModal;
-

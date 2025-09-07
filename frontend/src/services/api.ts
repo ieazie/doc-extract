@@ -386,7 +386,10 @@ class ApiClient {
     perPage: number = 10,
     search?: string,
     documentTypeId?: string,
-    status?: string
+    isActive?: boolean,
+    status?: string,
+    sortBy?: string,
+    sortOrder?: string
   ): Promise<{
     templates: Array<{
       id: string;
@@ -411,7 +414,10 @@ class ApiClient {
     
     if (search) params.append('search', search);
     if (documentTypeId) params.append('document_type_id', documentTypeId);
+    if (isActive !== undefined) params.append('is_active', isActive.toString());
     if (status) params.append('status', status);
+    if (sortBy) params.append('sort_by', sortBy);
+    if (sortOrder) params.append('sort_order', sortOrder);
     
     const response = await this.client.get(`/api/templates/?${params.toString()}`);
     return response.data;
