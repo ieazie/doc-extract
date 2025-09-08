@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     
     # Ollama Configuration
     ollama_url: str = Field(default="http://ollama:11434", env="OLLAMA_URL")
-    ollama_model: str = Field(default="gemma3:4b", env="OLLAMA_MODEL")
+    ollama_model: str = Field(default="gemma2:2b", env="OLLAMA_MODEL")
     
     # File Upload Settings
     max_file_size: int = Field(default=20971520, env="MAX_FILE_SIZE")  # 20MB

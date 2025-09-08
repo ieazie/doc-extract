@@ -1,46 +1,43 @@
 /**
  * Extraction Results Panel
- * Reusable component for displaying extraction results
+ * Reusable component for displaying extraction results with multiple view modes
  */
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { 
   Download, 
-  FileText, 
-  Eye,
-  Code
+  FileText
 } from 'lucide-react';
 
 import LoadingSpinner from '../common/LoadingSpinner';
+import HierarchicalResultsViewer from './HierarchicalResultsViewer';
+import TableViewer from './TableViewer';
+import CardsViewer from './CardsViewer';
+import ViewModeSelector, { ViewMode } from './ViewModeSelector';
 
 // Styled Components
-const ResultsTabs = styled.div`
+const Header = styled.div`
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
   border-bottom: 1px solid #e5e7eb;
   background: #f9fafb;
   flex-shrink: 0;
 `;
 
-const Tab = styled.button<{ $active: boolean }>`
-  flex: 1;
-  padding: 0.75rem 1rem;
-  border: none;
-  background: ${props => props.$active ? 'white' : 'transparent'};
-  color: ${props => props.$active ? '#1f2937' : '#6b7280'};
-  font-size: 0.875rem;
-  font-weight: ${props => props.$active ? '600' : '500'};
-  cursor: pointer;
-  border-bottom: 2px solid ${props => props.$active ? '#3b82f6' : 'transparent'};
-  transition: all 0.2s;
+const HeaderLeft = styled.div`
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  
-  &:hover {
-    background: ${props => props.$active ? 'white' : '#f3f4f6'};
-  }
+  gap: 1rem;
 `;
+
+const HeaderRight = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+`;
+
 
 const ResultsContent = styled.div`
   flex: 1;
@@ -155,7 +152,7 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
   showExportButton = true,
   onExport
 }) => {
-  const [activeTab, setActiveTab] = useState<'formatted' | 'raw'>('formatted');
+  const [viewMode, setViewMode] = useState<ViewMode>('hierarchical');
 
   const handleExportJson = () => {
     if (!extractionResults?.results) return;
@@ -213,46 +210,49 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
   // Results state
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {showExportButton && (
-        <ExportButton onClick={handleExportJson}>
-          <Download size={16} />
-          Export JSON
-        </ExportButton>
-      )}
-      
-      <ResultsTabs>
-        <Tab 
-          $active={activeTab === 'formatted'} 
-          onClick={() => setActiveTab('formatted')}
-        >
-          <Eye size={16} />
-          Extract Result
-        </Tab>
-        <Tab 
-          $active={activeTab === 'raw'} 
-          onClick={() => setActiveTab('raw')}
-        >
-          <Code size={16} />
-          Raw JSON Result
-        </Tab>
-      </ResultsTabs>
+      <Header>
+        <HeaderLeft>
+          <ViewModeSelector
+            currentMode={viewMode}
+            onModeChange={setViewMode}
+            availableModes={['hierarchical', 'table', 'cards', 'json']}
+          />
+        </HeaderLeft>
+        <HeaderRight>
+          {showExportButton && (
+            <ExportButton onClick={handleExportJson}>
+              <Download size={16} />
+              Export JSON
+            </ExportButton>
+          )}
+        </HeaderRight>
+      </Header>
       
       <ResultsContent style={{ flex: 1 }}>
-        {activeTab === 'formatted' ? (
-          <FormattedResults>
-            {Object.entries(extractionResults.results).map(([key, value]) => (
-              <ResultField key={key}>
-                <ResultFieldName>{key}</ResultFieldName>
-                <ResultFieldValue>
-                  {typeof value === 'object' 
-                    ? JSON.stringify(value, null, 2)
-                    : String(value)
-                  }
-                </ResultFieldValue>
-              </ResultField>
-            ))}
-          </FormattedResults>
-        ) : (
+        {viewMode === 'hierarchical' && (
+          <HierarchicalResultsViewer
+            results={extractionResults.results}
+            confidenceScores={extractionResults.confidence_scores}
+            showConfidenceScores={true}
+            showSourceLocations={true}
+          />
+        )}
+        {viewMode === 'table' && (
+          <TableViewer
+            results={extractionResults.results}
+            confidenceScores={extractionResults.confidence_scores}
+            showConfidenceScores={true}
+          />
+        )}
+        {viewMode === 'cards' && (
+          <CardsViewer
+            results={extractionResults.results}
+            confidenceScores={extractionResults.confidence_scores}
+            showConfidenceScores={true}
+            showSourceLocations={false}
+          />
+        )}
+        {viewMode === 'json' && (
           <JsonViewer>
             {JSON.stringify(extractionResults.results, null, 2)}
           </JsonViewer>
