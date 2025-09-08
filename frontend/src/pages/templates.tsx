@@ -275,7 +275,7 @@ const TemplatesPage: React.FC = () => {
 
   // Event handlers
   const handleCreateTemplate = () => {
-    router.push('/templates/new');
+    router.push('/templates/builder');
   };
 
   const handleEditTemplate = (template: TemplateBase) => {

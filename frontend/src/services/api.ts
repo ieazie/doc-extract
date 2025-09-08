@@ -80,6 +80,26 @@ export interface HealthStatus {
   };
 }
 
+// AI Field Generation Types
+export interface GeneratedField {
+  name: string;
+  type: string;
+  description: string;
+  required: boolean;
+}
+
+export interface GenerateFieldsRequest {
+  prompt: string;
+  document_type: string;
+  document_content?: string;
+}
+
+export interface GenerateFieldsResponse {
+  fields: GeneratedField[];
+  success: boolean;
+  message: string;
+}
+
 // API Client Class
 class ApiClient {
   private client: AxiosInstance;
@@ -534,6 +554,17 @@ class ApiClient {
     return response.data;
   }
 
+  // AI Field Generation Endpoints
+  async generateFieldsFromPrompt(request: GenerateFieldsRequest): Promise<GenerateFieldsResponse> {
+    const response = await this.client.post('/api/templates/generate-fields-from-prompt', request);
+    return response.data;
+  }
+
+  async generateFieldsFromDocument(request: GenerateFieldsRequest): Promise<GenerateFieldsResponse> {
+    const response = await this.client.post('/api/templates/generate-fields-from-document', request);
+    return response.data;
+  }
+
   // Extraction Endpoints
   async createExtraction(extractionData: {
     document_id: string;
@@ -563,6 +594,8 @@ class ApiClient {
     document_id?: string;
     template_id?: string;
     search?: string;
+    sort_by?: string;
+    sort_order?: string;
   } = {}): Promise<{
     extractions: Array<{
       id: string;

@@ -13,6 +13,15 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationDialog from '../../components/common/NotificationDialog';
 import ExtractionResultsPanel from '../../components/extractions/ExtractionResultsPanel';
 
+// Default prompt templates for each document type
+const DEFAULT_PROMPTS = {
+  invoice: "Extract invoice number, invoice date, due date, vendor name, vendor address, line items (description, quantity, unit price, total), subtotal, tax amount, total amount, payment terms, and any additional notes.",
+  receipt: "Extract receipt number, transaction date, merchant name, merchant address, items purchased (description, quantity, price), subtotal, tax amount, total amount, payment method, and any loyalty information.",
+  contract: "Extract contract number, contract date, effective date, parties involved, contract value, payment terms, duration, key clauses, signatures, and any special conditions.",
+  insurance_policy: "Extract policy number, policy holder name, policy type, coverage amount, premium amount, effective date, expiration date, beneficiaries, and key terms and conditions.",
+  other: "Extract key information from this document based on its content and structure."
+};
+
 // Styled components
 const PageContainer = styled.div`
   display: flex;
@@ -160,10 +169,11 @@ const TemplateBuilderPage: React.FC = () => {
   const [templateData, setTemplateData] = useState<Partial<any>>({
     name: '',
     description: '',
-    document_type: 'invoice',
+    document_type: 'manual',
     schema: { fields: [] },
     status: 'draft'
   });
+  
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [extractionResults, setExtractionResults] = useState<any>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -210,7 +220,7 @@ const TemplateBuilderPage: React.FC = () => {
           fields: Object.entries(template.schema || {}).map(([name, fieldDef]) => ({
             id: `field_${Date.now()}_${Math.random()}`,
             name,
-            type: fieldDef.type === 'text' ? 'string' : fieldDef.type,
+            type: fieldDef.type, // Backend now uses 'text' instead of 'string'
             required: fieldDef.required || false,
             description: fieldDef.description || ''
           }))
@@ -229,6 +239,19 @@ const TemplateBuilderPage: React.FC = () => {
     }
   }, [template, isEditMode]);
 
+  // Generate prompt when document type changes (except for manual)
+  useEffect(() => {
+    if (templateData.document_type && templateData.document_type !== 'manual') {
+      const defaultPrompt = DEFAULT_PROMPTS[templateData.document_type as keyof typeof DEFAULT_PROMPTS];
+      if (defaultPrompt && !templateData.description) {
+        setTemplateData(prev => ({
+          ...prev,
+          description: defaultPrompt
+        }));
+      }
+    }
+  }, [templateData.document_type]);
+
   const loadTestDocument = async (documentId: string) => {
     try {
       const document = await apiClient.getDocument(documentId);
@@ -240,7 +263,7 @@ const TemplateBuilderPage: React.FC = () => {
   };
 
   // Check if basic information is complete
-  const isBasicInfoComplete = !!(templateData.name && templateData.description);
+  const isBasicInfoComplete = !!(templateData.name && (templateData.description || templateData.document_type === 'manual'));
   
   // Check if template is complete for draft saving
   const isDraftReady = isBasicInfoComplete;
@@ -275,23 +298,38 @@ const TemplateBuilderPage: React.FC = () => {
     try {
       setIsAutoSaving(true);
       
+      const schemaFields = (templateData.schema?.fields || [])
+        .filter((field: any) => field.name && field.name.trim());
+      
+      const schema = Object.fromEntries(
+        schemaFields.map((field: any) => {
+          const fieldDef: any = {
+            type: field.type, // AI service now returns backend-compatible types
+            required: field.required || false,
+            description: field.description || ''
+          };
+          
+          // Add required nested properties for complex types
+          if (field.type === 'array' && field.items) {
+            fieldDef.items = field.items;
+          } else if (field.type === 'object' && field.fields) {
+            fieldDef.fields = field.fields;
+          }
+          
+          return [field.name.trim(), fieldDef];
+        })
+      );
+      
+      // Ensure schema is not empty
+      if (Object.keys(schema).length === 0) {
+        throw new Error('Schema cannot be empty. Please add at least one field.');
+      }
+      
       const backendTemplateData = {
         name: templateData.name,
         description: templateData.description,
         document_type_id: undefined,
-        schema: Object.fromEntries(
-          (templateData.schema?.fields || []).map((field: any) => [
-            field.name,
-            {
-              type: field.type === 'string' ? 'text' : field.type,
-              required: field.required || false,
-              description: field.description || '',
-              validation: null,
-              items: null,
-              fields: null
-            }
-          ])
-        ),
+        schema: schema,
         prompt_config: {
           system_prompt: `Extract data from ${templateData.document_type} documents according to the specified schema.`,
           instructions: templateData.description || 'Extract the specified fields from the document.',

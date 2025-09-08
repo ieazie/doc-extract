@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import { apiClient, GeneratedField } from '../../services/api';
 import { 
   Plus, 
   Trash2, 
@@ -16,7 +17,10 @@ import {
   Calendar,
   ToggleLeft,
   List,
-  FileText
+  FileText,
+  Sparkles,
+  FileText as FileTextIcon,
+  X
 } from 'lucide-react';
 
 // Types
@@ -31,10 +35,19 @@ interface Template {
   status: 'draft' | 'published' | 'archived';
 }
 
+// Default prompt templates for each document type
+const DEFAULT_PROMPTS = {
+  invoice: "Extract invoice number, invoice date, due date, vendor name, vendor address, line items (description, quantity, unit price, total), subtotal, tax amount, total amount, payment terms, and any additional notes.",
+  receipt: "Extract receipt number, transaction date, merchant name, merchant address, items purchased (description, quantity, price), subtotal, tax amount, total amount, payment method, and any loyalty information.",
+  contract: "Extract contract number, contract date, effective date, parties involved, contract value, payment terms, duration, key clauses, signatures, and any special conditions.",
+  insurance_policy: "Extract policy number, policy holder name, policy type, coverage amount, premium amount, effective date, expiration date, beneficiaries, and key terms and conditions.",
+  other: "Extract key information from this document based on its content and structure."
+};
+
 interface SchemaField {
   id: string;
   name: string;
-  type: 'string' | 'number' | 'date' | 'boolean' | 'array' | 'object';
+  type: 'text' | 'number' | 'date' | 'boolean' | 'array' | 'object';
   description: string;
   required: boolean;
   children?: SchemaField[];
@@ -421,9 +434,175 @@ const EmptySubtext = styled.div`
   font-size: 0.75rem;
 `;
 
+const GenerateFieldsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+`;
+
+const GenerateButton = styled.button<{ $variant?: 'primary' | 'secondary' }>`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid;
+  
+  ${props => {
+    if (props.$variant === 'primary') {
+      return `
+        background: #3b82f6;
+        color: white;
+        border-color: #3b82f6;
+        &:hover:not(:disabled) {
+          background: #2563eb;
+        }
+        &:disabled {
+          background: #9ca3af;
+          border-color: #9ca3af;
+          cursor: not-allowed;
+        }
+      `;
+    }
+    return `
+      background: white;
+      color: #374151;
+      border-color: #d1d5db;
+      &:hover:not(:disabled) {
+        background: #f9fafb;
+        border-color: #9ca3af;
+      }
+      &:disabled {
+        background: #f3f4f6;
+        color: #9ca3af;
+        cursor: not-allowed;
+      }
+    `;
+  }}
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+`;
+
+const ButtonLabel = styled.div`
+  font-size: 0.875rem;
+  color: #374151;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const TooltipIcon = styled.div`
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: #6b7280;
+  color: white;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: help;
+  
+  &:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2937;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+  
+  &:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(100%);
+    border: 4px solid transparent;
+    border-top-color: #1f2937;
+    z-index: 1000;
+  }
+`;
+
+const ProgressContainer = styled.div`
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+`;
+
+const ProgressBar = styled.div`
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+`;
+
+const ProgressFill = styled.div<{ $progress: number }>`
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  width: ${props => props.$progress}%;
+`;
+
+const ProgressText = styled.div`
+  font-size: 0.875rem;
+  color: #6b7280;
+  text-align: center;
+  margin-bottom: 0.5rem;
+`;
+
+const CancelButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin: 0 auto;
+  
+  &:hover {
+    background: #dc2626;
+  }
+`;
+
 const getTypeIcon = (type: string) => {
   switch (type) {
-    case 'string': return <Type size={12} />;
+    case 'text': return <Type size={12} />;
     case 'number': return <Hash size={12} />;
     case 'date': return <Calendar size={12} />;
     case 'boolean': return <ToggleLeft size={12} />;
@@ -443,6 +622,16 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(['basic']));
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [usedSuggestions, setUsedSuggestions] = useState<Set<string>>(new Set());
+  
+  // AI Field Generation State
+  const [isGeneratingFields, setIsGeneratingFields] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [lastGenerationTime, setLastGenerationTime] = useState<number>(0);
+  const [generationSuccess, setGenerationSuccess] = useState<string | null>(null);
+  const [promptWarning, setPromptWarning] = useState<string | null>(null);
+  const [generationStep, setGenerationStep] = useState<string>('');
+  const [generationProgress, setGenerationProgress] = useState<number>(0);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   // Generate field mapping suggestions based on the document type
   const getFieldSuggestions = (fieldName: string, fieldId: string) => {
@@ -494,11 +683,54 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
     onTemplateChange({ ...templateData, ...updates });
   };
 
+  // Prompt vagueness detection
+  const detectVaguePrompt = (prompt: string): string | null => {
+    if (!prompt || prompt.length < 20) {
+      return "Prompt is too short. Please provide more specific instructions.";
+    }
+    
+    const vagueWords = ['stuff', 'things', 'information', 'data', 'details', 'content'];
+    const vaguePhrases = ['extract everything', 'get all', 'find all', 'whatever', 'anything'];
+    
+    const lowerPrompt = prompt.toLowerCase();
+    
+    // Check for vague words
+    const hasVagueWords = vagueWords.some(word => lowerPrompt.includes(word));
+    const hasVaguePhrases = vaguePhrases.some(phrase => lowerPrompt.includes(phrase));
+    
+    if (hasVagueWords || hasVaguePhrases) {
+      return "Prompt seems vague. Try being more specific about what fields to extract (e.g., 'Extract invoice number, date, total amount').";
+    }
+    
+    // Check for lack of specific field names
+    const fieldIndicators = ['number', 'date', 'amount', 'name', 'address', 'id', 'total', 'price', 'quantity'];
+    const hasFieldIndicators = fieldIndicators.some(indicator => lowerPrompt.includes(indicator));
+    
+    if (!hasFieldIndicators) {
+      return "Prompt lacks specific field names. Consider mentioning specific fields like 'invoice number', 'date', 'amount', etc.";
+    }
+    
+    return null;
+  };
+
+  // Cancel generation function
+  const cancelGeneration = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setIsGeneratingFields(false);
+      setGenerationStep('');
+      setGenerationProgress(0);
+      setGenerationError('Generation cancelled by user');
+      setTimeout(() => setGenerationError(null), 3000);
+    }
+  };
+
   const addField = (parentId?: string) => {
     const newField: SchemaField = {
       id: `field_${Date.now()}`,
       name: 'new_field',
-      type: 'string',
+      type: 'text',
       description: '',
       required: false,
       children: [],
@@ -597,6 +829,253 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       newCollapsed.add(sectionId);
     }
     setCollapsedSections(newCollapsed);
+  };
+
+  // AI Field Generation Functions
+  const generateFieldsFromPrompt = async () => {
+    if (!templateData.description) return;
+    
+    // Check for vague prompt
+    const warning = detectVaguePrompt(templateData.description);
+    if (warning) {
+      setPromptWarning(warning);
+      setTimeout(() => setPromptWarning(null), 8000); // Clear after 8 seconds
+      // Continue with generation but show warning
+    } else {
+      setPromptWarning(null);
+    }
+    
+    // Debouncing: Prevent requests within 2 seconds of each other
+    const now = Date.now();
+    if (now - lastGenerationTime < 2000) {
+      console.log('Request debounced - too soon after last request');
+      return;
+    }
+    
+    // Create abort controller for cancellation
+    const controller = new AbortController();
+    setAbortController(controller);
+    
+    setIsGeneratingFields(true);
+    setGenerationError(null);
+    setGenerationSuccess(null);
+    setLastGenerationTime(now);
+    setGenerationStep('Analyzing prompt...');
+    setGenerationProgress(20);
+    
+    try {
+      // Simulate progress updates
+      setTimeout(() => {
+        setGenerationStep('Generating fields with AI...');
+        setGenerationProgress(60);
+      }, 500);
+      
+      const response = await apiClient.generateFieldsFromPrompt({
+        prompt: templateData.description,
+        document_type: templateData.document_type || 'other'
+      });
+      
+      setGenerationStep('Processing results...');
+      setGenerationProgress(90);
+      
+      if (response.success && response.fields.length > 0) {
+        // Convert generated fields to schema format
+        const newFields = response.fields.map((field: GeneratedField) => {
+          const baseField = {
+            id: `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            name: field.name,
+            type: field.type as 'text' | 'number' | 'date' | 'boolean' | 'array' | 'object',
+            description: field.description,
+            required: field.required,
+            children: []
+          };
+          
+          // Add required nested properties for complex types
+          if (field.type === 'array') {
+            return {
+              ...baseField,
+              items: {
+                type: 'text',
+                description: 'Array item'
+              }
+            };
+          } else if (field.type === 'object') {
+            return {
+              ...baseField,
+              fields: {}
+            };
+          }
+          
+          return baseField;
+        });
+        
+        // Add new fields to existing schema
+        const currentFields = templateData.schema?.fields || [];
+        const updatedFields = [...currentFields, ...newFields];
+        
+        updateTemplate({
+          schema: {
+            ...templateData.schema,
+            fields: updatedFields
+          }
+        });
+        
+        // Success feedback
+        setGenerationStep('Complete!');
+        setGenerationProgress(100);
+        setGenerationSuccess(`Successfully generated ${newFields.length} fields from prompt!`);
+        setTimeout(() => {
+          setGenerationSuccess(null);
+          setGenerationStep('');
+          setGenerationProgress(0);
+        }, 5000); // Clear after 5 seconds
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Generation cancelled by user');
+        return; // Don't show error for user cancellation
+      }
+      console.error('Error generating fields from prompt:', error);
+      setGenerationError(error.response?.data?.detail || 'Failed to generate fields from prompt');
+      setGenerationStep('');
+      setGenerationProgress(0);
+    } finally {
+      setIsGeneratingFields(false);
+      setAbortController(null);
+    }
+  };
+
+  const generateFieldsFromDocument = async () => {
+    if (!templateData.description || !selectedDocument) return;
+    
+    // Debouncing: Prevent requests within 2 seconds of each other
+    const now = Date.now();
+    if (now - lastGenerationTime < 2000) {
+      console.log('Request debounced - too soon after last request');
+      return;
+    }
+    
+    // Create abort controller for cancellation
+    const controller = new AbortController();
+    setAbortController(controller);
+    
+    setIsGeneratingFields(true);
+    setGenerationError(null);
+    setGenerationSuccess(null);
+    setLastGenerationTime(now);
+    setGenerationStep('Extracting document content...');
+    setGenerationProgress(10);
+    
+    try {
+      let documentContent = "";
+      
+      console.log('Selected document:', selectedDocument);
+      console.log('Document ID:', selectedDocument.id);
+      console.log('Document file:', selectedDocument.file);
+      
+      // Check if document is uploaded to server (has UUID) or is local file
+      if (selectedDocument.id && !selectedDocument.id.startsWith('doc_')) {
+        // Document is uploaded to server, fetch content via API
+        setGenerationStep('Fetching document content...');
+        setGenerationProgress(30);
+        try {
+          const contentResponse = await apiClient.getDocumentContent(selectedDocument.id);
+          documentContent = contentResponse.content;
+        } catch (error) {
+          console.error('Failed to fetch document content:', error);
+          setGenerationError('Failed to fetch document content. Please try again.');
+          return;
+        }
+      } else if (selectedDocument.file) {
+        // Document is local file, extract text directly
+        try {
+          if (selectedDocument.file.type === 'text/plain') {
+            documentContent = await selectedDocument.file.text();
+          } else if (selectedDocument.file.type === 'application/pdf') {
+            // For PDF files, we need to extract text using PDF.js
+            // This is a simplified approach - in production you might want to use a more robust PDF text extraction
+            documentContent = "PDF content extraction not implemented for local files. Please upload the document to the server first.";
+          } else {
+            documentContent = "Document type not supported for local text extraction.";
+          }
+        } catch (error) {
+          console.error('Failed to extract text from local file:', error);
+          setGenerationError('Failed to extract text from document. Please try uploading the document first.');
+          return;
+        }
+      } else {
+        setGenerationError('No document content available. Please upload a document first.');
+        return;
+      }
+      
+      console.log('Extracted document content length:', documentContent.length);
+      console.log('Document content preview:', documentContent.substring(0, 200) + '...');
+      
+      // Validate document content length
+      if (documentContent.length < 50) {
+        setGenerationError('Document content is too short. Please ensure the document contains sufficient text.');
+        setGenerationStep('');
+        setGenerationProgress(0);
+        return;
+      }
+      
+      setGenerationStep('Analyzing document with AI...');
+      setGenerationProgress(60);
+      
+      const response = await apiClient.generateFieldsFromDocument({
+        prompt: templateData.description,
+        document_type: templateData.document_type || 'other',
+        document_content: documentContent
+      });
+      
+      setGenerationStep('Processing results...');
+      setGenerationProgress(90);
+      
+      if (response.success && response.fields.length > 0) {
+        // Convert generated fields to schema format
+        const newFields = response.fields.map((field: GeneratedField) => ({
+          id: `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name: field.name,
+          type: field.type as 'text' | 'number' | 'date' | 'boolean' | 'array' | 'object',
+          description: field.description,
+          required: field.required,
+          children: []
+        }));
+        
+        // Add new fields to existing schema
+        const currentFields = templateData.schema?.fields || [];
+        const updatedFields = [...currentFields, ...newFields];
+        
+        updateTemplate({
+          schema: {
+            ...templateData.schema,
+            fields: updatedFields
+          }
+        });
+        
+        // Success feedback
+        setGenerationStep('Complete!');
+        setGenerationProgress(100);
+        setGenerationSuccess(`Successfully generated ${newFields.length} fields from document!`);
+        setTimeout(() => {
+          setGenerationSuccess(null);
+          setGenerationStep('');
+          setGenerationProgress(0);
+        }, 5000); // Clear after 5 seconds
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Generation cancelled by user');
+        return; // Don't show error for user cancellation
+      }
+      console.error('Error generating fields from document:', error);
+      setGenerationError(error.response?.data?.detail || 'Failed to generate fields from document');
+      setGenerationStep('');
+      setGenerationProgress(0);
+    } finally {
+      setIsGeneratingFields(false);
+      setAbortController(null);
+    }
   };
 
   const renderField = (field: SchemaField, level: number = 0) => {
@@ -742,23 +1221,19 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           </FormGroup>
           
           <FormGroup>
-            <Label>Extraction Prompt</Label>
-            <TextArea
-              value={templateData.description || ''}
-              onChange={(e) => updateTemplate({ description: e.target.value })}
-              placeholder="Provide instructions for the AI on what to extract from documents (e.g., 'Extract invoice number, date, total amount, and vendor information')"
-            />
-            <HelpText>
-              This prompt will guide the AI extraction process. Be specific about what data to extract.
-            </HelpText>
-          </FormGroup>
-          
-          <FormGroup>
             <Label>Document Type</Label>
             <Select
-              value={templateData.document_type || 'invoice'}
-              onChange={(e) => updateTemplate({ document_type: e.target.value })}
+              value={templateData.document_type || 'manual'}
+              onChange={(e) => {
+                const newDocumentType = e.target.value;
+                updateTemplate({ 
+                  document_type: newDocumentType,
+                  // Auto-generate prompt when document type changes (except for manual)
+                  description: newDocumentType === 'manual' ? '' : (DEFAULT_PROMPTS[newDocumentType as keyof typeof DEFAULT_PROMPTS] || DEFAULT_PROMPTS.other)
+                });
+              }}
             >
+              <option value="manual">Manual (Custom Prompt)</option>
               <option value="invoice">Invoice</option>
               <option value="contract">Contract</option>
               <option value="insurance_policy">Insurance Policy</option>
@@ -766,6 +1241,94 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
               <option value="other">Other</option>
             </Select>
           </FormGroup>
+          
+          <FormGroup>
+            <Label>Extraction Prompt</Label>
+            <TextArea
+              value={templateData.description || ''}
+              onChange={(e) => updateTemplate({ description: e.target.value })}
+              placeholder="Provide instructions for the AI on what to extract from documents (e.g., 'Extract invoice number, date, total amount, and vendor information')"
+              rows={4}
+              disabled={templateData.document_type === 'manual'}
+            />
+            <HelpText>
+              {templateData.document_type === 'manual' 
+                ? "Select a document type above to auto-generate a prompt, or choose 'Manual' to write your own custom prompt."
+                : "This prompt is auto-generated based on the document type. You can customize it after selecting a different document type."
+              }
+            </HelpText>
+          </FormGroup>
+          
+          {/* Generate Fields Buttons */}
+          {templateData.description && (
+            <GenerateFieldsContainer>
+              <ButtonGroup>
+                <ButtonLabel>
+                  AI-Powered Field Generation
+                  <TooltipIcon data-tooltip="Generate fields based on your prompt description. Best for general document types.">
+                    ?
+                  </TooltipIcon>
+                </ButtonLabel>
+                <GenerateButton
+                  onClick={generateFieldsFromPrompt}
+                  disabled={isGeneratingFields}
+                >
+                  <Sparkles size={16} />
+                  {isGeneratingFields ? 'Generating...' : 'Generate from Prompt'}
+                </GenerateButton>
+              </ButtonGroup>
+              
+              {selectedDocument && (
+                <ButtonGroup>
+                  <ButtonLabel>
+                    Enhanced with Document
+                    <TooltipIcon data-tooltip="Generate fields by analyzing both your prompt and the uploaded document content. More accurate for specific documents.">
+                      ?
+                    </TooltipIcon>
+                  </ButtonLabel>
+                  <GenerateButton
+                    $variant="primary"
+                    onClick={generateFieldsFromDocument}
+                    disabled={isGeneratingFields}
+                  >
+                    <FileTextIcon size={16} />
+                    {isGeneratingFields ? 'Generating...' : 'Generate from Document'}
+                  </GenerateButton>
+                </ButtonGroup>
+              )}
+              
+              {generationError && (
+                <div style={{ color: '#ef4444', fontSize: '14px', marginTop: '8px' }}>
+                  {generationError}
+                </div>
+              )}
+              
+              {generationSuccess && (
+                <div style={{ color: '#10b981', fontSize: '14px', marginTop: '8px', fontWeight: '500' }}>
+                  ✅ {generationSuccess}
+                </div>
+              )}
+              
+              {promptWarning && (
+                <div style={{ color: '#f59e0b', fontSize: '14px', marginTop: '8px', fontWeight: '500' }}>
+                  ⚠️ {promptWarning}
+                </div>
+              )}
+              
+              {isGeneratingFields && (
+                <ProgressContainer>
+                  <ProgressBar>
+                    <ProgressFill $progress={generationProgress} />
+                  </ProgressBar>
+                  <ProgressText>{generationStep}</ProgressText>
+                  <CancelButton onClick={cancelGeneration}>
+                    <X size={16} />
+                    Cancel Generation
+                  </CancelButton>
+                </ProgressContainer>
+              )}
+            </GenerateFieldsContainer>
+          )}
         </SectionContent>
       </Section>
 
