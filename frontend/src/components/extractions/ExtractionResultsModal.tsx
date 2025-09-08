@@ -16,7 +16,8 @@ import {
   ChevronUp
 } from 'lucide-react';
 
-import { apiClient } from '../../services/api';
+import { apiClient } from '@/services/api';
+import { SourceLocationProvider } from './SourceLocationContext';
 
 // Styled Components
 const ModalOverlay = styled.div`
@@ -394,7 +395,7 @@ interface ExtractionResultsModalProps {
   onClose: () => void;
 }
 
-export const ExtractionResultsModal: React.FC<ExtractionResultsModalProps> = ({
+const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   extractionId,
   isOpen,
   onClose
@@ -671,6 +672,15 @@ export const ExtractionResultsModal: React.FC<ExtractionResultsModalProps> = ({
         </ModalBody>
       </ModalContent>
     </ModalOverlay>
+  );
+};
+
+// Wrapper component with context provider
+export const ExtractionResultsModal: React.FC<ExtractionResultsModalProps> = (props) => {
+  return (
+    <SourceLocationProvider>
+      <ExtractionResultsModalContent {...props} />
+    </SourceLocationProvider>
   );
 };
 
