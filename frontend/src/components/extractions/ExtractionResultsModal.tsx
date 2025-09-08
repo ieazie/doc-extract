@@ -154,7 +154,7 @@ const CloseButton = styled.button`
 const ModalBody = styled.div`
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
+  grid-template-columns: 25% 50% 25%;
   gap: 0;
   min-height: 0;
 `;
@@ -164,6 +164,7 @@ const Panel = styled.div`
   flex-direction: column;
   border-right: 1px solid #e5e7eb;
   min-height: 0;
+  overflow: hidden;
   
   &:last-child {
     border-right: none;

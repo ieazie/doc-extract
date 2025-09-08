@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     langextract_extraction_passes: int = Field(default=2, env="LANGEXTRACT_EXTRACTION_PASSES")
     langextract_max_workers: int = Field(default=1, env="LANGEXTRACT_MAX_WORKERS")
     
+    # OpenAI Configuration
+    openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
+    openai_model: str = Field(default="gpt-4", env="OPENAI_MODEL")
+    openai_max_tokens: int = Field(default=2000, env="OPENAI_MAX_TOKENS")
+    openai_temperature: float = Field(default=0.3, env="OPENAI_TEMPERATURE")
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

@@ -154,6 +154,8 @@ async def list_extractions(
     document_id: Optional[str] = Query(None, description="Filter by document"),
     template_id: Optional[str] = Query(None, description="Filter by template"),
     search: Optional[str] = Query(None, description="Search in document and template names"),
+    sort_by: str = Query("created_at", description="Sort field"),
+    sort_order: str = Query("desc", description="Sort order (asc/desc)"),
     db: Session = Depends(get_db)
 ):
     """List extractions with pagination and filtering"""
@@ -184,6 +186,13 @@ async def list_extractions(
                     Template.name.ilike(search_term)
                 )
             )
+        
+        # Apply sorting
+        sort_column = getattr(Extraction, sort_by, Extraction.created_at)
+        if sort_order.lower() == "asc":
+            query = query.order_by(sort_column.asc())
+        else:
+            query = query.order_by(sort_column.desc())
         
         # Get total count
         total = query.count()

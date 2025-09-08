@@ -10,6 +10,7 @@ import uuid
 
 from ..models.database import get_db, Template, TemplateExample, Tenant
 from ..models.database import DocumentType, DocumentCategory
+from ..services.ai_service import ai_service
 from pydantic import BaseModel, Field, validator
 import json
 
@@ -756,3 +757,123 @@ async def test_template(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to test template: {str(e)}")
+
+# ============================================================================
+# AI-POWERED SCHEMA FIELD GENERATION ENDPOINTS
+# ============================================================================
+
+class GenerateFieldsRequest(BaseModel):
+    """Request model for field generation"""
+    prompt: str = Field(..., description="Extraction prompt")
+    document_type: str = Field(default="other", description="Type of document")
+    document_content: Optional[str] = Field(None, description="Document content (optional)")
+
+class GeneratedField(BaseModel):
+    """Generated field model"""
+    name: str = Field(..., description="Field name")
+    type: str = Field(..., description="Field type")
+    description: str = Field(..., description="Field description")
+    required: bool = Field(default=False, description="Whether field is required")
+
+class GenerateFieldsResponse(BaseModel):
+    """Response model for field generation"""
+    fields: List[GeneratedField] = Field(..., description="Generated fields")
+    success: bool = Field(True, description="Success status")
+    message: str = Field(..., description="Response message")
+
+@router.post("/generate-fields-from-prompt", response_model=GenerateFieldsResponse)
+async def generate_fields_from_prompt(
+    request: GenerateFieldsRequest,
+    db: Session = Depends(get_db)
+):
+    """Generate schema fields based on extraction prompt only"""
+    try:
+        # Validate prompt
+        if not request.prompt or len(request.prompt.strip()) < 10:
+            raise HTTPException(
+                status_code=400, 
+                detail="Prompt must be at least 10 characters long"
+            )
+        
+        # Generate fields using AI service
+        generated_fields = await ai_service.generate_fields_from_prompt(
+            prompt=request.prompt.strip(),
+            document_type=request.document_type
+        )
+        
+        # Convert to response format
+        fields = [
+            GeneratedField(
+                name=field['name'],
+                type=field['type'],
+                description=field['description'],
+                required=field['required']
+            )
+            for field in generated_fields
+        ]
+        
+        return GenerateFieldsResponse(
+            fields=fields,
+            success=True,
+            message=f"Successfully generated {len(fields)} fields from prompt"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to generate fields from prompt: {str(e)}"
+        )
+
+@router.post("/generate-fields-from-document", response_model=GenerateFieldsResponse)
+async def generate_fields_from_document(
+    request: GenerateFieldsRequest,
+    db: Session = Depends(get_db)
+):
+    """Generate schema fields based on extraction prompt and document content"""
+    try:
+        # Validate inputs
+        if not request.prompt or len(request.prompt.strip()) < 10:
+            raise HTTPException(
+                status_code=400, 
+                detail="Prompt must be at least 10 characters long"
+            )
+        
+        if not request.document_content or len(request.document_content.strip()) < 50:
+            raise HTTPException(
+                status_code=400, 
+                detail="Document content must be at least 50 characters long"
+            )
+        
+        # Generate fields using AI service
+        generated_fields = await ai_service.generate_fields_from_document(
+            prompt=request.prompt.strip(),
+            document_content=request.document_content.strip(),
+            document_type=request.document_type
+        )
+        
+        # Convert to response format
+        fields = [
+            GeneratedField(
+                name=field['name'],
+                type=field['type'],
+                description=field['description'],
+                required=field['required']
+            )
+            for field in generated_fields
+        ]
+        
+        return GenerateFieldsResponse(
+            fields=fields,
+            success=True,
+            message=f"Successfully generated {len(fields)} fields from document and prompt"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to generate fields from document: {str(e)}"
+        )

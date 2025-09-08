@@ -102,7 +102,9 @@ const ExtractionsPage: React.FC = () => {
     status: '',
     search: '',
     page: 1,
-    per_page: 10
+    per_page: 10,
+    sort_by: 'created_at',
+    sort_order: 'desc'
   });
   const [searchInput, setSearchInput] = useState('');
   const [selectedExtractionId, setSelectedExtractionId] = useState<string | null>(null);
@@ -145,7 +147,7 @@ const ExtractionsPage: React.FC = () => {
     };
     
     fetchExtractions();
-  }, [filters.status, filters.search, filters.page, filters.per_page]);
+  }, [filters.status, filters.search, filters.page, filters.per_page, filters.sort_by, filters.sort_order]);
 
 
   // Delete extraction function

@@ -374,6 +374,41 @@ class DocumentProcessor:
             logger.error(f"Text file processing failed: {e}")
             raise ValueError(f"Text file processing failed: {str(e)}")
 
+    async def extract_text_for_ai(self, file_content: bytes, content_type: str) -> str:
+        """
+        Extract text content from document for AI processing
+        Reuses existing extraction methods to avoid code duplication
+        
+        Args:
+            file_content: Document file content as bytes
+            content_type: MIME type of the document
+            
+        Returns:
+            Extracted text content as string
+        """
+        try:
+            if content_type == 'application/pdf':
+                # Reuse existing PDF extraction method
+                result = await self._extract_pdf_content(file_content)
+                return result.get('text', '')
+                
+            elif content_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword']:
+                # Reuse existing DOCX extraction method
+                result = await self._extract_docx_content(file_content)
+                return result.get('text', '')
+                
+            elif content_type == 'text/plain':
+                # Reuse existing text extraction method
+                result = await self._extract_text_content(file_content)
+                return result.get('text', '')
+                
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported content type: {content_type}")
+                
+        except Exception as e:
+            logger.error(f"Text extraction for AI failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to extract text for AI: {str(e)}")
+
     async def _generate_thumbnail(
         self, 
         file_content: bytes, 
