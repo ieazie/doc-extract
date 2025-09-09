@@ -151,6 +151,13 @@ class Extraction(Base):
     reviewed_by = Column(String(100))
     reviewed_at = Column(DateTime(timezone=True))
     is_test_extraction = Column(Boolean, default=False)
+    
+    # NEW: Review workflow fields
+    review_status = Column(String(50), default="pending")  # pending, in_review, approved, rejected, needs_correction
+    assigned_reviewer = Column(String(100))
+    review_comments = Column(Text)
+    review_completed_at = Column(DateTime(timezone=True))
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

@@ -14,6 +14,8 @@ import HierarchicalResultsViewer from './HierarchicalResultsViewer';
 import TableViewer from './TableViewer';
 import CardsViewer from './CardsViewer';
 import ViewModeSelector, { ViewMode } from './ViewModeSelector';
+import ReviewActionButtons from './ReviewActionButtons';
+import { ReviewStatus } from '../../services/api';
 
 // Styled Components
 const Header = styled.div`
@@ -142,6 +144,19 @@ interface ExtractionResultsPanelProps {
   size?: 'small' | 'medium' | 'large';
   showExportButton?: boolean;
   onExport?: () => void;
+  // Review workflow props
+  extractionId?: string;
+  reviewStatus?: ReviewStatus;
+  showReviewActions?: boolean;
+  onReviewStatusChange?: (status: ReviewStatus) => void;
+  // Field editing props
+  isEditing?: boolean;
+  onToggleEdit?: () => void;
+  onFieldValueChange?: (fieldPath: string, newValue: any) => void;
+  onFieldSave?: (fieldPath: string, newValue: any) => void;
+  onFieldCancel?: (fieldPath: string) => void;
+  hasPendingCorrections?: boolean;
+  onSaveCorrections?: () => void;
 }
 
 export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
@@ -150,9 +165,49 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
   extractionError = null,
   size = 'medium',
   showExportButton = true,
-  onExport
+  onExport,
+  // Review workflow props
+  extractionId,
+  reviewStatus = 'pending',
+  showReviewActions = false,
+  onReviewStatusChange,
+  // Field editing props
+  isEditing = false,
+  onToggleEdit,
+  onFieldValueChange,
+  onFieldSave,
+  onFieldCancel,
+  hasPendingCorrections = false,
+  onSaveCorrections
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('hierarchical');
+
+  // Review action handlers
+  const handleStartReview = () => {
+    console.log('Starting review for extraction:', extractionId);
+    // TODO: Add any additional logic for starting review
+  };
+
+  const handleApprove = () => {
+    console.log('Approving extraction:', extractionId);
+    // TODO: Add any additional logic for approval
+  };
+
+  const handleReject = () => {
+    console.log('Rejecting extraction:', extractionId);
+    // TODO: Add any additional logic for rejection
+  };
+
+  const handleNeedsCorrection = () => {
+    console.log('Marking extraction as needs correction:', extractionId);
+    // TODO: Add any additional logic for needs correction
+  };
+
+  const handleReviewStatusChange = (newStatus: ReviewStatus) => {
+    if (onReviewStatusChange) {
+      onReviewStatusChange(newStatus);
+    }
+  };
 
   const handleExportJson = () => {
     if (!extractionResults?.results) return;
@@ -219,12 +274,21 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
           />
         </HeaderLeft>
         <HeaderRight>
-          {showExportButton && (
-            <ExportButton onClick={handleExportJson}>
-              <Download size={16} />
-              Export JSON
-            </ExportButton>
-          )}
+        {showReviewActions && extractionId && (
+          <ReviewActionButtons
+            extractionId={extractionId}
+            currentStatus={reviewStatus}
+            onStatusChange={handleReviewStatusChange}
+            onStartReview={handleStartReview}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onNeedsCorrection={handleNeedsCorrection}
+            isEditing={isEditing}
+            onToggleEdit={onToggleEdit}
+            hasPendingCorrections={hasPendingCorrections}
+            onSaveCorrections={onSaveCorrections}
+          />
+        )}
         </HeaderRight>
       </Header>
       
@@ -235,6 +299,12 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
             confidenceScores={extractionResults.confidence_scores}
             showConfidenceScores={true}
             showSourceLocations={true}
+            isEditing={isEditing}
+            onFieldValueChange={onFieldValueChange}
+            onFieldEdit={onFieldValueChange ? (fieldPath) => console.log('Field edit:', fieldPath) : undefined}
+            onFieldSave={onFieldSave}
+            onFieldCancel={onFieldCancel}
+            disabled={!isEditing}
           />
         )}
         {viewMode === 'table' && (

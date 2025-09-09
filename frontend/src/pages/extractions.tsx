@@ -96,10 +96,34 @@ const useDebounce = (value: string, delay: number) => {
   return debouncedValue;
 };
 
+// Helper function to build API parameters
+const buildApiParams = (filters: any) => {
+  const apiParams: any = {
+    page: filters.page,
+    per_page: filters.per_page,
+    sort_by: filters.sort_by,
+    sort_order: filters.sort_order
+  };
+
+  // Only add parameters that have values
+  if (filters.status) apiParams.status = filters.status;
+  if (filters.review_status) apiParams.review_status = filters.review_status;
+  if (filters.confidence_max) apiParams.confidence_max = parseFloat(filters.confidence_max);
+  if (filters.date_from) apiParams.date_from = filters.date_from;
+  if (filters.date_to) apiParams.date_to = filters.date_to;
+  if (filters.search) apiParams.search = filters.search;
+
+  return apiParams;
+};
+
 // Main Component
 const ExtractionsPage: React.FC = () => {
   const [filters, setFilters] = useState({
     status: '',
+    review_status: '',
+    confidence_max: '',
+    date_from: '',
+    date_to: '',
     search: '',
     page: 1,
     per_page: 10,
@@ -114,20 +138,21 @@ const ExtractionsPage: React.FC = () => {
   const [extractionsData, setExtractionsData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isClearingFilters, setIsClearingFilters] = useState(false);
   
   // Debounce search input with 600ms delay to reduce API calls
   const debouncedSearch = useDebounce(searchInput, 600);
 
   // Sync debounced search with filters - simple debounced update
   useEffect(() => {
-    if (debouncedSearch !== filters.search) {
+    if (debouncedSearch !== filters.search && !isClearingFilters) {
       setFilters(prev => ({
         ...prev,
         search: debouncedSearch,
         page: 1 // Reset to first page when search changes
       }));
     }
-  }, [debouncedSearch, filters.search]);
+  }, [debouncedSearch, filters.search, isClearingFilters]);
 
   // Fetch data when filters change (including initial load)
   useEffect(() => {
@@ -136,7 +161,7 @@ const ExtractionsPage: React.FC = () => {
       setError(null);
       
       try {
-        const data = await apiClient.getExtractions(filters);
+        const data = await apiClient.getExtractions(buildApiParams(filters));
         setExtractionsData(data);
       } catch (err) {
         setError('Failed to load extractions');
@@ -147,7 +172,7 @@ const ExtractionsPage: React.FC = () => {
     };
     
     fetchExtractions();
-  }, [filters.status, filters.search, filters.page, filters.per_page, filters.sort_by, filters.sort_order]);
+  }, [filters.status, filters.review_status, filters.confidence_max, filters.date_from, filters.date_to, filters.search, filters.page, filters.per_page, filters.sort_by, filters.sort_order]);
 
 
   // Delete extraction function
@@ -155,7 +180,7 @@ const ExtractionsPage: React.FC = () => {
     try {
       await apiClient.deleteExtraction(extractionId);
       // Refresh the data after successful deletion
-      const data = await apiClient.getExtractions(filters);
+      const data = await apiClient.getExtractions(buildApiParams(filters));
       setExtractionsData(data);
     } catch (err) {
       console.error('Error deleting extraction:', err);
@@ -196,6 +221,43 @@ const ExtractionsPage: React.FC = () => {
     setResultsModalOpen(true);
   };
 
+  const handleSort = (key: string, direction: 'asc' | 'desc') => {
+    setFilters(prev => ({
+      ...prev,
+      sort_by: key,
+      sort_order: direction,
+      page: 1 // Reset to first page when sorting
+    }));
+  };
+
+  const handleClearFilters = () => {
+    // Set clearing flag to prevent debounced search from triggering
+    setIsClearingFilters(true);
+    
+    // Clear data immediately to show empty state with clear button
+    setExtractionsData(null);
+    
+    // Clear both search input and filters simultaneously
+    setSearchInput('');
+    setFilters({
+      page: 1,
+      per_page: 10,
+      sort_by: 'created_at',
+      sort_order: 'desc',
+      status: '',
+      review_status: '',
+      confidence_max: '',
+      date_from: '',
+      date_to: '',
+      search: ''
+    });
+    
+    // Reset clearing flag after a short delay
+    setTimeout(() => {
+      setIsClearingFilters(false);
+    }, 100);
+  };
+
   const handleCloseResultsModal = () => {
     setResultsModalOpen(false);
     setSelectedExtractionId(null);
@@ -221,8 +283,14 @@ const ExtractionsPage: React.FC = () => {
     {
       key: 'id',
       label: 'ID',
+      sortable: true,
+      width: '0.8fr',
+      align: 'left',
       render: (value) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+        <span style={{ 
+          fontFamily: 'monospace', 
+          fontSize: '0.75rem'
+        }}>
           {value.slice(0, 8)}...
         </span>
       )
@@ -230,10 +298,13 @@ const ExtractionsPage: React.FC = () => {
     {
       key: 'document_name',
       label: 'Document',
+      sortable: true,
+      width: '2fr',
+      align: 'left',
       render: (value, row) => (
         <div>
-          <div style={{ fontWeight: 500 }}>{value}</div>
-          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+          <div style={{ fontWeight: 500, lineHeight: '1.2' }}>{value}</div>
+          <div style={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: '1.2' }}>
             {row.document_id.slice(0, 8)}...
           </div>
         </div>
@@ -242,10 +313,13 @@ const ExtractionsPage: React.FC = () => {
     {
       key: 'template_name',
       label: 'Template',
+      sortable: true,
+      width: '1.5fr',
+      align: 'left',
       render: (value, row) => (
         <div>
-          <div style={{ fontWeight: 500 }}>{value}</div>
-          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+          <div style={{ fontWeight: 500, lineHeight: '1.2' }}>{value}</div>
+          <div style={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: '1.2' }}>
             {row.template_id.slice(0, 8)}...
           </div>
         </div>
@@ -254,11 +328,49 @@ const ExtractionsPage: React.FC = () => {
     {
       key: 'status',
       label: 'Status',
+      sortable: true,
+      width: '0.8fr',
+      align: 'left',
       render: (value) => <StatusBadge status={value}>{value}</StatusBadge>
+    },
+    {
+      key: 'review_status',
+      label: 'Review Status',
+      sortable: true,
+      width: '1.2fr',
+      align: 'left',
+      render: (value) => {
+        if (!value) return <span style={{ color: '#9ca3af' }}>-</span>;
+        const statusColors = {
+          'pending': '#6b7280',
+          'in_review': '#2563eb',
+          'approved': '#059669',
+          'rejected': '#dc2626',
+          'needs_correction': '#d97706'
+        };
+        const statusLabels = {
+          'pending': 'Pending Review',
+          'in_review': 'In Review',
+          'approved': 'Approved',
+          'rejected': 'Rejected',
+          'needs_correction': 'Needs Correction'
+        };
+        return (
+          <span style={{ 
+            color: statusColors[value as keyof typeof statusColors] || '#6b7280',
+            fontWeight: 500
+          }}>
+            {statusLabels[value as keyof typeof statusLabels] || value}
+          </span>
+        );
+      }
     },
     {
       key: 'confidence_score',
       label: 'Confidence',
+      sortable: true,
+      width: '0.8fr',
+      align: 'left',
       render: (value) => {
         if (!value) return <span style={{ color: '#9ca3af' }}>-</span>;
         return (
@@ -272,18 +384,15 @@ const ExtractionsPage: React.FC = () => {
       }
     },
     {
-      key: 'processing_time_ms',
-      label: 'Duration',
-      render: (value) => {
-        if (!value) return <span style={{ color: '#9ca3af' }}>-</span>;
-        return formatDuration(value);
-      }
-    },
-    {
       key: 'created_at',
-      label: 'Created',
+      label: 'Extracted On',
+      sortable: true,
+      width: '1.2fr',
+      align: 'left',
       render: (value) => (
-        <span style={{ fontSize: '0.875rem' }}>
+        <span style={{ 
+          fontSize: '0.875rem'
+        }}>
           {formatDate(value)}
         </span>
       )
@@ -297,6 +406,7 @@ const ExtractionsPage: React.FC = () => {
       label: 'Status',
       type: 'select',
       options: [
+        { value: '', label: 'All Statuses' },
         { value: 'pending', label: 'Pending' },
         { value: 'processing', label: 'Processing' },
         { value: 'completed', label: 'Completed' },
@@ -304,10 +414,33 @@ const ExtractionsPage: React.FC = () => {
       ]
     },
     {
+      key: 'review_status',
+      label: 'Review Status',
+      type: 'select',
+      options: [
+        { value: '', label: 'All Review Statuses' },
+        { value: 'pending', label: 'Pending Review' },
+        { value: 'in_review', label: 'In Review' },
+        { value: 'approved', label: 'Approved' },
+        { value: 'rejected', label: 'Rejected' },
+        { value: 'needs_correction', label: 'Needs Correction' }
+      ]
+    },
+    {
+      key: 'date_from',
+      label: 'From Date',
+      type: 'date'
+    },
+    {
+      key: 'date_to',
+      label: 'To Date',
+      type: 'date'
+    },
+    {
       key: 'search',
       label: 'Search',
       type: 'search',
-      placeholder: 'Search documents or templates (min 2 chars)...'
+      placeholder: 'Search documents, templates, reviewers, comments, or results...'
     }
   ];
 
@@ -363,7 +496,7 @@ const ExtractionsPage: React.FC = () => {
         </PageTitle>
         <HeaderActions>
           <RefreshButton onClick={async () => {
-            const data = await apiClient.getExtractions(filters);
+            const data = await apiClient.getExtractions(buildApiParams(filters));
             setExtractionsData(data);
           }} disabled={isLoading}>
             <RefreshCw size={16} />
@@ -378,10 +511,13 @@ const ExtractionsPage: React.FC = () => {
         filters={filterDefinitions}
         filterValues={{
           status: filters.status,
+          review_status: filters.review_status,
+          date_from: filters.date_from,
+          date_to: filters.date_to,
           search: searchInput
         }}
         pagination={paginationConfig}
-        loading={isLoading && !extractionsData}
+        loading={isLoading}
         error={error ? 'Failed to load extractions' : undefined}
         emptyState={{
           icon: <FileText size={48} />,
@@ -392,6 +528,8 @@ const ExtractionsPage: React.FC = () => {
         }}
         actions={renderActions}
         onFilterChange={handleFilterChange}
+        onSort={handleSort}
+        onClearFilters={handleClearFilters}
         isSearching={isSearchingOrLoading}
         searchMinLength={2}
       />

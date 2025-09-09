@@ -100,6 +100,43 @@ export interface GenerateFieldsResponse {
   message: string;
 }
 
+// Review Workflow Types
+export type ReviewStatus = 'pending' | 'in_review' | 'approved' | 'rejected' | 'needs_correction';
+
+export interface ReviewActionRequest {
+  action: string;
+  comments?: string;
+  reviewer?: string;
+}
+
+export interface ReviewStatusResponse {
+  extraction_id: string;
+  review_status: ReviewStatus;
+  assigned_reviewer?: string;
+  review_comments?: string;
+  review_completed_at?: string;
+  updated_at: string;
+}
+
+export interface FieldCorrectionRequest {
+  field_path: string;
+  original_value: any;
+  corrected_value: any;
+  correction_reason?: string;
+  corrected_by?: string;
+}
+
+export interface FieldCorrectionResponse {
+  extraction_id: string;
+  field_path: string;
+  original_value: any;
+  corrected_value: any;
+  correction_reason?: string;
+  corrected_by?: string;
+  corrected_at: string;
+  updated_at: string;
+}
+
 // API Client Class
 class ApiClient {
   private client: AxiosInstance;
@@ -591,8 +628,13 @@ class ApiClient {
     page?: number;
     per_page?: number;
     status?: string;
+    review_status?: string;
     document_id?: string;
     template_id?: string;
+    confidence_min?: number;
+    confidence_max?: number;
+    date_from?: string;
+    date_to?: string;
     search?: string;
     sort_by?: string;
     sort_order?: string;
@@ -608,6 +650,10 @@ class ApiClient {
       error_message?: string;
       document_name?: string;
       template_name?: string;
+      review_status?: ReviewStatus;
+      assigned_reviewer?: string;
+      review_comments?: string;
+      review_completed_at?: string;
       created_at: string;
       updated_at: string;
     }>;
@@ -631,6 +677,10 @@ class ApiClient {
     error_message?: string;
     document_name?: string;
     template_name?: string;
+    review_status?: ReviewStatus;
+    assigned_reviewer?: string;
+    review_comments?: string;
+    review_completed_at?: string;
     created_at: string;
     updated_at: string;
   }> {
@@ -640,6 +690,55 @@ class ApiClient {
 
   async deleteExtraction(extractionId: string): Promise<void> {
     await this.client.delete(`/api/extractions/${extractionId}`);
+  }
+
+  // Review Workflow Endpoints
+  async startReview(extractionId: string, request: ReviewActionRequest): Promise<ReviewStatusResponse> {
+    const response = await this.client.post(`/api/extractions/${extractionId}/review`, request);
+    return response.data;
+  }
+
+  async getReviewQueue(params: {
+    page?: number;
+    per_page?: number;
+    review_status?: ReviewStatus;
+    assigned_reviewer?: string;
+  } = {}): Promise<{
+    extractions: Array<{
+      id: string;
+      document_id: string;
+      template_id: string;
+      status: string;
+      results?: Record<string, any>;
+      confidence_score?: number;
+      processing_time_ms?: number;
+      error_message?: string;
+      document_name?: string;
+      template_name?: string;
+      review_status?: ReviewStatus;
+      assigned_reviewer?: string;
+      review_comments?: string;
+      review_completed_at?: string;
+      created_at: string;
+      updated_at: string;
+    }>;
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+  }> {
+    const response = await this.client.get('/api/extractions/review-queue', { params });
+    return response.data;
+  }
+
+  async getReviewStatus(extractionId: string): Promise<ReviewStatusResponse> {
+    const response = await this.client.get(`/api/extractions/${extractionId}/review-status`);
+    return response.data;
+  }
+
+  async correctField(extractionId: string, request: FieldCorrectionRequest): Promise<FieldCorrectionResponse> {
+    const response = await this.client.post(`/api/extractions/${extractionId}/correct-field`, request);
+    return response.data;
   }
 
   // Document Content Endpoints

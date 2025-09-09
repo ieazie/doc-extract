@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 
 import { useSourceLocation, createSourceLocation } from './SourceLocationContext';
+import EditableField from './EditableField';
 
 // Types
 export interface HierarchicalField {
@@ -46,6 +47,13 @@ interface HierarchicalResultsViewerProps {
   showConfidenceScores?: boolean;
   showSourceLocations?: boolean;
   className?: string;
+  // Editing functionality
+  isEditing?: boolean;
+  onFieldValueChange?: (fieldPath: string, newValue: any) => void;
+  onFieldEdit?: (fieldPath: string) => void;
+  onFieldSave?: (fieldPath: string, newValue: any) => void;
+  onFieldCancel?: (fieldPath: string) => void;
+  disabled?: boolean;
 }
 
 // Styled Components
@@ -298,9 +306,17 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
   onFieldClick,
   showConfidenceScores = true,
   showSourceLocations = false,
-  className
+  className,
+  isEditing = false,
+  onFieldValueChange,
+  onFieldEdit,
+  onFieldSave,
+  onFieldCancel,
+  disabled = false
 }) => {
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
+  const [editingFields, setEditingFields] = useState<Set<string>>(new Set());
+  const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   
   // Safely use the source location context - it's optional
   let setSourceLocation: ((location: any) => void) | null = null;
@@ -322,10 +338,54 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
     setExpandedFields(newExpanded);
   };
 
+  const handleFieldEdit = (fieldPath: string) => {
+    if (disabled) return;
+    setEditingFields(prev => new Set(prev).add(fieldPath));
+    onFieldEdit?.(fieldPath);
+  };
+
+  const handleFieldSave = (fieldPath: string, newValue: any) => {
+    if (disabled) return;
+    setFieldValues(prev => ({ ...prev, [fieldPath]: newValue }));
+    setEditingFields(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(fieldPath);
+      return newSet;
+    });
+    onFieldSave?.(fieldPath, newValue);
+  };
+
+  const handleFieldCancel = (fieldPath: string) => {
+    if (disabled) return;
+    setEditingFields(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(fieldPath);
+      return newSet;
+    });
+    setFieldValues(prev => {
+      const newValues = { ...prev };
+      delete newValues[fieldPath];
+      return newValues;
+    });
+    onFieldCancel?.(fieldPath);
+  };
+
+  const handleFieldValueChange = (fieldPath: string, newValue: any) => {
+    if (disabled) return;
+    setFieldValues(prev => ({ ...prev, [fieldPath]: newValue }));
+    onFieldValueChange?.(fieldPath, newValue);
+  };
+
+  const getFieldValue = (field: HierarchicalField, fieldPath: string) => {
+    return fieldValues[fieldPath] !== undefined ? fieldValues[fieldPath] : field.value;
+  };
+
   const renderField = (field: HierarchicalField, depth: number = 0, path: string = ''): React.ReactNode => {
     const currentPath = path ? `${path}.${field.name}` : field.name;
     const hasChildren = field.children && field.children.length > 0;
     const isExpanded = expandedFields.has(currentPath);
+    const isEditingField = editingFields.has(currentPath);
+    const currentValue = getFieldValue(field, currentPath);
 
   const handleFieldClick = () => {
     if (hasChildren) {
@@ -342,18 +402,30 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
       return;
     }
     
-    // Create a mock source location for demonstration
-    // In a real implementation, this would come from the extraction data
-    const mockSourceLocation = createSourceLocation(
-      field.name,
-      field.type,
-      { x: 100, y: 100, width: 200, height: 30 }, // Mock coordinates
-      String(field.value),
-      1, // Mock page
-      field.confidence
-    );
-    
-    setSourceLocation(mockSourceLocation);
+    // Check if field has actual source location data
+    if (field.sourceLocation) {
+      // Use real source location data if available
+      setSourceLocation(field.sourceLocation);
+      console.log('Highlighting source location for field:', field.name);
+    } else {
+      // Create a mock source location for demonstration
+      // In a real implementation, this would come from the extraction data
+      const mockSourceLocation = createSourceLocation(
+        field.name,
+        field.type,
+        { x: 100, y: 100, width: 200, height: 30 }, // Mock coordinates
+        String(field.value),
+        1, // Mock page
+        field.confidence
+      );
+      
+      setSourceLocation(mockSourceLocation);
+      console.log('Using mock source location for field:', field.name);
+      
+      // Show a temporary message to the user
+      // Note: This would be replaced with a proper notification system
+      console.log(`Source location for "${field.name}" would be highlighted in the document preview. This is a demo with mock coordinates.`);
+    }
   };
 
     return (
@@ -373,9 +445,25 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
             {field.name}
           </FieldName>
           
-          <FieldValue $type={field.type}>
-            {formatValue(field.value, field.type)}
-          </FieldValue>
+          {isEditing && !hasChildren ? (
+            <EditableField
+              value={currentValue}
+              fieldType={field.type}
+              fieldName={field.name}
+              isRequired={field.isRequired}
+              isEditing={isEditingField}
+              onEdit={() => handleFieldEdit(currentPath)}
+              onSave={(newValue) => handleFieldSave(currentPath, newValue)}
+              onCancel={() => handleFieldCancel(currentPath)}
+              onValueChange={(newValue) => handleFieldValueChange(currentPath, newValue)}
+              disabled={disabled}
+              placeholder={`Enter ${field.type} value...`}
+            />
+          ) : (
+            <FieldValue $type={field.type}>
+              {formatValue(currentValue, field.type)}
+            </FieldValue>
+          )}
           
           {showConfidenceScores && field.confidence !== undefined && (
             <ConfidenceIndicator $confidence={field.confidence}>

@@ -13,11 +13,16 @@ import {
   Code,
   Settings,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 
 import { apiClient } from '@/services/api';
 import { SourceLocationProvider } from './SourceLocationContext';
+import { ExtractionResultsPanel } from './ExtractionResultsPanel';
 
 // Styled Components
 const ModalOverlay = styled.div`
@@ -38,9 +43,9 @@ const ModalContent = styled.div`
   background: white;
   border-radius: 0.5rem;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  width: 95%;
+  width: 98%;
   height: 95%;
-  max-width: 1400px;
+  max-width: 1600px;
   max-height: 900px;
   display: flex;
   flex-direction: column;
@@ -72,41 +77,6 @@ const HeaderTitle = styled.h2`
   gap: 0.5rem;
 `;
 
-const StatusBadge = styled.span<{ status: string }>`
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  
-  ${props => {
-    switch (props.status) {
-      case 'completed':
-        return `
-          background: #d1fae5;
-          color: #065f46;
-        `;
-      case 'failed':
-        return `
-          background: #fee2e2;
-          color: #991b1b;
-        `;
-      case 'processing':
-        return `
-          background: #dbeafe;
-          color: #1e40af;
-        `;
-      default:
-        return `
-          background: #f3f4f6;
-          color: #374151;
-        `;
-    }
-  }}
-`;
 
 const HeaderRight = styled.div`
   display: flex;
@@ -155,7 +125,7 @@ const CloseButton = styled.button`
 const ModalBody = styled.div`
   flex: 1;
   display: grid;
-  grid-template-columns: 25% 50% 25%;
+  grid-template-columns: 25% 35% 40%;
   gap: 0;
   min-height: 0;
 `;
@@ -179,6 +149,18 @@ const PanelHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+`;
+
+const PanelHeaderLeft = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const PanelHeaderRight = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `;
 
 const PanelTitle = styled.h3`
@@ -207,6 +189,91 @@ const CollapseButton = styled.button`
     background: #e5e7eb;
   }
 `;
+
+const StatusBadge = styled.div<{ status: string }>`
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  
+  ${props => {
+    switch (props.status) {
+      case 'pending':
+        return `
+          background-color: #f3f4f6;
+          color: #374151;
+          border: 1px solid #d1d5db;
+        `;
+      case 'in_review':
+        return `
+          background-color: #dbeafe;
+          color: #1e40af;
+          border: 1px solid #bfdbfe;
+        `;
+      case 'approved':
+        return `
+          background-color: #dcfce7;
+          color: #166534;
+          border: 1px solid #bbf7d0;
+        `;
+      case 'rejected':
+        return `
+          background-color: #fee2e2;
+          color: #991b1b;
+          border: 1px solid #fecaca;
+        `;
+      case 'needs_correction':
+        return `
+          background-color: #fef3c7;
+          color: #92400e;
+          border: 1px solid #fde68a;
+        `;
+      default:
+        return `
+          background-color: #f3f4f6;
+          color: #374151;
+          border: 1px solid #d1d5db;
+        `;
+    }
+  }}
+`;
+
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case 'pending':
+      return <Clock size={12} />;
+    case 'in_review':
+      return <Eye size={12} />;
+    case 'approved':
+      return <CheckCircle size={12} />;
+    case 'rejected':
+      return <XCircle size={12} />;
+    case 'needs_correction':
+      return <AlertTriangle size={12} />;
+    default:
+      return <Clock size={12} />;
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case 'pending':
+      return 'Pending Review';
+    case 'in_review':
+      return 'In Review';
+    case 'approved':
+      return 'Approved';
+    case 'rejected':
+      return 'Rejected';
+    case 'needs_correction':
+      return 'Needs Correction';
+    default:
+      return 'Pending Review';
+  }
+};
 
 const PanelContent = styled.div<{ collapsed?: boolean }>`
   flex: 1;
@@ -410,6 +477,14 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     document: false,
     results: false
   });
+  
+  // Field editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [pendingCorrections, setPendingCorrections] = useState<Record<string, any>>({});
+  const [hasPendingCorrections, setHasPendingCorrections] = useState(false);
+  
+  // Review status state - initialize from extraction data
+  const [reviewStatus, setReviewStatus] = useState<'pending' | 'in_review' | 'approved' | 'rejected' | 'needs_correction'>('pending');
 
   // Fetch extraction details
   const { 
@@ -460,11 +535,121 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     }
   );
 
+  // Update review status when extraction data loads
+  useEffect(() => {
+    if (extraction?.review_status) {
+      setReviewStatus(extraction.review_status);
+      console.log('Loaded review status from API:', extraction.review_status);
+    }
+  }, [extraction?.review_status]);
+
   const togglePanel = (panel: keyof typeof collapsedPanels) => {
     setCollapsedPanels(prev => ({
       ...prev,
       [panel]: !prev[panel]
     }));
+  };
+
+  // Field editing handlers
+  const handleToggleEdit = () => {
+    setIsEditing(!isEditing);
+    if (isEditing) {
+      // Clear pending corrections when stopping edit mode
+      setPendingCorrections({});
+      setHasPendingCorrections(false);
+    }
+  };
+
+  const handleFieldValueChange = (fieldPath: string, newValue: any) => {
+    setPendingCorrections(prev => ({
+      ...prev,
+      [fieldPath]: newValue
+    }));
+    setHasPendingCorrections(true);
+  };
+
+  const handleFieldSave = async (fieldPath: string, newValue: any) => {
+    if (!extractionId) return;
+    
+    try {
+      const originalValue = getNestedValue(extraction?.results, fieldPath);
+      await apiClient.correctField(extractionId, {
+        field_path: fieldPath,
+        original_value: originalValue,
+        corrected_value: newValue,
+        correction_reason: 'Field correction via UI',
+        corrected_by: 'current_user'
+      });
+      
+      // Remove from pending corrections
+      setPendingCorrections(prev => {
+        const newPending = { ...prev };
+        delete newPending[fieldPath];
+        return newPending;
+      });
+      
+      // Check if there are still pending corrections
+      const remainingPending = Object.keys(pendingCorrections).filter(key => key !== fieldPath);
+      setHasPendingCorrections(remainingPending.length > 0);
+      
+    } catch (error) {
+      console.error('Failed to save field correction:', error);
+    }
+  };
+
+  const handleFieldCancel = (fieldPath: string) => {
+    setPendingCorrections(prev => {
+      const newPending = { ...prev };
+      delete newPending[fieldPath];
+      return newPending;
+    });
+    
+    // Check if there are still pending corrections
+    const remainingPending = Object.keys(pendingCorrections).filter(key => key !== fieldPath);
+    setHasPendingCorrections(remainingPending.length > 0);
+  };
+
+  const handleSaveCorrections = async () => {
+    if (!extractionId) return;
+    
+    try {
+      // Save all pending corrections
+      for (const [fieldPath, newValue] of Object.entries(pendingCorrections)) {
+        const originalValue = getNestedValue(extraction?.results, fieldPath);
+        await apiClient.correctField(extractionId, {
+          field_path: fieldPath,
+          original_value: originalValue,
+          corrected_value: newValue,
+          correction_reason: 'Bulk field correction via UI',
+          corrected_by: 'current_user'
+        });
+      }
+      
+      // Clear pending corrections
+      setPendingCorrections({});
+      setHasPendingCorrections(false);
+      
+    } catch (error) {
+      console.error('Failed to save corrections:', error);
+    }
+  };
+
+  // Handle review status changes
+  const handleReviewStatusChange = (status: 'pending' | 'in_review' | 'approved' | 'rejected' | 'needs_correction') => {
+    setReviewStatus(status);
+    console.log('Review status changed to:', status);
+  };
+
+  // Helper function to get nested values
+  const getNestedValue = (obj: any, path: string) => {
+    return path.split('.').reduce((current, key) => {
+      if (key.includes('[') && key.includes(']')) {
+        const fieldName = key.split('[')[0];
+        const index = parseInt(key.split('[')[1].split(']')[0]);
+        return current[fieldName]?.[index];
+      }
+      return current?.[key];
+    }, obj);
   };
 
   const handleExportJson = () => {
@@ -604,13 +789,21 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
           {/* Results Panel */}
           <Panel>
             <PanelHeader>
-              <PanelTitle>
-                <Code size={16} />
-                Extract Results
-              </PanelTitle>
-              <CollapseButton onClick={() => togglePanel('results')}>
-                {collapsedPanels.results ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-              </CollapseButton>
+              <PanelHeaderLeft>
+                <PanelTitle>
+                  <Code size={16} />
+                  Extract Results
+                </PanelTitle>
+              </PanelHeaderLeft>
+              <PanelHeaderRight>
+                <StatusBadge status={reviewStatus}>
+                  {getStatusIcon(reviewStatus)}
+                  {getStatusLabel(reviewStatus)}
+                </StatusBadge>
+                <CollapseButton onClick={() => togglePanel('results')}>
+                  {collapsedPanels.results ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                </CollapseButton>
+              </PanelHeaderRight>
             </PanelHeader>
             
             <PanelContent collapsed={collapsedPanels.results}>
@@ -618,44 +811,26 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                 <LoadingState>Loading results...</LoadingState>
               ) : extraction?.results ? (
                 <>
-                  <ResultsTabs>
-                    <Tab 
-                      active={activeTab === 'formatted'} 
-                      onClick={() => setActiveTab('formatted')}
-                    >
-                      <Eye size={16} />
-                      Extract Result
-                    </Tab>
-                    <Tab 
-                      active={activeTab === 'raw'} 
-                      onClick={() => setActiveTab('raw')}
-                    >
-                      <Code size={16} />
-                      Raw JSON Result
-                    </Tab>
-                  </ResultsTabs>
                   
-                  <ResultsContent>
-                    {activeTab === 'formatted' ? (
-                      <FormattedResults>
-                        {Object.entries(extraction.results).map(([key, value]) => (
-                          <ResultField key={key}>
-                            <ResultFieldName>{key}</ResultFieldName>
-                            <ResultFieldValue>
-                              {typeof value === 'object' 
-                                ? JSON.stringify(value, null, 2)
-                                : String(value)
-                              }
-                            </ResultFieldValue>
-                          </ResultField>
-                        ))}
-                      </FormattedResults>
-                    ) : (
-                      <JsonViewer>
-                        {JSON.stringify(extraction.results, null, 2)}
-                      </JsonViewer>
-                    )}
-                  </ResultsContent>
+                  <ExtractionResultsPanel
+                    extractionResults={extraction}
+                    isExtracting={false}
+                    extractionError={null}
+                    size="large"
+                    showExportButton={true}
+                    onExport={handleExportJson}
+                    extractionId={extractionId}
+                    reviewStatus={reviewStatus}
+                    showReviewActions={true}
+                    onReviewStatusChange={handleReviewStatusChange}
+                    isEditing={isEditing}
+                    onToggleEdit={handleToggleEdit}
+                    onFieldValueChange={handleFieldValueChange}
+                    onFieldSave={handleFieldSave}
+                    onFieldCancel={handleFieldCancel}
+                    hasPendingCorrections={hasPendingCorrections}
+                    onSaveCorrections={handleSaveCorrections}
+                  />
                 </>
               ) : extraction?.error_message ? (
                 <ErrorState>
