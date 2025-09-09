@@ -171,7 +171,12 @@ const TemplateBuilderPage: React.FC = () => {
     description: '',
     document_type: 'manual',
     schema: { fields: [] },
-    status: 'draft'
+    status: 'draft',
+    extraction_settings: {
+      max_chunk_size: 4000,
+      extraction_passes: 1,
+      confidence_threshold: 0.7
+    }
   });
   
   const [isAutoSaving, setIsAutoSaving] = useState(false);
@@ -335,10 +340,10 @@ const TemplateBuilderPage: React.FC = () => {
           instructions: templateData.description || 'Extract the specified fields from the document.',
           output_format: 'json'
         },
-        extraction_settings: {
+        extraction_settings: templateData.extraction_settings || {
           max_chunk_size: 4000,
           extraction_passes: 1,
-          confidence_threshold: 0.8
+          confidence_threshold: 0.7
         },
         few_shot_examples: [],
         status: status

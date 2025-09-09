@@ -23,6 +23,8 @@ import {
 import { apiClient } from '@/services/api';
 import { SourceLocationProvider } from './SourceLocationContext';
 import { ExtractionResultsPanel } from './ExtractionResultsPanel';
+import FlaggedFieldIndicator from './FlaggedFieldIndicator';
+import { detectLowConfidenceFields, ConfidenceField } from '../../utils/confidenceDetection';
 
 // Styled Components
 const ModalOverlay = styled.div`
@@ -485,6 +487,10 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   
   // Review status state - initialize from extraction data
   const [reviewStatus, setReviewStatus] = useState<'pending' | 'in_review' | 'approved' | 'rejected' | 'needs_correction'>('pending');
+  
+  // Flagged fields state
+  const [flaggedFields, setFlaggedFields] = useState<ConfidenceField[]>([]);
+  const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set());
 
   // Fetch extraction details
   const { 
@@ -542,6 +548,31 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
       console.log('Loaded review status from API:', extraction.review_status);
     }
   }, [extraction?.review_status]);
+
+  // Detect flagged fields when extraction data changes
+  useEffect(() => {
+    if (extraction?.results && template) {
+      // Only run confidence detection if we have actual confidence scores
+      const hasConfidenceData = extraction.confidence_scores && typeof extraction.confidence_scores === 'object' && Object.keys(extraction.confidence_scores).length > 0;
+      
+      console.log('DEBUG - Extraction confidence data:', {
+        confidence_scores: extraction.confidence_scores,
+        hasConfidenceData,
+        results: extraction.results
+      });
+      
+      const confidenceThreshold = template.extraction_settings?.confidence_threshold || 0.7;
+      const detection = detectLowConfidenceFields(
+        extraction.results, 
+        extraction.confidence_scores, 
+        confidenceThreshold
+      );
+      console.log('DEBUG - Confidence detection result:', detection);
+      setFlaggedFields(detection.flaggedFields);
+      // Initialize all flagged fields as visible
+      setVisibleFields(new Set(detection.flaggedFields.map(field => field.path)));
+    }
+  }, [extraction?.results, extraction?.confidence_scores, template]);
 
   const togglePanel = (panel: keyof typeof collapsedPanels) => {
     setCollapsedPanels(prev => ({
@@ -638,6 +669,43 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   const handleReviewStatusChange = (status: 'pending' | 'in_review' | 'approved' | 'rejected' | 'needs_correction') => {
     setReviewStatus(status);
     console.log('Review status changed to:', status);
+  };
+
+  // Flagged field handlers
+  const handleFlaggedFieldClick = (field: ConfidenceField) => {
+    console.log('Flagged field clicked:', field);
+    // TODO: Implement field highlighting or navigation
+  };
+
+  const handleToggleFieldVisibility = (fieldPath: string) => {
+    setVisibleFields(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(fieldPath)) {
+        newSet.delete(fieldPath);
+      } else {
+        newSet.add(fieldPath);
+      }
+      return newSet;
+    });
+  };
+
+  // Auto-routing handler
+  const handleAutoRoute = async () => {
+    if (!extractionId) return;
+    
+    try {
+      const result = await apiClient.autoRouteExtraction(extractionId);
+      console.log('Auto-routing result:', result);
+      
+      if (result.routed) {
+        // Update review status if routed
+        setReviewStatus('in_review');
+        // Refresh extraction data
+        window.location.reload(); // Simple refresh for now
+      }
+    } catch (error) {
+      console.error('Failed to auto-route extraction:', error);
+    }
   };
 
   // Helper function to get nested values
@@ -800,6 +868,30 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                   {getStatusIcon(reviewStatus)}
                   {getStatusLabel(reviewStatus)}
                 </StatusBadge>
+                {flaggedFields.length > 0 && reviewStatus === 'pending' && (
+                  <button
+                    onClick={handleAutoRoute}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.5rem 1rem',
+                      background: '#dc2626',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '0.375rem',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = '#b91c1c'}
+                    onMouseOut={(e) => e.currentTarget.style.background = '#dc2626'}
+                  >
+                    <AlertTriangle size={16} />
+                    Auto-Route to Review
+                  </button>
+                )}
                 <CollapseButton onClick={() => togglePanel('results')}>
                   {collapsedPanels.results ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
                 </CollapseButton>
@@ -811,6 +903,14 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                 <LoadingState>Loading results...</LoadingState>
               ) : extraction?.results ? (
                 <>
+                  {flaggedFields.length > 0 && (
+                    <FlaggedFieldIndicator
+                      flaggedFields={flaggedFields}
+                      onFieldClick={handleFlaggedFieldClick}
+                      onToggleVisibility={handleToggleFieldVisibility}
+                      visibleFields={visibleFields}
+                    />
+                  )}
                   
                   <ExtractionResultsPanel
                     extractionResults={extraction}
@@ -830,6 +930,12 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                     onFieldCancel={handleFieldCancel}
                     hasPendingCorrections={hasPendingCorrections}
                     onSaveCorrections={handleSaveCorrections}
+                    templateSettings={template}
+                    showLowConfidenceFlags={extraction?.confidence_scores && typeof extraction.confidence_scores === 'object' && Object.keys(extraction.confidence_scores).length > 0}
+                    onLowConfidenceFieldClick={(field) => {
+                      console.log('Low confidence field clicked:', field);
+                      // TODO: Implement field highlighting or navigation
+                    }}
                   />
                 </>
               ) : extraction?.error_message ? (

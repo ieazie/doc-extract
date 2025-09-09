@@ -262,29 +262,194 @@ JSON OUTPUT:"""
             return ""
     
     def _calculate_confidence(self, extracted_data: Dict[str, Any], schema: Dict[str, Any]) -> float:
-        """Calculate confidence score for the extraction"""
+        """Calculate sophisticated confidence score for the extraction"""
         if not extracted_data:
             return 0.0
         
         total_fields = len(schema)
-        filled_fields = 0
+        if total_fields == 0:
+            return 0.0
         
+        field_scores = []
+        required_fields = []
+        
+        # Analyze each field for confidence scoring
         for field_name, field_def in schema.items():
             field_name_display = field_def.get('name', field_name)
             value = extracted_data.get(field_name_display)
+            field_type = field_def.get('type', 'text')
+            is_required = field_def.get('required', False)
             
-            # Count as filled if it has a meaningful value
-            if value is not None and value != "" and value != 0.0 and value != [] and value != {}:
-                filled_fields += 1
+            if is_required:
+                required_fields.append(field_name_display)
+            
+            # Calculate field-specific confidence
+            field_confidence = self._calculate_field_confidence(value, field_type, is_required)
+            field_scores.append(field_confidence)
         
-        # Base confidence on how many fields were filled
-        base_confidence = filled_fields / total_fields if total_fields > 0 else 0.0
+        # Calculate overall confidence with weighted scoring
+        if not field_scores:
+            return 0.0
         
-        # Add some randomness to simulate real confidence scoring
-        # In a real implementation, this would be more sophisticated
-        confidence = min(0.95, base_confidence + 0.1)
+        # Base confidence from field fill rate
+        filled_fields = sum(1 for score in field_scores if score > 0)
+        fill_rate = filled_fields / total_fields
         
-        return round(confidence, 2)
+        # Average confidence of filled fields
+        avg_field_confidence = sum(score for score in field_scores if score > 0) / max(filled_fields, 1)
+        
+        # Required fields penalty
+        required_penalty = 0.0
+        for req_field in required_fields:
+            if req_field not in extracted_data or not self._has_meaningful_value(extracted_data[req_field]):
+                required_penalty += 0.2  # 20% penalty per missing required field
+        
+        # Data quality bonus
+        quality_bonus = self._calculate_data_quality_bonus(extracted_data, schema)
+        
+        # Calculate final confidence
+        base_confidence = (fill_rate * 0.4) + (avg_field_confidence * 0.6)
+        final_confidence = base_confidence - required_penalty + quality_bonus
+        
+        # Clamp between 0 and 0.95
+        final_confidence = max(0.0, min(0.95, final_confidence))
+        
+        return round(final_confidence, 2)
+    
+    def _calculate_field_confidence(self, value: Any, field_type: str, is_required: bool) -> float:
+        """Calculate confidence score for a single field"""
+        if not self._has_meaningful_value(value):
+            return 0.0 if is_required else 0.1  # Small score for optional empty fields
+        
+        base_confidence = 0.8  # Base confidence for filled fields
+        
+        # Type-specific validation
+        if field_type == 'number':
+            if isinstance(value, (int, float)):
+                base_confidence = 0.9
+            elif isinstance(value, str) and value.replace('.', '').replace('-', '').isdigit():
+                base_confidence = 0.85
+            else:
+                base_confidence = 0.6
+        
+        elif field_type == 'date':
+            if isinstance(value, str):
+                try:
+                    from datetime import datetime
+                    datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    base_confidence = 0.9
+                except:
+                    # Try common date formats
+                    import re
+                    if re.match(r'\d{4}-\d{2}-\d{2}', value) or re.match(r'\d{2}/\d{2}/\d{4}', value):
+                        base_confidence = 0.8
+                    else:
+                        base_confidence = 0.6
+            else:
+                base_confidence = 0.7
+        
+        elif field_type == 'boolean':
+            if isinstance(value, bool):
+                base_confidence = 0.95
+            elif isinstance(value, str) and value.lower() in ['true', 'false', 'yes', 'no', '1', '0']:
+                base_confidence = 0.9
+            else:
+                base_confidence = 0.6
+        
+        elif field_type == 'array':
+            if isinstance(value, list) and len(value) > 0:
+                base_confidence = 0.9
+            elif isinstance(value, list):
+                base_confidence = 0.3  # Empty array
+            else:
+                base_confidence = 0.6
+        
+        elif field_type == 'object':
+            if isinstance(value, dict) and len(value) > 0:
+                base_confidence = 0.9
+            elif isinstance(value, dict):
+                base_confidence = 0.3  # Empty object
+            else:
+                base_confidence = 0.6
+        
+        else:  # text
+            if isinstance(value, str) and len(value.strip()) > 0:
+                # Length-based confidence for text fields
+                if len(value.strip()) > 50:
+                    base_confidence = 0.9
+                elif len(value.strip()) > 10:
+                    base_confidence = 0.8
+                else:
+                    base_confidence = 0.7
+            else:
+                base_confidence = 0.6
+        
+        return base_confidence
+    
+    def _has_meaningful_value(self, value: Any) -> bool:
+        """Check if a value is meaningful (not empty/null)"""
+        if value is None:
+            return False
+        if isinstance(value, str) and value.strip() == "":
+            return False
+        if isinstance(value, (list, dict)) and len(value) == 0:
+            return False
+        if isinstance(value, (int, float)) and value == 0:
+            return False
+        return True
+    
+    def _calculate_data_quality_bonus(self, extracted_data: Dict[str, Any], schema: Dict[str, Any]) -> float:
+        """Calculate bonus points for data quality indicators"""
+        bonus = 0.0
+        
+        # Check for consistent data patterns
+        text_fields = [k for k, v in schema.items() if v.get('type') == 'text']
+        if len(text_fields) > 1:
+            text_values = [extracted_data.get(v.get('name', k), '') for k, v in schema.items() if v.get('type') == 'text']
+            text_values = [v for v in text_values if isinstance(v, str) and v.strip()]
+            
+            if len(text_values) > 1:
+                # Check for consistent formatting (e.g., all caps, all title case)
+                if all(v.isupper() for v in text_values) or all(v.istitle() for v in text_values):
+                    bonus += 0.05
+        
+        # Check for realistic number ranges
+        number_fields = [k for k, v in schema.items() if v.get('type') == 'number']
+        if number_fields:
+            number_values = [extracted_data.get(v.get('name', k)) for k, v in schema.items() if v.get('type') == 'number']
+            number_values = [v for v in number_values if isinstance(v, (int, float))]
+            
+            if number_values:
+                # Check for reasonable number ranges (not all zeros or very large numbers)
+                if not all(v == 0 for v in number_values) and not any(abs(v) > 1e10 for v in number_values):
+                    bonus += 0.03
+        
+        # Check for date consistency
+        date_fields = [k for k, v in schema.items() if v.get('type') == 'date']
+        if len(date_fields) > 1:
+            date_values = [extracted_data.get(v.get('name', k)) for k, v in schema.items() if v.get('type') == 'date']
+            date_values = [v for v in date_values if isinstance(v, str) and v.strip()]
+            
+            if len(date_values) > 1:
+                # Check for logical date ordering (e.g., start_date < end_date)
+                try:
+                    from datetime import datetime
+                    parsed_dates = []
+                    for date_str in date_values:
+                        try:
+                            parsed_dates.append(datetime.fromisoformat(date_str.replace('Z', '+00:00')))
+                        except:
+                            try:
+                                parsed_dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
+                            except:
+                                pass
+                    
+                    if len(parsed_dates) > 1 and parsed_dates == sorted(parsed_dates):
+                        bonus += 0.05
+                except:
+                    pass
+        
+        return min(bonus, 0.15)  # Cap bonus at 15%
     
     async def close(self):
         """Close the HTTP client"""

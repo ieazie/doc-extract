@@ -673,6 +673,7 @@ class ApiClient {
     status: string;
     results?: Record<string, any>;
     confidence_score?: number;
+    confidence_scores?: Record<string, number>;
     processing_time_ms?: number;
     error_message?: string;
     document_name?: string;
@@ -690,6 +691,33 @@ class ApiClient {
 
   async deleteExtraction(extractionId: string): Promise<void> {
     await this.client.delete(`/api/extractions/${extractionId}`);
+  }
+
+  async autoRouteExtraction(extractionId: string): Promise<{
+    routed: boolean;
+    reason: string;
+    flagged_fields: string[];
+    review_status?: string;
+  }> {
+    const response = await this.client.post(`/api/extractions/${extractionId}/auto-route`);
+    return response.data;
+  }
+
+  async getExtractionConfidenceSummary(extractionId: string): Promise<{
+    overall_confidence: number;
+    flagged_fields_count: number;
+    total_fields: number;
+    confidence_threshold: number;
+    flagged_fields: Array<{
+      path: string;
+      name: string;
+      confidence: number;
+      threshold: number;
+    }>;
+    confidence_breakdown: Record<string, number>;
+  }> {
+    const response = await this.client.get(`/api/extractions/${extractionId}/confidence-summary`);
+    return response.data;
   }
 
   // Review Workflow Endpoints

@@ -27,3 +27,4 @@ COMMENT ON COLUMN extractions.review_status IS 'Review workflow status: pending,
 COMMENT ON COLUMN extractions.assigned_reviewer IS 'Username or ID of the assigned reviewer';
 COMMENT ON COLUMN extractions.review_comments IS 'Comments from the reviewer about the extraction';
 COMMENT ON COLUMN extractions.review_completed_at IS 'Timestamp when the review was completed';
+

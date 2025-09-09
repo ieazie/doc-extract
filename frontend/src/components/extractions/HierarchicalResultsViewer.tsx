@@ -14,6 +14,7 @@ import {
   Database,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   XCircle,
   Eye,
   EyeOff,
@@ -22,6 +23,8 @@ import {
 
 import { useSourceLocation, createSourceLocation } from './SourceLocationContext';
 import EditableField from './EditableField';
+import { detectLowConfidenceFields, ConfidenceField, getConfidenceThreshold } from '../../utils/confidenceDetection';
+import LowConfidenceFlag from './LowConfidenceFlag';
 
 // Types
 export interface HierarchicalField {
@@ -54,6 +57,10 @@ interface HierarchicalResultsViewerProps {
   onFieldSave?: (fieldPath: string, newValue: any) => void;
   onFieldCancel?: (fieldPath: string) => void;
   disabled?: boolean;
+  // Low confidence field detection
+  templateSettings?: Record<string, any>;
+  showLowConfidenceFlags?: boolean;
+  onLowConfidenceFieldClick?: (field: ConfidenceField) => void;
 }
 
 // Styled Components
@@ -70,7 +77,7 @@ const FieldContainer = styled.div<{ $depth: number }>`
   padding-left: ${props => props.$depth > 0 ? '0.75rem' : '0'};
 `;
 
-const FieldRow = styled.div<{ $hasChildren: boolean }>`
+const FieldRow = styled.div<{ $hasChildren: boolean; $isLowConfidence?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -78,9 +85,11 @@ const FieldRow = styled.div<{ $hasChildren: boolean }>`
   border-radius: 0.375rem;
   cursor: ${props => props.$hasChildren ? 'pointer' : 'default'};
   transition: background-color 0.2s;
+  border-left: ${props => props.$isLowConfidence ? '3px solid #dc2626' : 'none'};
+  background-color: ${props => props.$isLowConfidence ? '#fef2f2' : 'transparent'};
   
   &:hover {
-    background-color: #f9fafb;
+    background-color: ${props => props.$isLowConfidence ? '#fee2e2' : '#f9fafb'};
   }
 `;
 
@@ -125,6 +134,9 @@ const FieldName = styled.div<{ $required?: boolean }>`
   font-weight: 600;
   color: #1f2937;
   font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   
   ${props => props.$required && `
     &::after {
@@ -132,6 +144,17 @@ const FieldName = styled.div<{ $required?: boolean }>`
       color: #ef4444;
     }
   `}
+`;
+
+const PriorityBadge = styled.div`
+  background: #dc2626;
+  color: white;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
 `;
 
 const FieldValue = styled.div<{ $type: string }>`
@@ -212,6 +235,30 @@ const EmptyState = styled.div`
   justify-content: center;
   padding: 2rem;
   color: #6b7280;
+  text-align: center;
+`;
+
+const FlaggedFieldsSummary = styled.div`
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #991b1b;
+`;
+
+const FlaggedFieldsCount = styled.div`
+  background: #dc2626;
+  color: white;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 1.5rem;
   text-align: center;
 `;
 
@@ -312,7 +359,10 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
   onFieldEdit,
   onFieldSave,
   onFieldCancel,
-  disabled = false
+  disabled = false,
+  templateSettings,
+  showLowConfidenceFlags = true,
+  onLowConfidenceFieldClick
 }) => {
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
   const [editingFields, setEditingFields] = useState<Set<string>>(new Set());
@@ -327,6 +377,23 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
     // Context not available - source location functionality will be disabled
     console.warn('SourceLocationContext not available - source location features disabled');
   }
+
+  // Low confidence field detection
+  const confidenceThreshold = getConfidenceThreshold(templateSettings);
+  
+  console.log('DEBUG - HierarchicalResultsViewer confidence data:', {
+    confidenceScores,
+    showLowConfidenceFlags,
+    results
+  });
+  
+  const lowConfidenceDetection = detectLowConfidenceFields(results, confidenceScores, confidenceThreshold);
+    
+  console.log('DEBUG - Low confidence detection result:', lowConfidenceDetection);
+  
+  const lowConfidenceFieldsMap = new Map(
+    lowConfidenceDetection.flaggedFields.map(field => [field.path, field])
+  );
 
   const toggleExpanded = (fieldPath: string) => {
     const newExpanded = new Set(expandedFields);
@@ -386,6 +453,8 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
     const isExpanded = expandedFields.has(currentPath);
     const isEditingField = editingFields.has(currentPath);
     const currentValue = getFieldValue(field, currentPath);
+    const isLowConfidence = lowConfidenceFieldsMap.has(currentPath);
+    const lowConfidenceField = lowConfidenceFieldsMap.get(currentPath);
 
   const handleFieldClick = () => {
     if (hasChildren) {
@@ -393,6 +462,12 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
     }
     if (onFieldClick) {
       onFieldClick(field);
+    }
+  };
+
+  const handleLowConfidenceFieldClick = () => {
+    if (lowConfidenceField && onLowConfidenceFieldClick) {
+      onLowConfidenceFieldClick(lowConfidenceField);
     }
   };
 
@@ -430,7 +505,11 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
 
     return (
       <FieldContainer key={currentPath} $depth={depth}>
-        <FieldRow $hasChildren={hasChildren} onClick={handleFieldClick}>
+        <FieldRow 
+          $hasChildren={!!hasChildren} 
+          $isLowConfidence={!!isLowConfidence}
+          onClick={handleFieldClick}
+        >
           {hasChildren && (
             <ExpandButton $expanded={isExpanded}>
               <ChevronRight size={16} />
@@ -443,6 +522,9 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
           
           <FieldName $required={field.isRequired}>
             {field.name}
+            {isLowConfidence && (
+              <PriorityBadge>Priority</PriorityBadge>
+            )}
           </FieldName>
           
           {isEditing && !hasChildren ? (
@@ -472,6 +554,15 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
               </ConfidenceIcon>
               {Math.round(field.confidence * 100)}%
             </ConfidenceIndicator>
+          )}
+          
+          {showLowConfidenceFlags && isLowConfidence && lowConfidenceField && (
+            <LowConfidenceFlag
+              confidence={lowConfidenceField.confidence}
+              threshold={lowConfidenceField.threshold}
+              size="small"
+              onToggleVisibility={handleLowConfidenceFieldClick}
+            />
           )}
           
           {showSourceLocations && setSourceLocation && (
@@ -507,10 +598,35 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
   }
 
   const hierarchicalFields = parseToHierarchical(results, confidenceScores);
+  
+  // Sort fields to prioritize low-confidence fields
+  const sortedFields = hierarchicalFields.sort((a, b) => {
+    const aIsLowConfidence = lowConfidenceFieldsMap.has(a.name);
+    const bIsLowConfidence = lowConfidenceFieldsMap.has(b.name);
+    
+    // Low confidence fields first
+    if (aIsLowConfidence && !bIsLowConfidence) return -1;
+    if (!aIsLowConfidence && bIsLowConfidence) return 1;
+    
+    // Within same priority group, maintain original order
+    return 0;
+  });
 
   return (
     <Container className={className}>
-      {hierarchicalFields.map((field, index) => 
+      {lowConfidenceDetection.flaggedCount > 0 && (
+        <FlaggedFieldsSummary>
+          <AlertTriangle size={16} />
+          <span>
+            {lowConfidenceDetection.flaggedCount} field{lowConfidenceDetection.flaggedCount === 1 ? '' : 's'} flagged for review
+          </span>
+          <FlaggedFieldsCount>
+            {lowConfidenceDetection.flaggedCount}
+          </FlaggedFieldsCount>
+        </FlaggedFieldsSummary>
+      )}
+      
+      {sortedFields.map((field, index) => 
         renderField(field, 0, '')
       )}
     </Container>

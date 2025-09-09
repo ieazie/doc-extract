@@ -12,6 +12,7 @@ import logging
 
 from ..models.database import get_db, Extraction, Document, Template, Tenant
 from ..services.langextract_service import get_langextract_service, ExtractionRequest
+from ..services.review_routing_service import ReviewRoutingService
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class ExtractionResponse(BaseModel):
     status: str
     results: Optional[dict] = None
     confidence_score: Optional[float] = None
+    confidence_scores: Optional[dict] = None
     processing_time_ms: Optional[int] = None
     error_message: Optional[str] = None
     created_at: str
@@ -436,6 +438,7 @@ async def get_extraction(
             status=extraction.status,
             results=extraction.results,
             confidence_score=float(extraction.confidence_scores.get('overall', 0)) if extraction.confidence_scores else None,
+            confidence_scores=extraction.confidence_scores,
             processing_time_ms=extraction.processing_time,
             error_message=extraction.error_message,
             document_name=document.original_filename if document else None,
@@ -762,4 +765,68 @@ async def process_extraction(
             pass
     finally:
         db.close()
+
+@router.post("/{extraction_id}/auto-route")
+async def auto_route_extraction(
+    extraction_id: str,
+    db: Session = Depends(get_db)
+):
+    """Automatically route an extraction to review based on confidence scores"""
+    try:
+        tenant_id = get_tenant_id(db)
+        
+        # Get extraction with tenant validation
+        extraction = db.query(Extraction).join(Document).filter(
+            and_(
+                Extraction.id == uuid.UUID(extraction_id),
+                Document.tenant_id == tenant_id
+            )
+        ).first()
+        
+        if not extraction:
+            raise HTTPException(status_code=404, detail="Extraction not found")
+        
+        # Use review routing service
+        routing_service = ReviewRoutingService(db)
+        result = routing_service.auto_route_extraction(extraction_id)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to auto-route extraction: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to auto-route extraction: {str(e)}")
+
+@router.get("/{extraction_id}/confidence-summary")
+async def get_extraction_confidence_summary(
+    extraction_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get confidence summary for an extraction"""
+    try:
+        tenant_id = get_tenant_id(db)
+        
+        # Get extraction with tenant validation
+        extraction = db.query(Extraction).join(Document).filter(
+            and_(
+                Extraction.id == uuid.UUID(extraction_id),
+                Document.tenant_id == tenant_id
+            )
+        ).first()
+        
+        if not extraction:
+            raise HTTPException(status_code=404, detail="Extraction not found")
+        
+        # Use review routing service
+        routing_service = ReviewRoutingService(db)
+        summary = routing_service.get_extraction_confidence_summary(extraction)
+        
+        return summary
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get confidence summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get confidence summary: {str(e)}")
 

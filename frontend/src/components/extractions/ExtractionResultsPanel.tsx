@@ -157,6 +157,10 @@ interface ExtractionResultsPanelProps {
   onFieldCancel?: (fieldPath: string) => void;
   hasPendingCorrections?: boolean;
   onSaveCorrections?: () => void;
+  // Low confidence field detection props
+  templateSettings?: Record<string, any>;
+  showLowConfidenceFlags?: boolean;
+  onLowConfidenceFieldClick?: (field: any) => void;
 }
 
 export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
@@ -178,7 +182,11 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
   onFieldSave,
   onFieldCancel,
   hasPendingCorrections = false,
-  onSaveCorrections
+  onSaveCorrections,
+  // Low confidence field detection props
+  templateSettings,
+  showLowConfidenceFlags = true,
+  onLowConfidenceFieldClick
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('hierarchical');
 
@@ -297,7 +305,7 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
           <HierarchicalResultsViewer
             results={extractionResults.results}
             confidenceScores={extractionResults.confidence_scores}
-            showConfidenceScores={true}
+            showConfidenceScores={extractionResults?.confidence_scores && typeof extractionResults.confidence_scores === 'object' && Object.keys(extractionResults.confidence_scores).length > 0}
             showSourceLocations={true}
             isEditing={isEditing}
             onFieldValueChange={onFieldValueChange}
@@ -305,20 +313,23 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
             onFieldSave={onFieldSave}
             onFieldCancel={onFieldCancel}
             disabled={!isEditing}
+            templateSettings={templateSettings}
+            showLowConfidenceFlags={showLowConfidenceFlags}
+            onLowConfidenceFieldClick={onLowConfidenceFieldClick}
           />
         )}
         {viewMode === 'table' && (
           <TableViewer
             results={extractionResults.results}
             confidenceScores={extractionResults.confidence_scores}
-            showConfidenceScores={true}
+            showConfidenceScores={extractionResults?.confidence_scores && typeof extractionResults.confidence_scores === 'object' && Object.keys(extractionResults.confidence_scores).length > 0}
           />
         )}
         {viewMode === 'cards' && (
           <CardsViewer
             results={extractionResults.results}
             confidenceScores={extractionResults.confidence_scores}
-            showConfidenceScores={true}
+            showConfidenceScores={extractionResults?.confidence_scores && typeof extractionResults.confidence_scores === 'object' && Object.keys(extractionResults.confidence_scores).length > 0}
             showSourceLocations={false}
           />
         )}
