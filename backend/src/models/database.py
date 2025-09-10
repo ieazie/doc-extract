@@ -1,13 +1,14 @@
 """
 SQLAlchemy models for the Document Extraction Platform
 """
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 import uuid
 from datetime import datetime
+import enum
 
 from ..config import get_database_url
 
@@ -17,6 +18,27 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+# Enums for database
+class UserRoleEnum(str, enum.Enum):
+    ADMIN = "admin"
+    USER = "user"
+    VIEWER = "viewer"
+
+
+class UserStatusEnum(str, enum.Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    PENDING = "pending"
+    SUSPENDED = "suspended"
+
+
+class TenantStatusEnum(str, enum.Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
+    TRIAL = "trial"
+
+
 class Tenant(Base):
     """Tenant model for multi-tenancy support"""
     __tablename__ = "tenants"
@@ -24,10 +46,13 @@ class Tenant(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     settings = Column(JSONB, default={})
+    status = Column(Enum(TenantStatusEnum), default=TenantStatusEnum.ACTIVE)
+    environment = Column(String(50), default="development")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
+    users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
     document_types = relationship("DocumentType", back_populates="tenant", cascade="all, delete-orphan")
     document_categories = relationship("DocumentCategory", back_populates="tenant", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")
@@ -35,6 +60,54 @@ class Tenant(Base):
 
     def __repr__(self):
         return f"<Tenant(id={self.id}, name='{self.name}')>"
+
+
+class User(Base):
+    """User model for authentication and authorization"""
+    __tablename__ = "users"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=False)
+    first_name = Column(String(100), nullable=False)
+    last_name = Column(String(100), nullable=False)
+    role = Column(Enum(UserRoleEnum), default=UserRoleEnum.USER)
+    status = Column(Enum(UserStatusEnum), default=UserStatusEnum.ACTIVE)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    last_login = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    tenant = relationship("Tenant", back_populates="users")
+    api_keys = relationship("APIKey", back_populates="user", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<User(id={self.id}, email='{self.email}')>"
+
+
+class APIKey(Base):
+    """API Key model for programmatic access"""
+    __tablename__ = "api_keys"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    key_hash = Column(String(255), nullable=False, unique=True)  # Hashed version of the key
+    permissions = Column(JSONB, default=[])
+    is_active = Column(Boolean, default=True)
+    last_used = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="api_keys")
+    tenant = relationship("Tenant")
+
+    def __repr__(self):
+        return f"<APIKey(id={self.id}, name='{self.name}')>"
 
 
 class DocumentType(Base):

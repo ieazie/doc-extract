@@ -10,9 +10,10 @@ from sqlalchemy.types import Text
 import uuid
 import logging
 
-from ..models.database import get_db, Extraction, Document, Template, Tenant
+from ..models.database import get_db, Extraction, Document, Template, Tenant, User
 from ..services.langextract_service import get_langextract_service, ExtractionRequest
 from ..services.review_routing_service import ReviewRoutingService
+from ..api.auth import get_current_user, require_permission
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -99,13 +100,7 @@ class FieldCorrectionResponse(BaseModel):
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def get_tenant_id(db: Session) -> uuid.UUID:
-    """Get tenant ID from database (for now, use default tenant)"""
-    # TODO: In Phase 7, this will come from authentication
-    tenant = db.query(Tenant).filter(Tenant.name == 'Default Tenant').first()
-    if not tenant:
-        raise HTTPException(status_code=500, detail="Default tenant not found")
-    return tenant.id
+# get_tenant_id function removed - now using proper authentication
 
 # ============================================================================
 # EXTRACTION ENDPOINTS
@@ -115,11 +110,12 @@ def get_tenant_id(db: Session) -> uuid.UUID:
 async def create_extraction(
     extraction_data: ExtractionCreate,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:write"))
 ):
     """Create a new extraction job"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Validate document exists and belongs to tenant
         document = db.query(Document).filter(
@@ -205,11 +201,12 @@ async def list_extractions(
     search: Optional[str] = Query(None, description="Search in document and template names"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", description="Sort order (asc/desc)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:read"))
 ):
     """List extractions with pagination and filtering"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Build query with joins - use left join for Template to avoid filtering issues
         query = db.query(Extraction).join(Document).outerjoin(Template, Extraction.template_id == Template.id).filter(
@@ -334,11 +331,12 @@ async def get_review_queue(
     per_page: int = Query(10, ge=1, le=100, description="Items per page"),
     review_status: Optional[str] = Query(None, description="Filter by review status"),
     assigned_reviewer: Optional[str] = Query(None, description="Filter by assigned reviewer"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:read"))
 ):
     """Get extractions in review queue"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Build query for review queue
         query = db.query(Extraction).join(Document).outerjoin(Template, Extraction.template_id == Template.id).filter(
@@ -410,11 +408,12 @@ async def get_review_queue(
 @router.get("/{extraction_id}", response_model=ExtractionResponse)
 async def get_extraction(
     extraction_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:read"))
 ):
     """Get a specific extraction by ID"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Get extraction with tenant validation
         extraction = db.query(Extraction).join(Document).filter(
@@ -461,11 +460,12 @@ async def get_extraction(
 @router.delete("/{extraction_id}", status_code=204)
 async def delete_extraction(
     extraction_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:write"))
 ):
     """Delete an extraction"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Get extraction with tenant validation
         extraction = db.query(Extraction).join(Document).filter(
@@ -492,11 +492,12 @@ async def delete_extraction(
 async def start_review(
     extraction_id: str,
     request: ReviewActionRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:write"))
 ):
     """Start review process for an extraction"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Get extraction with tenant validation
         extraction = db.query(Extraction).join(Document).filter(
@@ -556,11 +557,12 @@ async def start_review(
 @router.get("/{extraction_id}/review-status", response_model=ReviewStatusResponse)
 async def get_review_status(
     extraction_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:read"))
 ):
     """Get review status for an extraction"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Get extraction with tenant validation
         extraction = db.query(Extraction).join(Document).filter(
@@ -592,11 +594,12 @@ async def get_review_status(
 async def correct_field(
     extraction_id: str,
     request: FieldCorrectionRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:write"))
 ):
     """Correct a field value in an extraction"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Get extraction with tenant validation
         extraction = db.query(Extraction).join(Document).filter(
@@ -769,11 +772,12 @@ async def process_extraction(
 @router.post("/{extraction_id}/auto-route")
 async def auto_route_extraction(
     extraction_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:write"))
 ):
     """Automatically route an extraction to review based on confidence scores"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Get extraction with tenant validation
         extraction = db.query(Extraction).join(Document).filter(
@@ -801,11 +805,12 @@ async def auto_route_extraction(
 @router.get("/{extraction_id}/confidence-summary")
 async def get_extraction_confidence_summary(
     extraction_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("extractions:read"))
 ):
     """Get confidence summary for an extraction"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Get extraction with tenant validation
         extraction = db.query(Extraction).join(Document).filter(

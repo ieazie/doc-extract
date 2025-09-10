@@ -210,7 +210,8 @@ class DocumentProcessor:
         self, 
         document_id: UUID, 
         s3_key: str, 
-        mime_type: str
+        mime_type: str,
+        tenant_id: UUID
     ) -> Dict[str, Any]:
         """
         Asynchronously extract text content and generate thumbnail
@@ -220,6 +221,7 @@ class DocumentProcessor:
             document_id: Document identifier
             s3_key: S3 key for the document
             mime_type: MIME type of the document
+            tenant_id: Tenant identifier for secure storage
             
         Returns:
             Extraction results with text content and metadata
@@ -241,7 +243,7 @@ class DocumentProcessor:
             
             # Generate thumbnail
             thumbnail_result = await self._generate_thumbnail(
-                file_content, mime_type, document_id
+                file_content, mime_type, document_id, tenant_id
             )
             
             # Calculate text statistics
@@ -513,7 +515,8 @@ class DocumentProcessor:
         self, 
         file_content: bytes, 
         mime_type: str, 
-        document_id: UUID
+        document_id: UUID,
+        tenant_id: UUID
     ) -> Dict[str, Any]:
         """
         Generate thumbnail for document
@@ -522,15 +525,16 @@ class DocumentProcessor:
             file_content: File content as bytes
             mime_type: MIME type of the file
             document_id: Document identifier
+            tenant_id: Tenant identifier for secure storage
             
         Returns:
             Thumbnail generation result
         """
         try:
             if mime_type == 'application/pdf':
-                return await self._generate_pdf_thumbnail(file_content, document_id)
+                return await self._generate_pdf_thumbnail(file_content, document_id, tenant_id)
             else:
-                return await self._generate_generic_thumbnail(mime_type, document_id)
+                return await self._generate_generic_thumbnail(mime_type, document_id, tenant_id)
                 
         except Exception as e:
             logger.warning(f"Thumbnail generation failed for {document_id}: {e}")
@@ -539,7 +543,8 @@ class DocumentProcessor:
     async def _generate_pdf_thumbnail(
         self, 
         pdf_content: bytes, 
-        document_id: UUID
+        document_id: UUID,
+        tenant_id: UUID
     ) -> Dict[str, Any]:
         """
         Generate full-page preview from PDF first page
@@ -547,6 +552,7 @@ class DocumentProcessor:
         Args:
             pdf_content: PDF content as bytes
             document_id: Document identifier
+            tenant_id: Tenant identifier for secure storage
             
         Returns:
             Preview generation result
@@ -583,7 +589,6 @@ class DocumentProcessor:
             preview_data = preview_buffer.getvalue()
             
             # Upload preview to S3
-            tenant_id = UUID(str(document_id).split('-')[0] + '-0000-0000-0000-000000000000')  # Simplified
             preview_s3_key = await self.s3_service.upload_thumbnail(
                 preview_data, document_id, tenant_id, "jpg"
             )
@@ -605,7 +610,8 @@ class DocumentProcessor:
     async def _generate_generic_thumbnail(
         self, 
         mime_type: str, 
-        document_id: UUID
+        document_id: UUID,
+        tenant_id: UUID
     ) -> Dict[str, Any]:
         """
         Generate generic thumbnail for non-PDF files
@@ -613,6 +619,7 @@ class DocumentProcessor:
         Args:
             mime_type: MIME type of the file
             document_id: Document identifier
+            tenant_id: Tenant identifier for secure storage
             
         Returns:
             Thumbnail generation result
@@ -660,7 +667,6 @@ class DocumentProcessor:
             thumbnail_data = thumbnail_buffer.getvalue()
             
             # Upload thumbnail to S3
-            tenant_id = UUID(str(document_id).split('-')[0] + '-0000-0000-0000-000000000000')  # Simplified
             thumbnail_s3_key = await self.s3_service.upload_thumbnail(
                 thumbnail_data, document_id, tenant_id, "jpg"
             )

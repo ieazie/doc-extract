@@ -33,6 +33,9 @@ interface Template {
     fields: SchemaField[];
   };
   status: 'draft' | 'published' | 'archived';
+  extraction_settings?: {
+    confidence_threshold?: number;
+  };
 }
 
 // Default prompt templates for each document type
@@ -532,7 +535,7 @@ const TooltipIcon = styled.div`
     border-radius: 6px;
     font-size: 12px;
     white-space: nowrap;
-    z-index: 1000;
+    z-index: ${props => props.theme.zIndex.tooltip};
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   }
   
@@ -544,7 +547,7 @@ const TooltipIcon = styled.div`
     transform: translateX(-50%) translateY(100%);
     border: 4px solid transparent;
     border-top-color: #1f2937;
-    z-index: 1000;
+    z-index: ${props => props.theme.zIndex.tooltip};
   }
 `;
 

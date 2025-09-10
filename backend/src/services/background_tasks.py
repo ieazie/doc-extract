@@ -52,7 +52,7 @@ class BackgroundTaskService:
             
             # Perform text extraction
             extraction_result = await self.document_processor.extract_text_async(
-                document_id, s3_key, mime_type
+                document_id, s3_key, mime_type, tenant_id
             )
             
             # Update document with extraction results

@@ -24,7 +24,7 @@ import { apiClient } from '@/services/api';
 import { SourceLocationProvider } from './SourceLocationContext';
 import { ExtractionResultsPanel } from './ExtractionResultsPanel';
 import FlaggedFieldIndicator from './FlaggedFieldIndicator';
-import { detectLowConfidenceFields, ConfidenceField } from '../../utils/confidenceDetection';
+import { detectLowConfidenceFields, ConfidenceField } from '@/utils/confidenceDetection';
 
 // Styled Components
 const ModalOverlay = styled.div`
@@ -37,7 +37,7 @@ const ModalOverlay = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: ${props => props.theme.zIndex.modal};
   padding: 1rem;
 `;
 
@@ -375,7 +375,9 @@ const ResultsTabs = styled.div`
   background: #f9fafb;
 `;
 
-const Tab = styled.button<{ active: boolean }>`
+const Tab = styled.button.withConfig({
+  shouldForwardProp: (prop) => prop !== 'active',
+})<{ active: boolean }>`
   flex: 1;
   padding: 0.75rem 1rem;
   border: none;
@@ -538,6 +540,40 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     () => apiClient.getDocumentPreview(extraction!.document_id),
     {
       enabled: isOpen && !!extraction?.document_id
+    }
+  );
+
+  // Fetch document preview image as blob
+  const { 
+    data: previewImageUrl, 
+    isLoading: imageLoading 
+  } = useQuery(
+    ['document-preview-image', extraction?.document_id],
+    async () => {
+      if (!extraction?.document_id) return null;
+      
+      try {
+        // Fetch the image as a blob with authentication
+        const response = await fetch(`http://localhost:8000/api/documents/preview-image/${extraction.document_id}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_tokens') ? JSON.parse(localStorage.getItem('auth_tokens')!).access_token : ''}`
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch preview image');
+        }
+        
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+      } catch (error) {
+        console.error('Error fetching preview image:', error);
+        return null;
+      }
+    },
+    {
+      enabled: isOpen && !!extraction?.document_id && !!documentPreview?.has_preview,
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     }
   );
 
@@ -814,12 +850,12 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
             </PanelHeader>
             
             <PanelContent collapsed={collapsedPanels.document}>
-              {documentLoading || previewLoading ? (
+              {documentLoading || previewLoading || imageLoading ? (
                 <LoadingState>Loading document...</LoadingState>
-              ) : documentPreview?.has_preview && documentPreview.preview_url ? (
+              ) : documentPreview?.has_preview && previewImageUrl ? (
                 <DocumentPreview>
                   <DocumentImage 
-                    src={documentPreview.preview_url} 
+                    src={previewImageUrl} 
                     alt={`Preview of ${documentPreview.filename}`}
                     onError={(e) => {
                       // Fallback to icon if image fails to load

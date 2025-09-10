@@ -82,7 +82,9 @@ const TabHeader = styled.div`
   border-bottom: 1px solid ${props => props.theme.colors.border};
 `;
 
-const Tab = styled.button<{ active: boolean }>`
+const Tab = styled.button.withConfig({
+  shouldForwardProp: (prop) => prop !== 'active',
+})<{ active: boolean }>`
   flex: 1;
   padding: 1rem 1.5rem;
   border: none;

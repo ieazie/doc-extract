@@ -137,9 +137,57 @@ export interface FieldCorrectionResponse {
   updated_at: string;
 }
 
+// Auth Types
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: {
+    id: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+    role: string;
+    status: string;
+    tenant_id: string;
+    last_login?: string;
+    created_at: string;
+    updated_at: string;
+  };
+}
+
+export interface User {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  status: string;
+  tenant_id: string;
+  last_login?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  settings: Record<string, any>;
+  status: string;
+  environment: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // API Client Class
 class ApiClient {
   private client: AxiosInstance;
+  private authToken: string | null = null;
 
   constructor() {
     // Determine the correct API URL based on environment
@@ -160,9 +208,17 @@ class ApiClient {
       },
     });
 
-    // Request interceptor for debugging
+    // Request interceptor for authentication and debugging
     this.client.interceptors.request.use(
       (config) => {
+        // Add auth token if available
+        if (this.authToken) {
+          config.headers.Authorization = `Bearer ${this.authToken}`;
+          console.log(`🔑 API Request with token: ${config.method?.toUpperCase()} ${config.url}`);
+        } else {
+          console.log(`⚠️ API Request without token: ${config.method?.toUpperCase()} ${config.url}`);
+        }
+        
         console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`);
         return config;
       },
@@ -190,6 +246,29 @@ class ApiClient {
           throw new Error(error.response.data?.detail || 'Invalid request');
         }
         
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          // Clear auth data and redirect to login
+          console.warn('Authentication failed, clearing auth data and redirecting to login');
+          
+          // Clear localStorage
+          localStorage.removeItem('auth_tokens');
+          localStorage.removeItem('auth_user');
+          localStorage.removeItem('auth_tenant');
+          
+          // Clear API client token
+          this.authToken = null;
+          
+          // Only redirect to login if we're not already on the login page
+          // and if we're not in the middle of a login process
+          if (typeof window !== 'undefined' && 
+              window.location.pathname !== '/login' && 
+              !error.config?.url?.includes('/auth/login')) {
+            window.location.href = '/login';
+          }
+          
+          throw new Error('Authentication required');
+        }
+        
         if (error.response?.status === 500) {
           throw new Error('Server error. Please try again later.');
         }
@@ -197,6 +276,40 @@ class ApiClient {
         throw error;
       }
     );
+  }
+
+  // Authentication Methods
+  setAuthToken(token: string | null) {
+    this.authToken = token;
+  }
+
+  clearAuthToken() {
+    this.authToken = null;
+  }
+
+  // Auth Endpoints
+  async login(credentials: LoginCredentials): Promise<LoginResponse> {
+    const response = await this.client.post('/api/auth/login', credentials);
+    return response.data;
+  }
+
+  async getCurrentUser(): Promise<User> {
+    const response = await this.client.get('/api/auth/me');
+    return response.data;
+  }
+
+  async getCurrentTenant(): Promise<Tenant> {
+    const response = await this.client.get('/api/auth/tenant');
+    return response.data;
+  }
+
+  async switchTenant(tenantId: string): Promise<void> {
+    await this.client.post('/api/auth/switch-tenant', { tenant_id: tenantId });
+  }
+
+  async getUserPermissions(): Promise<{ permissions: string[]; role: string; tenant_id: string }> {
+    const response = await this.client.get('/api/auth/permissions');
+    return response.data;
   }
 
   // Health Endpoints

@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 import uuid
 
-from ..models.database import get_db, Template, TemplateExample, Tenant
+from ..models.database import get_db, Template, TemplateExample, Tenant, User
 from ..models.database import DocumentType, DocumentCategory
+from .auth import get_current_user, require_permission
 from ..services.ai_service import ai_service
 from pydantic import BaseModel, Field, validator
 import json
@@ -136,13 +137,7 @@ class TemplateExampleResponse(BaseModel):
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def get_tenant_id(db: Session) -> uuid.UUID:
-    """Get tenant ID from database (for now, use default tenant)"""
-    # TODO: In Phase 7, this will come from authentication
-    tenant = db.query(Tenant).filter(Tenant.name == 'Default Tenant').first()
-    if not tenant:
-        raise HTTPException(status_code=500, detail="Default tenant not found")
-    return tenant.id
+# Remove the old get_tenant_id function - we'll use current_user.tenant_id instead
 
 def validate_template_schema(schema: dict) -> bool:
     """Validate template schema structure"""
@@ -185,7 +180,8 @@ async def test_endpoint():
 @router.post("/", response_model=TemplateResponse, status_code=201)
 async def create_template(
     template_data: TemplateCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Create a new extraction template"""
     try:
@@ -193,8 +189,8 @@ async def create_template(
         if not validate_template_schema(template_data.schema):
             raise HTTPException(status_code=400, detail="Invalid schema structure")
         
-        # Get tenant ID
-        tenant_id = get_tenant_id(db)
+        # Get tenant ID from current user
+        tenant_id = current_user.tenant_id
         
         # Check if template name already exists for this tenant
         existing = db.query(Template).filter(
@@ -298,11 +294,12 @@ async def list_templates(
     status: Optional[str] = Query(None, description="Filter by template status (draft, published, archived)"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", description="Sort order (asc/desc)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:read"))
 ):
     """List templates with pagination and filtering"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Build query
         query = db.query(Template).filter(Template.tenant_id == tenant_id)
@@ -393,11 +390,12 @@ async def list_templates(
 @router.get("/{template_id}", response_model=TemplateResponse)
 async def get_template(
     template_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Get a specific template by ID"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         template = db.query(Template).filter(
             and_(
@@ -443,11 +441,12 @@ async def get_template(
 async def update_template(
     template_id: str,
     template_data: TemplateUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Update an existing template"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         template = db.query(Template).filter(
             and_(
@@ -533,11 +532,12 @@ async def update_template(
 @router.delete("/{template_id}", status_code=204)
 async def delete_template(
     template_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Delete a template (soft delete by setting is_active=False)"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         template = db.query(Template).filter(
             and_(
@@ -567,11 +567,12 @@ async def delete_template(
 async def create_template_example(
     template_id: str,
     example_data: TemplateExampleCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Add an example to a template"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Verify template exists and belongs to tenant
         template = db.query(Template).filter(
@@ -619,11 +620,12 @@ async def create_template_example(
 @router.get("/{template_id}/examples", response_model=List[TemplateExampleResponse])
 async def list_template_examples(
     template_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """List all examples for a template"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Verify template exists and belongs to tenant
         template = db.query(Template).filter(
@@ -665,11 +667,12 @@ async def list_template_examples(
 async def delete_template_example(
     template_id: str,
     example_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Delete a template example"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Verify template exists and belongs to tenant
         template = db.query(Template).filter(
@@ -710,11 +713,12 @@ async def delete_template_example(
 async def test_template(
     template_id: str,
     test_document: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Test a template with sample document content (mock implementation)"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Verify template exists and belongs to tenant
         template = db.query(Template).filter(
@@ -784,7 +788,8 @@ class GenerateFieldsResponse(BaseModel):
 @router.post("/generate-fields-from-prompt", response_model=GenerateFieldsResponse)
 async def generate_fields_from_prompt(
     request: GenerateFieldsRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Generate schema fields based on extraction prompt only"""
     try:
@@ -829,7 +834,8 @@ async def generate_fields_from_prompt(
 @router.post("/generate-fields-from-document", response_model=GenerateFieldsResponse)
 async def generate_fields_from_document(
     request: GenerateFieldsRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Generate schema fields based on extraction prompt and document content"""
     try:

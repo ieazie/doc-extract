@@ -19,7 +19,7 @@ const TesterOverlay = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: ${props => props.theme.zIndex.modal};
 `;
 
 const TesterModal = styled.div`
