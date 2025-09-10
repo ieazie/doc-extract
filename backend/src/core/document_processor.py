@@ -20,6 +20,106 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 
+def detectLowConfidenceFields(
+    results: Dict[str, Any],
+    confidence_scores: Dict[str, float] = {},
+    threshold: float = 0.7
+) -> Dict[str, Any]:
+    """
+    Detect low-confidence fields in extraction results
+    
+    Args:
+        results: Extraction results dictionary
+        confidence_scores: Field-level confidence scores
+        threshold: Confidence threshold for flagging (0.0-1.0)
+    
+    Returns:
+        Dictionary with detection results
+    """
+    flagged_fields = []
+    total_fields = 0
+    total_confidence = 0
+
+    def traverse_fields(data: Any, path: str = '', parent_name: str = '') -> None:
+        nonlocal total_fields, total_confidence
+        
+        if data is None:
+            return
+
+        if isinstance(data, list):
+            for index, item in enumerate(data):
+                current_path = path + f"[{index}]" if path else f"[{index}]"
+                current_name = f"[{index}]"
+                
+                confidence = confidence_scores.get(current_path, 0)
+                field_type = 'array' if isinstance(item, list) else \
+                            'object' if isinstance(item, dict) else \
+                            'number' if isinstance(item, (int, float)) else \
+                            'boolean' if isinstance(item, bool) else 'text'
+
+                field_info = {
+                    'path': current_path,
+                    'name': current_name,
+                    'type': field_type,
+                    'value': item,
+                    'confidence': confidence,
+                    'is_low_confidence': confidence < threshold,
+                    'threshold': threshold
+                }
+
+                total_fields += 1
+                total_confidence += confidence
+
+                if field_info['is_low_confidence']:
+                    flagged_fields.append(field_info)
+
+                # Recursively process array items
+                if isinstance(item, (dict, list)):
+                    traverse_fields(item, current_path, current_name)
+                    
+        elif isinstance(data, dict):
+            for key, value in data.items():
+                current_path = f"{path}.{key}" if path else key
+                field_type = 'array' if isinstance(value, list) else \
+                            'object' if isinstance(value, dict) else \
+                            'number' if isinstance(value, (int, float)) else \
+                            'boolean' if isinstance(value, bool) else 'text'
+
+                confidence = confidence_scores.get(current_path, 0)
+                
+                field_info = {
+                    'path': current_path,
+                    'name': key,
+                    'type': field_type,
+                    'value': value,
+                    'confidence': confidence,
+                    'is_low_confidence': confidence < threshold,
+                    'threshold': threshold
+                }
+
+                total_fields += 1
+                total_confidence += confidence
+
+                if field_info['is_low_confidence']:
+                    flagged_fields.append(field_info)
+
+                # Recursively process nested objects
+                if isinstance(value, (dict, list)):
+                    traverse_fields(value, current_path, key)
+
+    traverse_fields(results)
+
+    overall_confidence = total_confidence / total_fields if total_fields > 0 else 0
+
+    return {
+        'flagged_fields': flagged_fields,
+        'total_fields': total_fields,
+        'flagged_count': len(flagged_fields),
+        'overall_confidence': round(overall_confidence, 2),
+        'threshold': threshold
+    }
+
+
 class DocumentProcessor:
     """
     Comprehensive document processor with text extraction, metadata analysis,

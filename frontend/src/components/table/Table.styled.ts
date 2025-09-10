@@ -79,6 +79,28 @@ export const SearchIcon = styled.div<{ $isSearching?: boolean }>`
   }
 `;
 
+export const ClearButton = styled.button`
+  position: absolute;
+  right: 2.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, background-color 0.2s ease;
+  
+  &:hover {
+    color: #6b7280;
+    background-color: #f3f4f6;
+  }
+`;
+
 // Table Components
 export const TableContainer = styled.div`
   background: white;
@@ -87,9 +109,8 @@ export const TableContainer = styled.div`
   overflow: visible;
 `;
 
-export const TableHeader = styled.div<{ $columns: number }>`
+export const TableHeader = styled.div<{ $columns: number; $gridTemplate?: string }>`
   display: grid;
-  grid-template-columns: repeat(${props => props.$columns}, 1fr);
   gap: 1rem;
   padding: 1rem;
   background: #f9fafb;
@@ -97,16 +118,47 @@ export const TableHeader = styled.div<{ $columns: number }>`
   font-weight: 600;
   font-size: 0.875rem;
   color: #374151;
+  ${props => props.$gridTemplate && `grid-template-columns: ${props.$gridTemplate};`}
 `;
 
-export const TableRow = styled.div<{ $columns: number }>`
+export const SortableHeaderCell = styled.div<{ $sortable?: boolean }>`
+  display: flex;
+  align-items: center;
+  min-height: 1.5rem;
+  height: 1.5rem;
+  cursor: ${props => props.$sortable ? 'pointer' : 'default'};
+  user-select: none;
+  transition: color 0.2s;
+  line-height: 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  
+  &:hover {
+    color: ${props => props.$sortable ? '#3b82f6' : 'inherit'};
+  }
+`;
+
+export const SortIcon = styled.span<{ $active?: boolean; $direction?: 'asc' | 'desc' }>`
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  color: ${props => props.$active ? '#3b82f6' : '#9ca3af'};
+  transition: color 0.2s;
+  margin-left: 0.5rem;
+  
+  &:hover {
+    color: #3b82f6;
+  }
+`;
+
+export const TableRow = styled.div<{ $columns: number; $gridTemplate?: string }>`
   display: grid;
-  grid-template-columns: repeat(${props => props.$columns}, 1fr);
   gap: 1rem;
   padding: 1rem;
   border-bottom: 1px solid #f3f4f6;
   align-items: center;
   transition: background-color 0.2s;
+  ${props => props.$gridTemplate && `grid-template-columns: ${props.$gridTemplate};`}
   
   &:hover {
     background: #f9fafb;
@@ -121,18 +173,25 @@ export const TableCell = styled.div`
   display: flex;
   align-items: center;
   min-height: 1.5rem;
+  height: 1.5rem;
+  line-height: 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 400;
 `;
 
 // Status Badge Component
 export const StatusBadge = styled.span<{ status: string }>`
   display: inline-flex;
   align-items: center;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  justify-content: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.625rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.025em;
+  min-width: 4rem;
+  height: 1.25rem;
   
   ${props => {
     switch (props.status) {
@@ -203,7 +262,9 @@ export const ActionButton = styled.button<{ variant?: 'primary' | 'secondary' | 
 
 export const ActionGroup = styled.div`
   display: flex;
+  align-items: center;
   gap: 0.5rem;
+  height: 100%;
 `;
 
 // Pagination Components

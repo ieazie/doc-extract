@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { 
   FilterBar, 
   FilterGroup, 
@@ -8,8 +8,11 @@ import {
   SearchInputWrapper,
   SearchInput,
   SearchIcon,
+  ClearButton,
   TableContainer,
   TableHeader,
+  SortableHeaderCell,
+  SortIcon,
   TableRow,
   TableCell,
   PaginationContainer,
@@ -38,7 +41,7 @@ export interface ColumnDefinition<T = any> {
 export interface FilterDefinition {
   key: string;
   label: string;
-  type: 'select' | 'search';
+  type: 'select' | 'search' | 'date';
   options?: Array<{ value: string; label: string }>;
   placeholder?: string;
 }
@@ -69,6 +72,7 @@ export interface TableProps<T = any> {
   actions?: (row: T, index: number) => React.ReactNode;
   onFilterChange?: (key: string, value: string) => void;
   onSort?: (key: string, direction: 'asc' | 'desc') => void;
+  onClearFilters?: () => void;
   className?: string;
   isSearching?: boolean;
   searchMinLength?: number;
@@ -116,6 +120,7 @@ export const Table = <T extends Record<string, any>>({
   actions,
   onFilterChange,
   onSort,
+  onClearFilters,
   className,
   isSearching = false,
   searchMinLength = 2
@@ -125,6 +130,10 @@ export const Table = <T extends Record<string, any>>({
     page: 1,
     perPage: 10
   });
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  } | null>(null);
 
   // Determine if we're using client-side or server-side pagination
   const isClientPagination = !pagination || pagination.mode === 'client';
@@ -161,6 +170,47 @@ export const Table = <T extends Record<string, any>>({
     }
   };
 
+  // Handle sorting
+  const handleSort = (key: string) => {
+    const column = columns.find(col => col.key === key);
+    if (!column?.sortable) return;
+
+    let direction: 'asc' | 'desc' = 'asc';
+    
+    if (sortConfig && sortConfig.key === key) {
+      direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
+    }
+
+    if (onSort) {
+      onSort(key, direction);
+    } else {
+      setSortConfig({ key, direction });
+    }
+  };
+
+  // Client-side sorting function
+  const sortData = <T,>(data: T[], sortConfig: { key: string; direction: 'asc' | 'desc' } | null): T[] => {
+    if (!sortConfig) return data;
+
+    return [...data].sort((a, b) => {
+      const aValue = (a as any)[sortConfig.key];
+      const bValue = (b as any)[sortConfig.key];
+
+      if (aValue === null || aValue === undefined) return 1;
+      if (bValue === null || bValue === undefined) return -1;
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortConfig.direction === 'asc' 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      }
+
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
   // Process data based on pagination mode
   const processedData = useMemo(() => {
     let filteredData = data;
@@ -170,13 +220,18 @@ export const Table = <T extends Record<string, any>>({
       filteredData = filterData(data, localFilters, columns);
     }
 
+    // Apply client-side sorting if no onSort is provided
+    if (!onSort && sortConfig) {
+      filteredData = sortData(filteredData, sortConfig);
+    }
+
     // Apply client-side pagination
     if (isClientPagination) {
       return paginateData(filteredData, localPagination.page, localPagination.perPage);
     }
 
     return filteredData;
-  }, [data, localFilters, localPagination, filters, columns, onFilterChange, isClientPagination]);
+  }, [data, localFilters, localPagination, filters, columns, onFilterChange, onSort, sortConfig, isClientPagination]);
 
   // Calculate pagination info
   const paginationInfo = useMemo(() => {
@@ -232,13 +287,43 @@ export const Table = <T extends Record<string, any>>({
     );
   }
 
+  // Check if empty state is due to search/filtering
+  const hasActiveFilters = Object.values(filterValues).some(value => value && value.length > 0);
+  const isFilteredEmpty = !loading && !isSearching && processedData.length === 0 && hasActiveFilters;
+
   // Empty state - only show if not loading, not searching, and no data
   if (!loading && !isSearching && processedData.length === 0) {
     return (
       <EmptyState>
         {emptyState.icon && <EmptyStateIcon>{emptyState.icon}</EmptyStateIcon>}
-        <EmptyStateTitle>{emptyState.title}</EmptyStateTitle>
-        <EmptyStateDescription>{emptyState.description}</EmptyStateDescription>
+        <EmptyStateTitle>
+          {isFilteredEmpty ? 'No results found' : emptyState.title}
+        </EmptyStateTitle>
+        <EmptyStateDescription>
+          {isFilteredEmpty 
+            ? 'Try adjusting your search terms or filters to see more results.' 
+            : emptyState.description
+          }
+        </EmptyStateDescription>
+        {isFilteredEmpty && onClearFilters && (
+          <div style={{ marginTop: '1rem' }}>
+            <button
+              onClick={onClearFilters}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '500'
+              }}
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
       </EmptyState>
     );
   }
@@ -249,7 +334,7 @@ export const Table = <T extends Record<string, any>>({
   const getGridTemplateColumns = () => {
     const columnWidths = columns.map(col => col.width || '1fr');
     if (actions) {
-      return [...columnWidths, 'auto'].join(' ');
+      return [...columnWidths, '1fr'].join(' ');
     }
     return columnWidths.join(' ');
   };
@@ -274,6 +359,12 @@ export const Table = <T extends Record<string, any>>({
                     </option>
                   ))}
                 </FilterSelect>
+              ) : filter.type === 'date' ? (
+                <SearchInput
+                  type="date"
+                  value={onFilterChange ? (filterValues[filter.key] || '') : localFilters[filter.key] || ''}
+                  onChange={(e) => handleFilterChange(filter.key, e.target.value)}
+                />
               ) : (
                 <SearchInputWrapper>
                   <SearchInput
@@ -282,6 +373,14 @@ export const Table = <T extends Record<string, any>>({
                     value={onFilterChange ? (filterValues[filter.key] || '') : localFilters[filter.key] || ''}
                     onChange={(e) => handleFilterChange(filter.key, e.target.value)}
                   />
+                  {(onFilterChange ? (filterValues[filter.key] || '') : localFilters[filter.key] || '') && (
+                    <ClearButton
+                      onClick={() => handleFilterChange(filter.key, '')}
+                      title="Clear search"
+                    >
+                      <X size={14} />
+                    </ClearButton>
+                  )}
                   <SearchIcon $isSearching={isSearching}>
                     <Search size={16} />
                   </SearchIcon>
@@ -310,17 +409,39 @@ export const Table = <T extends Record<string, any>>({
 
       {/* Table */}
       <TableContainer>
-        <TableHeader $columns={totalColumns} style={{ gridTemplateColumns: getGridTemplateColumns() }}>
+        <TableHeader $columns={totalColumns} $gridTemplate={getGridTemplateColumns()}>
           {columns.map(column => (
-            <div key={column.key} style={{ textAlign: column.align || 'left' }}>
-              {column.label}
-            </div>
+            <SortableHeaderCell 
+              key={column.key} 
+              $sortable={column.sortable}
+              onClick={() => column.sortable && handleSort(column.key)}
+              style={{ 
+                justifyContent: column.align === 'center' ? 'center' : 
+                               column.align === 'right' ? 'flex-end' : 'flex-start',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <span>{column.label}</span>
+              {column.sortable && (
+                <SortIcon 
+                  $active={sortConfig?.key === column.key}
+                  $direction={sortConfig?.key === column.key ? sortConfig.direction : undefined}
+                >
+                  {sortConfig?.key === column.key ? (
+                    sortConfig.direction === 'asc' ? '↑' : '↓'
+                  ) : (
+                    '↕'
+                  )}
+                </SortIcon>
+              )}
+            </SortableHeaderCell>
           ))}
-          {actions && <div>Actions</div>}
+          {actions && <TableCell style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center' }}>Actions</TableCell>}
         </TableHeader>
 
         {isSearching ? (
-          <TableRow $columns={totalColumns} style={{ gridTemplateColumns: getGridTemplateColumns() }}>
+          <TableRow $columns={totalColumns} $gridTemplate={getGridTemplateColumns()}>
             <TableCell style={{ textAlign: 'center', gridColumn: `1 / ${totalColumns + 1}` }}>
               <div style={{ padding: '2rem', color: '#6b7280' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
@@ -338,7 +459,7 @@ export const Table = <T extends Record<string, any>>({
             </TableCell>
           </TableRow>
         ) : processedData.length === 0 && filters.some(f => f.type === 'search' && filterValues[f.key] && filterValues[f.key].length > 0 && filterValues[f.key].length < searchMinLength) ? (
-          <TableRow $columns={totalColumns} style={{ gridTemplateColumns: getGridTemplateColumns() }}>
+          <TableRow $columns={totalColumns} $gridTemplate={getGridTemplateColumns()}>
             <TableCell style={{ textAlign: 'center', gridColumn: `1 / ${totalColumns + 1}` }}>
               <div style={{ padding: '2rem', color: '#6b7280' }}>
                 <div>Type at least {searchMinLength} characters to search</div>
@@ -347,14 +468,19 @@ export const Table = <T extends Record<string, any>>({
           </TableRow>
         ) : (
           processedData.map((row, index) => (
-            <TableRow key={index} $columns={totalColumns} style={{ gridTemplateColumns: getGridTemplateColumns() }}>
+            <TableRow key={index} $columns={totalColumns} $gridTemplate={getGridTemplateColumns()}>
               {columns.map(column => (
-                <TableCell key={column.key} style={{ textAlign: column.align || 'left' }}>
+                <TableCell key={column.key} style={{ 
+                  justifyContent: column.align === 'center' ? 'center' : 
+                                 column.align === 'right' ? 'flex-end' : 'flex-start',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
                   {renderCell(column, row, index)}
                 </TableCell>
               ))}
               {actions && (
-                <TableCell>
+                <TableCell style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center' }}>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     {actions(row, index)}
                   </div>

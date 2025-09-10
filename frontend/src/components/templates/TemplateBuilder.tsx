@@ -1329,6 +1329,29 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
               )}
             </GenerateFieldsContainer>
           )}
+          
+          {/* Extraction Settings */}
+          <FormGroup>
+            <Label>Confidence Threshold</Label>
+            <Input
+              type="number"
+              min="0"
+              max="1"
+              step="0.1"
+              value={templateData.extraction_settings?.confidence_threshold || 0.7}
+              onChange={(e) => updateTemplate({ 
+                extraction_settings: {
+                  ...templateData.extraction_settings,
+                  confidence_threshold: parseFloat(e.target.value) || 0.7
+                }
+              })}
+              placeholder="0.7"
+            />
+            <HelpText>
+              Minimum confidence score (0.0-1.0) for flagging low-confidence fields. 
+              Fields below this threshold will be highlighted for review. Default: 0.7 (70%)
+            </HelpText>
+          </FormGroup>
         </SectionContent>
       </Section>
 

@@ -14,6 +14,7 @@ import {
   Database,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   XCircle,
   Eye,
   EyeOff,
@@ -21,6 +22,9 @@ import {
 } from 'lucide-react';
 
 import { useSourceLocation, createSourceLocation } from './SourceLocationContext';
+import EditableField from './EditableField';
+import { detectLowConfidenceFields, ConfidenceField, getConfidenceThreshold } from '../../utils/confidenceDetection';
+import LowConfidenceFlag from './LowConfidenceFlag';
 
 // Types
 export interface HierarchicalField {
@@ -46,6 +50,17 @@ interface HierarchicalResultsViewerProps {
   showConfidenceScores?: boolean;
   showSourceLocations?: boolean;
   className?: string;
+  // Editing functionality
+  isEditing?: boolean;
+  onFieldValueChange?: (fieldPath: string, newValue: any) => void;
+  onFieldEdit?: (fieldPath: string) => void;
+  onFieldSave?: (fieldPath: string, newValue: any) => void;
+  onFieldCancel?: (fieldPath: string) => void;
+  disabled?: boolean;
+  // Low confidence field detection
+  templateSettings?: Record<string, any>;
+  showLowConfidenceFlags?: boolean;
+  onLowConfidenceFieldClick?: (field: ConfidenceField) => void;
 }
 
 // Styled Components
@@ -62,7 +77,7 @@ const FieldContainer = styled.div<{ $depth: number }>`
   padding-left: ${props => props.$depth > 0 ? '0.75rem' : '0'};
 `;
 
-const FieldRow = styled.div<{ $hasChildren: boolean }>`
+const FieldRow = styled.div<{ $hasChildren: boolean; $isLowConfidence?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -70,9 +85,11 @@ const FieldRow = styled.div<{ $hasChildren: boolean }>`
   border-radius: 0.375rem;
   cursor: ${props => props.$hasChildren ? 'pointer' : 'default'};
   transition: background-color 0.2s;
+  border-left: ${props => props.$isLowConfidence ? '3px solid #dc2626' : 'none'};
+  background-color: ${props => props.$isLowConfidence ? '#fef2f2' : 'transparent'};
   
   &:hover {
-    background-color: #f9fafb;
+    background-color: ${props => props.$isLowConfidence ? '#fee2e2' : '#f9fafb'};
   }
 `;
 
@@ -117,6 +134,9 @@ const FieldName = styled.div<{ $required?: boolean }>`
   font-weight: 600;
   color: #1f2937;
   font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   
   ${props => props.$required && `
     &::after {
@@ -124,6 +144,17 @@ const FieldName = styled.div<{ $required?: boolean }>`
       color: #ef4444;
     }
   `}
+`;
+
+const PriorityBadge = styled.div`
+  background: #dc2626;
+  color: white;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
 `;
 
 const FieldValue = styled.div<{ $type: string }>`
@@ -204,6 +235,30 @@ const EmptyState = styled.div`
   justify-content: center;
   padding: 2rem;
   color: #6b7280;
+  text-align: center;
+`;
+
+const FlaggedFieldsSummary = styled.div`
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #991b1b;
+`;
+
+const FlaggedFieldsCount = styled.div`
+  background: #dc2626;
+  color: white;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 1.5rem;
   text-align: center;
 `;
 
@@ -298,9 +353,20 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
   onFieldClick,
   showConfidenceScores = true,
   showSourceLocations = false,
-  className
+  className,
+  isEditing = false,
+  onFieldValueChange,
+  onFieldEdit,
+  onFieldSave,
+  onFieldCancel,
+  disabled = false,
+  templateSettings,
+  showLowConfidenceFlags = true,
+  onLowConfidenceFieldClick
 }) => {
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
+  const [editingFields, setEditingFields] = useState<Set<string>>(new Set());
+  const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   
   // Safely use the source location context - it's optional
   let setSourceLocation: ((location: any) => void) | null = null;
@@ -312,6 +378,23 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
     console.warn('SourceLocationContext not available - source location features disabled');
   }
 
+  // Low confidence field detection
+  const confidenceThreshold = getConfidenceThreshold(templateSettings);
+  
+  console.log('DEBUG - HierarchicalResultsViewer confidence data:', {
+    confidenceScores,
+    showLowConfidenceFlags,
+    results
+  });
+  
+  const lowConfidenceDetection = detectLowConfidenceFields(results, confidenceScores, confidenceThreshold);
+    
+  console.log('DEBUG - Low confidence detection result:', lowConfidenceDetection);
+  
+  const lowConfidenceFieldsMap = new Map(
+    lowConfidenceDetection.flaggedFields.map(field => [field.path, field])
+  );
+
   const toggleExpanded = (fieldPath: string) => {
     const newExpanded = new Set(expandedFields);
     if (newExpanded.has(fieldPath)) {
@@ -322,10 +405,56 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
     setExpandedFields(newExpanded);
   };
 
+  const handleFieldEdit = (fieldPath: string) => {
+    if (disabled) return;
+    setEditingFields(prev => new Set(prev).add(fieldPath));
+    onFieldEdit?.(fieldPath);
+  };
+
+  const handleFieldSave = (fieldPath: string, newValue: any) => {
+    if (disabled) return;
+    setFieldValues(prev => ({ ...prev, [fieldPath]: newValue }));
+    setEditingFields(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(fieldPath);
+      return newSet;
+    });
+    onFieldSave?.(fieldPath, newValue);
+  };
+
+  const handleFieldCancel = (fieldPath: string) => {
+    if (disabled) return;
+    setEditingFields(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(fieldPath);
+      return newSet;
+    });
+    setFieldValues(prev => {
+      const newValues = { ...prev };
+      delete newValues[fieldPath];
+      return newValues;
+    });
+    onFieldCancel?.(fieldPath);
+  };
+
+  const handleFieldValueChange = (fieldPath: string, newValue: any) => {
+    if (disabled) return;
+    setFieldValues(prev => ({ ...prev, [fieldPath]: newValue }));
+    onFieldValueChange?.(fieldPath, newValue);
+  };
+
+  const getFieldValue = (field: HierarchicalField, fieldPath: string) => {
+    return fieldValues[fieldPath] !== undefined ? fieldValues[fieldPath] : field.value;
+  };
+
   const renderField = (field: HierarchicalField, depth: number = 0, path: string = ''): React.ReactNode => {
     const currentPath = path ? `${path}.${field.name}` : field.name;
     const hasChildren = field.children && field.children.length > 0;
     const isExpanded = expandedFields.has(currentPath);
+    const isEditingField = editingFields.has(currentPath);
+    const currentValue = getFieldValue(field, currentPath);
+    const isLowConfidence = lowConfidenceFieldsMap.has(currentPath);
+    const lowConfidenceField = lowConfidenceFieldsMap.get(currentPath);
 
   const handleFieldClick = () => {
     if (hasChildren) {
@@ -336,29 +465,51 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
     }
   };
 
+  const handleLowConfidenceFieldClick = () => {
+    if (lowConfidenceField && onLowConfidenceFieldClick) {
+      onLowConfidenceFieldClick(lowConfidenceField);
+    }
+  };
+
   const handleSourceLocationClick = (field: HierarchicalField) => {
     if (!setSourceLocation) {
       console.warn('Source location functionality not available');
       return;
     }
     
-    // Create a mock source location for demonstration
-    // In a real implementation, this would come from the extraction data
-    const mockSourceLocation = createSourceLocation(
-      field.name,
-      field.type,
-      { x: 100, y: 100, width: 200, height: 30 }, // Mock coordinates
-      String(field.value),
-      1, // Mock page
-      field.confidence
-    );
-    
-    setSourceLocation(mockSourceLocation);
+    // Check if field has actual source location data
+    if (field.sourceLocation) {
+      // Use real source location data if available
+      setSourceLocation(field.sourceLocation);
+      console.log('Highlighting source location for field:', field.name);
+    } else {
+      // Create a mock source location for demonstration
+      // In a real implementation, this would come from the extraction data
+      const mockSourceLocation = createSourceLocation(
+        field.name,
+        field.type,
+        { x: 100, y: 100, width: 200, height: 30 }, // Mock coordinates
+        String(field.value),
+        1, // Mock page
+        field.confidence
+      );
+      
+      setSourceLocation(mockSourceLocation);
+      console.log('Using mock source location for field:', field.name);
+      
+      // Show a temporary message to the user
+      // Note: This would be replaced with a proper notification system
+      console.log(`Source location for "${field.name}" would be highlighted in the document preview. This is a demo with mock coordinates.`);
+    }
   };
 
     return (
       <FieldContainer key={currentPath} $depth={depth}>
-        <FieldRow $hasChildren={hasChildren} onClick={handleFieldClick}>
+        <FieldRow 
+          $hasChildren={!!hasChildren} 
+          $isLowConfidence={!!isLowConfidence}
+          onClick={handleFieldClick}
+        >
           {hasChildren && (
             <ExpandButton $expanded={isExpanded}>
               <ChevronRight size={16} />
@@ -371,11 +522,30 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
           
           <FieldName $required={field.isRequired}>
             {field.name}
+            {isLowConfidence && (
+              <PriorityBadge>Priority</PriorityBadge>
+            )}
           </FieldName>
           
-          <FieldValue $type={field.type}>
-            {formatValue(field.value, field.type)}
-          </FieldValue>
+          {isEditing && !hasChildren ? (
+            <EditableField
+              value={currentValue}
+              fieldType={field.type}
+              fieldName={field.name}
+              isRequired={field.isRequired}
+              isEditing={isEditingField}
+              onEdit={() => handleFieldEdit(currentPath)}
+              onSave={(newValue) => handleFieldSave(currentPath, newValue)}
+              onCancel={() => handleFieldCancel(currentPath)}
+              onValueChange={(newValue) => handleFieldValueChange(currentPath, newValue)}
+              disabled={disabled}
+              placeholder={`Enter ${field.type} value...`}
+            />
+          ) : (
+            <FieldValue $type={field.type}>
+              {formatValue(currentValue, field.type)}
+            </FieldValue>
+          )}
           
           {showConfidenceScores && field.confidence !== undefined && (
             <ConfidenceIndicator $confidence={field.confidence}>
@@ -384,6 +554,15 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
               </ConfidenceIcon>
               {Math.round(field.confidence * 100)}%
             </ConfidenceIndicator>
+          )}
+          
+          {showLowConfidenceFlags && isLowConfidence && lowConfidenceField && (
+            <LowConfidenceFlag
+              confidence={lowConfidenceField.confidence}
+              threshold={lowConfidenceField.threshold}
+              size="small"
+              onToggleVisibility={handleLowConfidenceFieldClick}
+            />
           )}
           
           {showSourceLocations && setSourceLocation && (
@@ -419,10 +598,35 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
   }
 
   const hierarchicalFields = parseToHierarchical(results, confidenceScores);
+  
+  // Sort fields to prioritize low-confidence fields
+  const sortedFields = hierarchicalFields.sort((a, b) => {
+    const aIsLowConfidence = lowConfidenceFieldsMap.has(a.name);
+    const bIsLowConfidence = lowConfidenceFieldsMap.has(b.name);
+    
+    // Low confidence fields first
+    if (aIsLowConfidence && !bIsLowConfidence) return -1;
+    if (!aIsLowConfidence && bIsLowConfidence) return 1;
+    
+    // Within same priority group, maintain original order
+    return 0;
+  });
 
   return (
     <Container className={className}>
-      {hierarchicalFields.map((field, index) => 
+      {lowConfidenceDetection.flaggedCount > 0 && (
+        <FlaggedFieldsSummary>
+          <AlertTriangle size={16} />
+          <span>
+            {lowConfidenceDetection.flaggedCount} field{lowConfidenceDetection.flaggedCount === 1 ? '' : 's'} flagged for review
+          </span>
+          <FlaggedFieldsCount>
+            {lowConfidenceDetection.flaggedCount}
+          </FlaggedFieldsCount>
+        </FlaggedFieldsSummary>
+      )}
+      
+      {sortedFields.map((field, index) => 
         renderField(field, 0, '')
       )}
     </Container>
