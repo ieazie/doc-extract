@@ -114,10 +114,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     };
 
+    // Listen for auth logout events from API client
+    const handleAuthLogout = () => {
+      console.log('Auth logout event received, clearing auth data');
+      clearAuthData();
+    };
+
+    window.addEventListener('auth:logout', handleAuthLogout);
+
     initializeAuth();
+
+    // Cleanup event listener
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
   }, []);
 
   const clearAuthData = () => {
+    console.log('Clearing auth data');
     setUser(null);
     setTenant(null);
     setTokens(null);
@@ -125,6 +139,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('auth_tokens');
     localStorage.removeItem('auth_user');
     localStorage.removeItem('auth_tenant');
+  };
+
+  const logout = () => {
+    clearAuthData();
+    // Don't redirect - the _app.tsx will show the login form when user is not authenticated
   };
 
   const login = async (credentials: LoginCredentials) => {
@@ -135,6 +154,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Set the auth token in the API client immediately
       apiClient.setAuthToken(response.access_token);
+      console.log('Token set in API client:', response.access_token.substring(0, 20) + '...');
       
       // Store tokens and user data
       setTokens({
@@ -177,10 +197,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const logout = () => {
-    clearAuthData();
   };
 
   const refreshToken = async () => {
@@ -250,11 +266,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return user?.role === role;
   };
 
+  const isAuthenticated = !!user && !!tokens;
+  
+  // Debug authentication state changes
+  React.useEffect(() => {
+    console.log('Auth state changed:', { 
+      hasUser: !!user, 
+      hasTokens: !!tokens, 
+      isAuthenticated,
+      userEmail: user?.email 
+    });
+  }, [user, tokens, isAuthenticated]);
+
   const value: AuthContextType = {
     user,
     tenant,
     tokens,
-    isAuthenticated: !!user && !!tokens,
+    isAuthenticated,
     isLoading,
     login,
     logout,

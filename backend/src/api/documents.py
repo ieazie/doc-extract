@@ -628,7 +628,7 @@ async def get_processing_stats(
     Get document processing statistics for the tenant
     """
     try:
-        stats = await background_task_service.get_processing_stats(tenant_id)
+        stats = await background_task_service.get_processing_stats(current_user.tenant_id)
         
         return DocumentStatsResponse(
             total_documents=stats["total_documents"],

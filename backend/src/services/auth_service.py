@@ -152,6 +152,7 @@ class AuthService:
                 "documents:read", "documents:write", "documents:delete",
                 "templates:read", "templates:write", "templates:delete",
                 "extractions:read", "extractions:write", "extractions:delete",
+                "categories:read", "categories:write", "categories:delete",
                 "users:read", "users:write", "users:delete",
                 "tenants:read", "tenants:write", "tenants:delete",
                 "api-keys:read", "api-keys:write", "api-keys:delete",
@@ -161,12 +162,14 @@ class AuthService:
                 "documents:read", "documents:write", "documents:delete",
                 "templates:read", "templates:write", "templates:delete",
                 "extractions:read", "extractions:write", "extractions:delete",
+                "categories:read", "categories:write", "categories:delete",
                 "analytics:read"
             ],
             UserRole.VIEWER: [
                 "documents:read",
                 "templates:read",
                 "extractions:read",
+                "categories:read",
                 "analytics:read"
             ]
         }

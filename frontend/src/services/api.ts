@@ -250,7 +250,7 @@ class ApiClient {
           // Clear auth data and redirect to login
           console.warn('Authentication failed, clearing auth data and redirecting to login');
           
-          // Clear localStorage
+          // Clear localStorage completely
           localStorage.removeItem('auth_tokens');
           localStorage.removeItem('auth_user');
           localStorage.removeItem('auth_tenant');
@@ -258,13 +258,13 @@ class ApiClient {
           // Clear API client token
           this.authToken = null;
           
-          // Only redirect to login if we're not already on the login page
-          // and if we're not in the middle of a login process
-          if (typeof window !== 'undefined' && 
-              window.location.pathname !== '/login' && 
-              !error.config?.url?.includes('/auth/login')) {
-            window.location.href = '/login';
+          // Dispatch a custom event to notify AuthContext to clear its state
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth:logout'));
           }
+          
+          // Don't redirect - let the _app.tsx handle showing the login form
+          // when the user is not authenticated
           
           throw new Error('Authentication required');
         }

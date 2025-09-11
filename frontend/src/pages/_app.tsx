@@ -1,4 +1,5 @@
 import type { AppProps } from 'next/app';
+import type { NextComponentType } from 'next';
 import { ThemeProvider } from 'styled-components';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { useState } from 'react';
@@ -27,14 +28,14 @@ function MyApp({ Component, pageProps, router }: AppProps) {
       <ThemeProvider theme={theme}>
         <GlobalStyle />
         <AuthProvider>
-          <AppContent Component={Component} pageProps={pageProps} router={router} />
+          <AppContent Component={Component} pageProps={pageProps} />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
 }
 
-function AppContent({ Component, pageProps, router }: AppProps) {
+function AppContent({ Component, pageProps }: { Component: NextComponentType<any, any, any>; pageProps: any }) {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {

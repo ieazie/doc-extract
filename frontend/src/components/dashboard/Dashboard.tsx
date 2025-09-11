@@ -194,11 +194,26 @@ export const Dashboard: React.FC = () => {
     setLoading(true);
     
     try {
+      // Small delay to ensure authentication is fully set up
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const [statsData, categoriesData, documentsData, healthData] = await Promise.all([
-        apiClient.getProcessingStats().catch(() => null),
-        apiClient.getCategories().catch(() => ({ categories: [], total: 0 })),
-        apiClient.getDocuments({ page: 1, per_page: 5, sort_by: 'created_at', sort_order: 'desc' }).catch(() => null),
-        apiClient.getDetailedHealth().catch(() => null)
+        apiClient.getProcessingStats().catch((error) => {
+          console.error('Failed to load processing stats:', error);
+          return null;
+        }),
+        apiClient.getCategories().catch((error) => {
+          console.error('Failed to load categories:', error);
+          return { categories: [], total: 0 };
+        }),
+        apiClient.getDocuments({ page: 1, per_page: 5, sort_by: 'created_at', sort_order: 'desc' }).catch((error) => {
+          console.error('Failed to load documents:', error);
+          return null;
+        }),
+        apiClient.getDetailedHealth().catch((error) => {
+          console.error('Failed to load health data:', error);
+          return null;
+        })
       ]);
 
       setStats(statsData);
