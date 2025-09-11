@@ -312,6 +312,72 @@ class ApiClient {
     return response.data;
   }
 
+  // User Management Endpoints
+  async getUsers(): Promise<User[]> {
+    const response = await this.client.get('/api/auth/users');
+    return response.data;
+  }
+
+  async updateUser(userId: string, userData: {
+    first_name?: string;
+    last_name?: string;
+    role?: string;
+    status?: string;
+  }): Promise<User> {
+    const response = await this.client.put(`/api/auth/users/${userId}`, userData);
+    return response.data;
+  }
+
+  async createUser(userData: {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+    role?: string;
+  }): Promise<User> {
+    const response = await this.client.post('/api/auth/register', userData);
+    return response.data;
+  }
+
+  // Tenant Management Endpoints
+  async getTenants(): Promise<Tenant[]> {
+    const response = await this.client.get('/api/auth/tenants/all');
+    return response.data;
+  }
+
+  async getTenant(tenantId: string): Promise<Tenant> {
+    const response = await this.client.get(`/api/auth/tenants/${tenantId}`);
+    return response.data;
+  }
+
+  async createTenant(tenantData: {
+    name: string;
+    settings?: Record<string, any>;
+    environment?: string;
+  }): Promise<Tenant> {
+    const response = await this.client.post('/api/auth/tenants', tenantData);
+    return response.data;
+  }
+
+  async updateTenant(tenantId: string, tenantData: {
+    name?: string;
+    settings?: Record<string, any>;
+    status?: string;
+    environment?: string;
+  }): Promise<Tenant> {
+    const response = await this.client.put(`/api/auth/tenants/${tenantId}`, tenantData);
+    return response.data;
+  }
+
+  async deleteTenant(tenantId: string): Promise<void> {
+    await this.client.delete(`/api/auth/tenants/${tenantId}`);
+  }
+
+  async getUserTenants(): Promise<Tenant[]> {
+    const response = await this.client.get('/api/auth/tenants');
+    return response.data;
+  }
+
   // Health Endpoints
   async getHealth(): Promise<HealthStatus> {
     const response = await this.client.get('/health/');

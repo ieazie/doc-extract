@@ -91,55 +91,11 @@ const LogoText = styled.span<{ $isCollapsed: boolean }>`
   overflow: hidden;
 `;
 
-const TenantInfo = styled.div<{ $isCollapsed: boolean }>`
-  display: flex;
-  flex-direction: column;
-  gap: ${props => props.theme.spacing.xs};
-  opacity: ${props => props.$isCollapsed ? 0 : 1};
-  transition: opacity ${props => props.theme.animation.duration.normal} ${props => props.theme.animation.easing.easeInOut};
-  white-space: nowrap;
-  overflow: hidden;
-  max-width: 100%;
-  
-  ${props => props.$isCollapsed && `
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    pointer-events: none;
-  `}
-`;
-
-const TenantName = styled.div`
-  font-size: ${props => props.theme.typography.sizes.sm};
-  font-weight: ${props => props.theme.typography.weights.medium};
-  color: ${props => props.theme.colors.text.primary};
-`;
-
-const EnvironmentBadge = styled.div<{ $environment: string }>`
-  background: ${props => {
-    switch (props.$environment) {
-      case 'production': return props.theme.colors.success;
-      case 'staging': return props.theme.colors.warning;
-      default: return props.theme.colors.primary;
-    }
-  }};
-  color: ${props => props.theme.colors.text.inverse};
-  padding: ${props => props.theme.spacing.xs} ${props => props.theme.spacing.sm};
-  border-radius: ${props => props.theme.borderRadius.sm};
-  font-size: ${props => props.theme.typography.sizes.xs};
-  font-weight: ${props => props.theme.typography.weights.medium};
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  display: inline-block;
-  width: fit-content;
-`;
 
 
 const Navigation = styled.nav`
   flex: 1;
-  padding: ${props => props.theme.spacing.md} 0;
+  padding: ${props => props.theme.spacing.xl} 0 ${props => props.theme.spacing.md} 0;
   overflow-y: auto;
   
   &::-webkit-scrollbar {
@@ -333,6 +289,7 @@ const MobileLogo = styled.div`
 
 interface SidebarProps {
   children: React.ReactNode;
+  showHeader?: boolean;
 }
 
 interface NavigationItem {
@@ -367,10 +324,10 @@ const useIsMobile = () => {
   return isMobile;
 };
 
-export const Sidebar: React.FC<SidebarProps> = ({ children }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ children, showHeader = false }) => {
   const router = useRouter();
-  const { isCollapsed, toggleSidebar, setCollapsed } = useSidebar();
-  const { user, tenant, isLoading, hasPermission, logout } = useAuth();
+  const { isCollapsed, toggleSidebar } = useSidebar();
+  const { user, hasPermission } = useAuth();
   const isMobile = useIsMobile();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -454,13 +411,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         $isMobile={isMobile}
         data-sidebar
       >
-        <SidebarHeader $isCollapsed={isCollapsed}>
-          {!isLoading && tenant && (
-            <TenantInfo $isCollapsed={isCollapsed}>
-              <TenantName>{tenant.name}</TenantName>
-            </TenantInfo>
-          )}
-        </SidebarHeader>
+        {showHeader && (
+          <SidebarHeader $isCollapsed={isCollapsed}>
+            {/* Header content can be added here when needed */}
+          </SidebarHeader>
+        )}
 
         <Navigation>
           <NavSection>

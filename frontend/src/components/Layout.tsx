@@ -35,7 +35,7 @@ export const Layout = ({ children }: LayoutProps) => {
       <LoadingWrapper isLoading={!isInitialized} loadingText="Initializing application...">
         <LayoutContainer>
           <PageHeader />
-          <Sidebar>
+          <Sidebar showHeader={false}>
             {children}
           </Sidebar>
         </LayoutContainer>
@@ -43,4 +43,6 @@ export const Layout = ({ children }: LayoutProps) => {
     </SidebarProvider>
   );
 };
+
+export default Layout;
 

@@ -433,3 +433,147 @@ async def update_user(
         created_at=user.created_at,
         updated_at=user.updated_at
     )
+
+
+# ============================================================================
+# TENANT MANAGEMENT ENDPOINTS (Admin only)
+# ============================================================================
+
+@router.post("/tenants", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
+async def create_tenant(
+    tenant_data: TenantCreate,
+    current_user: User = Depends(require_permission("tenants:write")),
+    db: Session = Depends(get_db)
+):
+    """Create a new tenant (admin only)"""
+    try:
+        tenant = auth_service.create_tenant(db, tenant_data)
+        
+        return TenantResponse(
+            id=tenant.id,
+            name=tenant.name,
+            settings=tenant.settings,
+            status=tenant.status,
+            environment=tenant.environment,
+            created_at=tenant.created_at,
+            updated_at=tenant.updated_at
+        )
+        
+    except Exception as e:
+        logger.error(f"Tenant creation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create tenant"
+        )
+
+
+@router.get("/tenants/all", response_model=List[TenantResponse])
+async def list_all_tenants(
+    current_user: User = Depends(require_permission("tenants:read")),
+    db: Session = Depends(get_db)
+):
+    """List all tenants (admin only)"""
+    tenants = db.query(Tenant).all()
+    
+    return [
+        TenantResponse(
+            id=tenant.id,
+            name=tenant.name,
+            settings=tenant.settings,
+            status=tenant.status,
+            environment=tenant.environment,
+            created_at=tenant.created_at,
+            updated_at=tenant.updated_at
+        )
+        for tenant in tenants
+    ]
+
+
+@router.get("/tenants/{tenant_id}", response_model=TenantResponse)
+async def get_tenant(
+    tenant_id: UUID,
+    current_user: User = Depends(require_permission("tenants:read")),
+    db: Session = Depends(get_db)
+):
+    """Get tenant by ID (admin only)"""
+    tenant = auth_service.get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found"
+        )
+    
+    return TenantResponse(
+        id=tenant.id,
+        name=tenant.name,
+        settings=tenant.settings,
+        status=tenant.status,
+        environment=tenant.environment,
+        created_at=tenant.created_at,
+        updated_at=tenant.updated_at
+    )
+
+
+@router.put("/tenants/{tenant_id}", response_model=TenantResponse)
+async def update_tenant(
+    tenant_id: UUID,
+    tenant_data: TenantUpdate,
+    current_user: User = Depends(require_permission("tenants:write")),
+    db: Session = Depends(get_db)
+):
+    """Update a tenant (admin only)"""
+    tenant = auth_service.get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found"
+        )
+    
+    # Update fields
+    if tenant_data.name is not None:
+        tenant.name = tenant_data.name
+    if tenant_data.settings is not None:
+        tenant.settings = tenant_data.settings
+    if tenant_data.status is not None:
+        tenant.status = tenant_data.status
+    if tenant_data.environment is not None:
+        tenant.environment = tenant_data.environment
+    
+    db.commit()
+    db.refresh(tenant)
+    
+    return TenantResponse(
+        id=tenant.id,
+        name=tenant.name,
+        settings=tenant.settings,
+        status=tenant.status,
+        environment=tenant.environment,
+        created_at=tenant.created_at,
+        updated_at=tenant.updated_at
+    )
+
+
+@router.delete("/tenants/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tenant(
+    tenant_id: UUID,
+    current_user: User = Depends(require_permission("tenants:delete")),
+    db: Session = Depends(get_db)
+):
+    """Delete a tenant (admin only)"""
+    tenant = auth_service.get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found"
+        )
+    
+    # Check if tenant has users
+    user_count = db.query(User).filter(User.tenant_id == tenant_id).count()
+    if user_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete tenant with existing users"
+        )
+    
+    db.delete(tenant)
+    db.commit()
