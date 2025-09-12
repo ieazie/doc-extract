@@ -36,7 +36,9 @@ interface DropZoneProps {
   hasError: boolean;
 }
 
-const DropZone = styled.div<DropZoneProps>`
+const DropZone = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['isDragActive', 'hasError'].includes(prop),
+})<DropZoneProps>`
   border: 2px dashed ${props => 
     props.hasError ? props.theme.colors.error :
     props.isDragActive ? props.theme.colors.primary : 
@@ -128,7 +130,9 @@ const Input = styled.input`
   }
 `;
 
-const UploadButton = styled.button<{ disabled?: boolean }>`
+const UploadButton = styled.button.withConfig({
+  shouldForwardProp: (prop) => prop !== 'disabled',
+})<{ disabled?: boolean }>`
   background: ${props => props.disabled ? props.theme.colors.neutral : props.theme.colors.primary};
   color: white;
   border: none;
@@ -157,7 +161,9 @@ const ProgressBar = styled.div`
   margin-bottom: 1rem;
 `;
 
-const ProgressFill = styled.div<{ progress: number }>`
+const ProgressFill = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'progress',
+})<{ progress: number }>`
   height: 100%;
   background: ${props => props.theme.colors.primary};
   width: ${props => props.progress}%;
@@ -170,7 +176,9 @@ const ProgressText = styled.p`
   text-align: center;
 `;
 
-const Message = styled.div<{ type: 'success' | 'error' }>`
+const Message = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'type',
+})<{ type: 'success' | 'error' }>`
   padding: 1rem;
   border-radius: 6px;
   margin-top: 1rem;

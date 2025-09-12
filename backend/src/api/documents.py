@@ -82,12 +82,9 @@ def get_db():
         db.close()
 
 
-# Temporary tenant resolution (will be enhanced in Phase 7)
-async def get_current_tenant_id() -> UUID:
-    """Get current tenant ID - placeholder for multi-tenancy"""
-    # For now, return the default tenant ID
-    # In Phase 7, this will be replaced with proper user authentication
-    return UUID("00000000-0000-0000-0000-000000000001")
+# Import authentication dependencies
+from .auth import get_current_user, get_current_tenant, require_permission
+from ..models.database import User, Tenant
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)
@@ -99,7 +96,7 @@ async def upload_document(
     tags: Optional[str] = Form(None),  # Comma-separated tags
     is_test_document: Optional[bool] = Form(False),
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:write"))
 ):
     """
     Upload a new document with optional categorization and tagging
@@ -121,7 +118,7 @@ async def upload_document(
         if doc_type_uuid:
             doc_type = db.query(DocumentType).filter(
                 DocumentType.id == doc_type_uuid,
-                DocumentType.tenant_id == tenant_id
+                DocumentType.tenant_id == current_user.tenant_id
             ).first()
             if not doc_type:
                 raise HTTPException(status_code=400, detail="Invalid document type")
@@ -130,20 +127,20 @@ async def upload_document(
         if category_uuid:
             category = db.query(DocumentCategory).filter(
                 DocumentCategory.id == category_uuid,
-                DocumentCategory.tenant_id == tenant_id
+                DocumentCategory.tenant_id == current_user.tenant_id
             ).first()
             if not category:
                 raise HTTPException(status_code=400, detail="Invalid category")
         
         # Process the upload (includes S3 upload and basic metadata)
         upload_result = await document_processor.process_upload(
-            file, tenant_id, doc_type_uuid, category_uuid, tag_list
+            file, current_user.tenant_id, doc_type_uuid, category_uuid, tag_list
         )
         
         # Create document record in database
         document = Document(
             id=upload_result["document_id"],
-            tenant_id=tenant_id,
+            tenant_id=current_user.tenant_id,
             s3_key=upload_result["s3_key"],
             original_filename=upload_result["original_filename"],
             file_size=upload_result["file_size"],
@@ -171,7 +168,7 @@ async def upload_document(
             document.id,
             document.s3_key,
             document.mime_type,
-            tenant_id
+            current_user.tenant_id
         )
         
         logger.info(f"Document {document.id} uploaded successfully, extraction queued")
@@ -204,7 +201,7 @@ async def list_documents(
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", description="Sort order (asc/desc)"),
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     List documents with filtering, search, and pagination
@@ -226,7 +223,7 @@ async def list_documents(
             joinedload(Document.document_type),
             joinedload(Document.category),
             joinedload(Document.tags)
-        ).filter(Document.tenant_id == tenant_id)
+        ).filter(Document.tenant_id == current_user.tenant_id)
         
         # Apply filters
         if search:
@@ -319,7 +316,7 @@ async def list_documents(
 async def get_document(
     document_id: UUID,
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Get a specific document by ID
@@ -333,7 +330,7 @@ async def get_document(
             joinedload(Document.tags)
         ).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -376,7 +373,7 @@ async def get_document(
 async def download_document(
     document_id: UUID,
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Get a presigned URL for downloading the document
@@ -386,7 +383,7 @@ async def download_document(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -413,7 +410,7 @@ async def download_document(
 async def get_document_thumbnail(
     document_id: UUID,
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Get a presigned URL for the document thumbnail
@@ -423,7 +420,7 @@ async def get_document_thumbnail(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -452,7 +449,7 @@ async def update_document_category(
     document_id: UUID,
     category_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Update document category
@@ -463,7 +460,7 @@ async def update_document_category(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -473,7 +470,7 @@ async def update_document_category(
             # Validate category exists
             category = db.query(DocumentCategory).filter(
                 DocumentCategory.id == UUID(category_id),
-                DocumentCategory.tenant_id == tenant_id
+                DocumentCategory.tenant_id == current_user.tenant_id
             ).first()
             
             if not category:
@@ -500,7 +497,7 @@ async def update_document_tags(
     document_id: UUID,
     tags: str = Form(...),  # Comma-separated tags
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Update document tags (replaces all existing tags)
@@ -511,7 +508,7 @@ async def update_document_tags(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -543,7 +540,7 @@ async def reprocess_document(
     document_id: UUID,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Reprocess document text extraction (useful for failed extractions)
@@ -553,7 +550,7 @@ async def reprocess_document(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -581,7 +578,7 @@ async def reprocess_document(
 async def delete_document(
     document_id: UUID,
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Delete a document and all associated data
@@ -591,7 +588,7 @@ async def delete_document(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -625,13 +622,13 @@ async def delete_document(
 
 @router.get("/stats/processing", response_model=DocumentStatsResponse)
 async def get_processing_stats(
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Get document processing statistics for the tenant
     """
     try:
-        stats = await background_task_service.get_processing_stats(tenant_id)
+        stats = await background_task_service.get_processing_stats(current_user.tenant_id)
         
         return DocumentStatsResponse(
             total_documents=stats["total_documents"],
@@ -649,7 +646,7 @@ async def get_processing_stats(
 async def get_document_content(
     document_id: UUID,
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Get extracted text content of a document
@@ -659,7 +656,7 @@ async def get_document_content(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -694,7 +691,7 @@ async def get_document_content(
 async def get_document_preview(
     document_id: UUID,
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Get document preview (thumbnail/preview image) for display in results viewer
@@ -704,7 +701,7 @@ async def get_document_preview(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -746,7 +743,7 @@ async def get_document_preview(
 async def get_document_preview_image(
     document_id: UUID,
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Proxy endpoint to serve document preview images directly
@@ -758,7 +755,7 @@ async def get_document_preview_image(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -791,7 +788,7 @@ async def get_document_preview_image(
 async def regenerate_document_preview(
     document_id: UUID,
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("documents:read"))
 ):
     """
     Regenerate document preview with improved quality
@@ -801,7 +798,7 @@ async def regenerate_document_preview(
     try:
         document = db.query(Document).filter(
             Document.id == document_id,
-            Document.tenant_id == tenant_id
+            Document.tenant_id == current_user.tenant_id
         ).first()
         
         if not document:
@@ -818,7 +815,7 @@ async def regenerate_document_preview(
         processor = DocumentProcessor()
         
         # Generate new preview
-        preview_result = await processor._generate_pdf_thumbnail(document_content, document_id)
+        preview_result = await processor._generate_pdf_thumbnail(document_content, document_id, document.tenant_id)
         
         # Update document with new preview
         document.thumbnail_s3_key = preview_result["s3_key"]

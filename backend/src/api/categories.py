@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from ..models.database import DocumentCategory, Document, SessionLocal
 from ..config import settings
+from .auth import User, require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ async def get_current_tenant_id() -> UUID:
 @router.get("/", response_model=CategoryListResponse)
 async def list_categories(
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("categories:read"))
 ):
     """
     List all categories for the tenant with document counts
@@ -82,7 +83,7 @@ async def list_categories(
             DocumentCategory,
             func.count(Document.id).label('document_count')
         ).outerjoin(Document).filter(
-            DocumentCategory.tenant_id == tenant_id
+            DocumentCategory.tenant_id == current_user.tenant_id
         ).group_by(DocumentCategory.id).order_by(DocumentCategory.name).all()
         
         categories = []
@@ -418,7 +419,7 @@ async def get_category_documents(
 @router.get("/stats/usage")
 async def get_category_usage_stats(
     db: Session = Depends(get_db),
-    tenant_id: UUID = Depends(get_current_tenant_id)
+    current_user: User = Depends(require_permission("categories:read"))
 ):
     """
     Get category usage statistics
@@ -431,7 +432,7 @@ async def get_category_usage_stats(
             func.count(Document.id).label('document_count'),
             func.sum(Document.file_size).label('total_size')
         ).outerjoin(Document).filter(
-            DocumentCategory.tenant_id == tenant_id
+            DocumentCategory.tenant_id == current_user.tenant_id
         ).group_by(
             DocumentCategory.id, DocumentCategory.name, DocumentCategory.color
         ).order_by(
@@ -440,12 +441,12 @@ async def get_category_usage_stats(
         
         # Get uncategorized documents count
         uncategorized_count = db.query(func.count(Document.id)).filter(
-            Document.tenant_id == tenant_id,
+            Document.tenant_id == current_user.tenant_id,
             Document.category_id.is_(None)
         ).scalar()
         
         uncategorized_size = db.query(func.sum(Document.file_size)).filter(
-            Document.tenant_id == tenant_id,
+            Document.tenant_id == current_user.tenant_id,
             Document.category_id.is_(None)
         ).scalar() or 0
         

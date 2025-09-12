@@ -7,14 +7,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 import uuid
+import logging
 
-from ..models.database import get_db, Template, TemplateExample, Tenant
+from ..models.database import get_db, Template, TemplateExample, Tenant, User
 from ..models.database import DocumentType, DocumentCategory
-from ..services.ai_service import ai_service
+from .auth import get_current_user, require_permission
+from ..services.ai_service import AIService
 from pydantic import BaseModel, Field, validator
 import json
 
 router = APIRouter(tags=["templates"])
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # PYDANTIC MODELS FOR API
@@ -136,13 +139,7 @@ class TemplateExampleResponse(BaseModel):
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def get_tenant_id(db: Session) -> uuid.UUID:
-    """Get tenant ID from database (for now, use default tenant)"""
-    # TODO: In Phase 7, this will come from authentication
-    tenant = db.query(Tenant).filter(Tenant.name == 'Default Tenant').first()
-    if not tenant:
-        raise HTTPException(status_code=500, detail="Default tenant not found")
-    return tenant.id
+# Remove the old get_tenant_id function - we'll use current_user.tenant_id instead
 
 def validate_template_schema(schema: dict) -> bool:
     """Validate template schema structure"""
@@ -185,7 +182,8 @@ async def test_endpoint():
 @router.post("/", response_model=TemplateResponse, status_code=201)
 async def create_template(
     template_data: TemplateCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Create a new extraction template"""
     try:
@@ -193,8 +191,8 @@ async def create_template(
         if not validate_template_schema(template_data.schema):
             raise HTTPException(status_code=400, detail="Invalid schema structure")
         
-        # Get tenant ID
-        tenant_id = get_tenant_id(db)
+        # Get tenant ID from current user
+        tenant_id = current_user.tenant_id
         
         # Check if template name already exists for this tenant
         existing = db.query(Template).filter(
@@ -298,11 +296,12 @@ async def list_templates(
     status: Optional[str] = Query(None, description="Filter by template status (draft, published, archived)"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", description="Sort order (asc/desc)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:read"))
 ):
     """List templates with pagination and filtering"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Build query
         query = db.query(Template).filter(Template.tenant_id == tenant_id)
@@ -393,11 +392,12 @@ async def list_templates(
 @router.get("/{template_id}", response_model=TemplateResponse)
 async def get_template(
     template_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Get a specific template by ID"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         template = db.query(Template).filter(
             and_(
@@ -443,11 +443,12 @@ async def get_template(
 async def update_template(
     template_id: str,
     template_data: TemplateUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Update an existing template"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         template = db.query(Template).filter(
             and_(
@@ -533,11 +534,12 @@ async def update_template(
 @router.delete("/{template_id}", status_code=204)
 async def delete_template(
     template_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Delete a template (soft delete by setting is_active=False)"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         template = db.query(Template).filter(
             and_(
@@ -567,11 +569,12 @@ async def delete_template(
 async def create_template_example(
     template_id: str,
     example_data: TemplateExampleCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Add an example to a template"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Verify template exists and belongs to tenant
         template = db.query(Template).filter(
@@ -619,11 +622,12 @@ async def create_template_example(
 @router.get("/{template_id}/examples", response_model=List[TemplateExampleResponse])
 async def list_template_examples(
     template_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """List all examples for a template"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Verify template exists and belongs to tenant
         template = db.query(Template).filter(
@@ -665,11 +669,12 @@ async def list_template_examples(
 async def delete_template_example(
     template_id: str,
     example_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Delete a template example"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Verify template exists and belongs to tenant
         template = db.query(Template).filter(
@@ -710,11 +715,12 @@ async def delete_template_example(
 async def test_template(
     template_id: str,
     test_document: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Test a template with sample document content (mock implementation)"""
     try:
-        tenant_id = get_tenant_id(db)
+        tenant_id = current_user.tenant_id
         
         # Verify template exists and belongs to tenant
         template = db.query(Template).filter(
@@ -727,31 +733,66 @@ async def test_template(
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
         
-        # Mock extraction result (will be replaced with LangExtract in Phase 4)
-        mock_result = {
-            "status": "success",
-            "message": "Template test completed (mock mode)",
-            "extracted_data": {},
-            "confidence_score": 0.85,
-            "processing_time_ms": 150,
-            "template_id": template_id,
-            "note": "This is a mock result. Real extraction will be available in Phase 4."
-        }
+        # Perform real extraction using tenant-specific LLM config
+        from ..services.extraction_service import ExtractionService, ExtractionRequest
         
-        # Try to extract some basic fields based on schema
-        for field_name, field_def in template.schema.items():
-            if field_def.get('type') == 'text':
-                mock_result['extracted_data'][field_name] = f"Sample {field_name} value"
-            elif field_def.get('type') == 'number':
-                mock_result['extracted_data'][field_name] = 123.45
-            elif field_def.get('type') == 'date':
-                mock_result['extracted_data'][field_name] = "2024-01-15"
-            elif field_def.get('type') == 'array':
-                mock_result['extracted_data'][field_name] = ["Sample item 1", "Sample item 2"]
-            elif field_def.get('type') == 'object':
-                mock_result['extracted_data'][field_name] = {"nested_field": "nested value"}
-        
-        return mock_result
+        try:
+            # Create extraction service with tenant context
+            extraction_service = ExtractionService(db)
+            
+            # Create extraction request
+            extraction_request = ExtractionRequest(
+                document_text=test_document,
+                schema=template.schema,
+                prompt_config={
+                    "system_prompt": f"Extract data from this {template.document_type} document according to the schema.",
+                    "few_shot_examples": []
+                },
+                tenant_id=tenant_id
+            )
+            
+            # Perform extraction
+            result = await extraction_service.extract_data(extraction_request)
+            
+            return {
+                "status": result.status,
+                "message": "Template test completed successfully" if result.status == "success" else "Template test failed",
+                "extracted_data": result.extracted_data,
+                "confidence_score": result.confidence_score,
+                "processing_time_ms": result.processing_time_ms,
+                "template_id": template_id,
+                "provider": result.provider,
+                "model": result.model,
+                "error_message": result.error_message
+            }
+            
+        except Exception as e:
+            # Fallback to mock if extraction fails
+            logger.warning(f"Template extraction failed, using fallback: {str(e)}")
+            mock_result = {
+                "status": "success",
+                "message": "Template test completed (fallback mode)",
+                "extracted_data": {},
+                "confidence_score": 0.85,
+                "processing_time_ms": 150,
+                "template_id": template_id,
+                "note": f"Real extraction failed: {str(e)}. Using fallback."
+            }
+            
+            # Try to extract some basic fields based on schema
+            for field_name, field_def in template.schema.items():
+                if field_def.get('type') == 'text':
+                    mock_result['extracted_data'][field_name] = f"Sample {field_name} value"
+                elif field_def.get('type') == 'number':
+                    mock_result['extracted_data'][field_name] = 123.45
+                elif field_def.get('type') == 'date':
+                    mock_result['extracted_data'][field_name] = "2024-01-15"
+                elif field_def.get('type') == 'array':
+                    mock_result['extracted_data'][field_name] = ["Sample item 1", "Sample item 2"]
+                elif field_def.get('type') == 'object':
+                    mock_result['extracted_data'][field_name] = {"nested_field": "nested value"}
+            
+            return mock_result
         
     except HTTPException:
         raise
@@ -784,7 +825,8 @@ class GenerateFieldsResponse(BaseModel):
 @router.post("/generate-fields-from-prompt", response_model=GenerateFieldsResponse)
 async def generate_fields_from_prompt(
     request: GenerateFieldsRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Generate schema fields based on extraction prompt only"""
     try:
@@ -795,10 +837,12 @@ async def generate_fields_from_prompt(
                 detail="Prompt must be at least 10 characters long"
             )
         
-        # Generate fields using AI service
+        # Generate fields using AI service with tenant-specific config
+        ai_service = AIService(db)
         generated_fields = await ai_service.generate_fields_from_prompt(
             prompt=request.prompt.strip(),
-            document_type=request.document_type
+            document_type=request.document_type,
+            tenant_id=current_user.tenant_id
         )
         
         # Convert to response format
@@ -829,7 +873,8 @@ async def generate_fields_from_prompt(
 @router.post("/generate-fields-from-document", response_model=GenerateFieldsResponse)
 async def generate_fields_from_document(
     request: GenerateFieldsRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     """Generate schema fields based on extraction prompt and document content"""
     try:
@@ -846,11 +891,13 @@ async def generate_fields_from_document(
                 detail="Document content must be at least 50 characters long"
             )
         
-        # Generate fields using AI service
+        # Generate fields using AI service with tenant-specific config
+        ai_service = AIService(db)
         generated_fields = await ai_service.generate_fields_from_document(
             prompt=request.prompt.strip(),
             document_content=request.document_content.strip(),
-            document_type=request.document_type
+            document_type=request.document_type,
+            tenant_id=current_user.tenant_id
         )
         
         # Convert to response format

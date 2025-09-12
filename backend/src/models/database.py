@@ -1,13 +1,14 @@
 """
 SQLAlchemy models for the Document Extraction Platform
 """
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 import uuid
 from datetime import datetime
+import enum
 
 from ..config import get_database_url
 
@@ -17,6 +18,27 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+# Enums for database
+class UserRoleEnum(str, enum.Enum):
+    ADMIN = "admin"
+    USER = "user"
+    VIEWER = "viewer"
+
+
+class UserStatusEnum(str, enum.Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    PENDING = "pending"
+    SUSPENDED = "suspended"
+
+
+class TenantStatusEnum(str, enum.Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
+    TRIAL = "trial"
+
+
 class Tenant(Base):
     """Tenant model for multi-tenancy support"""
     __tablename__ = "tenants"
@@ -24,17 +46,70 @@ class Tenant(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     settings = Column(JSONB, default={})
+    status = Column(Enum(TenantStatusEnum), default=TenantStatusEnum.ACTIVE)
+    environment = Column(String(50), default="development")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
+    users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
     document_types = relationship("DocumentType", back_populates="tenant", cascade="all, delete-orphan")
     document_categories = relationship("DocumentCategory", back_populates="tenant", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")
     templates = relationship("Template", back_populates="tenant", cascade="all, delete-orphan")
+    configurations = relationship("TenantConfiguration", back_populates="tenant", cascade="all, delete-orphan")
+    rate_limits = relationship("TenantRateLimit", back_populates="tenant", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Tenant(id={self.id}, name='{self.name}')>"
+
+
+class User(Base):
+    """User model for authentication and authorization"""
+    __tablename__ = "users"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=False)
+    first_name = Column(String(100), nullable=False)
+    last_name = Column(String(100), nullable=False)
+    role = Column(Enum(UserRoleEnum), default=UserRoleEnum.USER)
+    status = Column(Enum(UserStatusEnum), default=UserStatusEnum.ACTIVE)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    last_login = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    tenant = relationship("Tenant", back_populates="users")
+    api_keys = relationship("APIKey", back_populates="user", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<User(id={self.id}, email='{self.email}')>"
+
+
+class APIKey(Base):
+    """API Key model for programmatic access"""
+    __tablename__ = "api_keys"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    key_hash = Column(String(255), nullable=False, unique=True)  # Hashed version of the key
+    permissions = Column(JSONB, default=[])
+    is_active = Column(Boolean, default=True)
+    last_used = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="api_keys")
+    tenant = relationship("Tenant")
+
+    def __repr__(self):
+        return f"<APIKey(id={self.id}, name='{self.name}')>"
 
 
 class DocumentType(Base):
@@ -329,6 +404,59 @@ class TemplateUsage(Base):
 
     def __repr__(self):
         return f"<TemplateUsage(id={self.id}, status='{self.extraction_status}')>"
+
+
+class TenantConfiguration(Base):
+    """Tenant Configuration Model"""
+    __tablename__ = "tenant_configurations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    config_type = Column(String(50), nullable=False)
+    config_data = Column(JSONB, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    tenant = relationship("Tenant", back_populates="configurations")
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("config_type IN ('llm', 'rate_limits')", name="valid_config_type"),
+        UniqueConstraint("tenant_id", "config_type", name="unique_active_config", deferrable=True),
+    )
+
+    def __repr__(self):
+        return f"<TenantConfiguration(id={self.id}, tenant_id={self.tenant_id}, config_type='{self.config_type}')>"
+
+
+class TenantRateLimit(Base):
+    """Tenant Rate Limit Model"""
+    __tablename__ = "tenant_rate_limits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    limit_type = Column(String(50), nullable=False)
+    current_count = Column(Integer, default=0)
+    window_start = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    tenant = relationship("Tenant", back_populates="rate_limits")
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "limit_type IN ('api_requests_per_minute', 'api_requests_per_hour', 'document_uploads_per_hour', 'extractions_per_hour', 'max_concurrent_extractions')",
+            name="valid_limit_type"
+        ),
+        UniqueConstraint("tenant_id", "limit_type", name="unique_tenant_limit_type"),
+    )
+
+    def __repr__(self):
+        return f"<TenantRateLimit(id={self.id}, tenant_id={self.tenant_id}, limit_type='{self.limit_type}')>"
 
 
 # ============================================================================

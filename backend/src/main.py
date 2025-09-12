@@ -10,10 +10,12 @@ import logging
 from .config import settings, get_cors_origins
 from .models.database import create_tables
 from .api import health
+from .api import auth
 from .api import documents
 from .api import categories
 from .api import templates
 from .api import extractions
+from .api import tenant_configurations
 
 # Configure logging
 logging.basicConfig(
@@ -94,10 +96,12 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health.router, prefix="/health")
+app.include_router(auth.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
 app.include_router(templates.router, prefix="/api/templates")
 app.include_router(extractions.router, prefix="/api/extractions")
+app.include_router(tenant_configurations.router, prefix="/api/tenant")
 
 @app.get("/")
 async def root():

@@ -191,7 +191,7 @@ const Tooltip = styled.div`
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s;
-  z-index: 1000;
+  z-index: ${props => props.theme.zIndex.tooltip};
   
   ${Button}:hover & {
     opacity: 1;
@@ -224,7 +224,7 @@ const Modal = styled.div<{ $isOpen: boolean }>`
   display: ${props => props.$isOpen ? 'flex' : 'none'};
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: ${props => props.theme.zIndex.tooltip};
 `;
 
 const ModalContent = styled.div`

@@ -510,7 +510,7 @@ const TemplateBuilderPage: React.FC = () => {
               created_at: result.created_at
             });
             setIsExtracting(false);
-          } else if (result.status === 'error') {
+          } else if (result.status === 'error' || result.status === 'failed') {
             const errorMsg = typeof result.error_message === 'string' 
               ? result.error_message 
               : JSON.stringify(result.error_message) || 'Extraction failed';

@@ -137,9 +137,123 @@ export interface FieldCorrectionResponse {
   updated_at: string;
 }
 
+// Auth Types
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: {
+    id: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+    role: string;
+    status: string;
+    tenant_id: string;
+    last_login?: string;
+    created_at: string;
+    updated_at: string;
+  };
+}
+
+export interface User {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  status: string;
+  tenant_id: string;
+  last_login?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  settings: Record<string, any>;
+  status: string;
+  environment: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Tenant Configuration Types
+export interface OllamaConfig {
+  host: string;
+  model_path?: string;
+}
+
+export interface LLMConfig {
+  provider: 'ollama' | 'openai' | 'anthropic' | 'custom';
+  model_name: string;
+  api_key?: string;
+  base_url?: string;
+  max_tokens?: number;
+  temperature?: number;
+  ollama_config?: OllamaConfig;
+  // Support for dual configuration structure
+  field_extraction?: LLMConfig;
+  document_extraction?: LLMConfig;
+}
+
+export interface TenantLLMConfigs {
+  field_extraction: LLMConfig;
+  document_extraction: LLMConfig;
+}
+
+export interface AvailableModelsResponse {
+  provider: string;
+  models: string[];
+  default_model?: string;
+}
+
+export interface RateLimitsConfig {
+  api_requests_per_minute: number;
+  api_requests_per_hour: number;
+  document_uploads_per_hour: number;
+  extractions_per_hour: number;
+  max_concurrent_extractions: number;
+  burst_limit?: number;
+}
+
+export interface TenantConfiguration {
+  id: string;
+  tenant_id: string;
+  config_type: 'llm' | 'rate_limits';
+  config_data: LLMConfig | RateLimitsConfig;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantRateLimit {
+  id: string;
+  tenant_id: string;
+  limit_type: string;
+  current_count: number;
+  window_start: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantConfigSummary {
+  tenant_id: string;
+  llm_config?: LLMConfig;
+  rate_limits?: RateLimitsConfig;
+  rate_usage?: Record<string, number>;
+}
+
 // API Client Class
 class ApiClient {
   private client: AxiosInstance;
+  private authToken: string | null = null;
 
   constructor() {
     // Determine the correct API URL based on environment
@@ -160,9 +274,17 @@ class ApiClient {
       },
     });
 
-    // Request interceptor for debugging
+    // Request interceptor for authentication and debugging
     this.client.interceptors.request.use(
       (config) => {
+        // Add auth token if available
+        if (this.authToken) {
+          config.headers.Authorization = `Bearer ${this.authToken}`;
+          console.log(`🔑 API Request with token: ${config.method?.toUpperCase()} ${config.url}`);
+        } else {
+          console.log(`⚠️ API Request without token: ${config.method?.toUpperCase()} ${config.url}`);
+        }
+        
         console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`);
         return config;
       },
@@ -190,6 +312,29 @@ class ApiClient {
           throw new Error(error.response.data?.detail || 'Invalid request');
         }
         
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          // Clear auth data and redirect to login
+          console.warn('Authentication failed, clearing auth data and redirecting to login');
+          
+          // Clear localStorage completely
+          localStorage.removeItem('auth_tokens');
+          localStorage.removeItem('auth_user');
+          localStorage.removeItem('auth_tenant');
+          
+          // Clear API client token
+          this.authToken = null;
+          
+          // Dispatch a custom event to notify AuthContext to clear its state
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth:logout'));
+          }
+          
+          // Don't redirect - let the _app.tsx handle showing the login form
+          // when the user is not authenticated
+          
+          throw new Error('Authentication required');
+        }
+        
         if (error.response?.status === 500) {
           throw new Error('Server error. Please try again later.');
         }
@@ -197,6 +342,184 @@ class ApiClient {
         throw error;
       }
     );
+  }
+
+  // Authentication Methods
+  setAuthToken(token: string | null) {
+    this.authToken = token;
+  }
+
+  clearAuthToken() {
+    this.authToken = null;
+  }
+
+  // Auth Endpoints
+  async login(credentials: LoginCredentials): Promise<LoginResponse> {
+    const response = await this.client.post('/api/auth/login', credentials);
+    return response.data;
+  }
+
+  async getCurrentUser(): Promise<User> {
+    const response = await this.client.get('/api/auth/me');
+    return response.data;
+  }
+
+  async getCurrentTenant(): Promise<Tenant> {
+    const response = await this.client.get('/api/auth/tenant');
+    return response.data;
+  }
+
+  async switchTenant(tenantId: string): Promise<void> {
+    await this.client.post('/api/auth/switch-tenant', { tenant_id: tenantId });
+  }
+
+  async getUserPermissions(): Promise<{ permissions: string[]; role: string; tenant_id: string }> {
+    const response = await this.client.get('/api/auth/permissions');
+    return response.data;
+  }
+
+  // User Management Endpoints
+  async getUsers(): Promise<User[]> {
+    const response = await this.client.get('/api/auth/users');
+    return response.data;
+  }
+
+  async updateUser(userId: string, userData: {
+    first_name?: string;
+    last_name?: string;
+    role?: string;
+    status?: string;
+  }): Promise<User> {
+    const response = await this.client.put(`/api/auth/users/${userId}`, userData);
+    return response.data;
+  }
+
+  async createUser(userData: {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+    role?: string;
+  }): Promise<User> {
+    const response = await this.client.post('/api/auth/register', userData);
+    return response.data;
+  }
+
+  // Tenant Management Endpoints
+  async getTenants(): Promise<Tenant[]> {
+    const response = await this.client.get('/api/auth/tenants/all');
+    return response.data;
+  }
+
+  async getTenant(tenantId: string): Promise<Tenant> {
+    const response = await this.client.get(`/api/auth/tenants/${tenantId}`);
+    return response.data;
+  }
+
+  async createTenant(tenantData: {
+    name: string;
+    settings?: Record<string, any>;
+    environment?: string;
+  }): Promise<Tenant> {
+    const response = await this.client.post('/api/auth/tenants', tenantData);
+    return response.data;
+  }
+
+  async updateTenant(tenantId: string, tenantData: {
+    name?: string;
+    settings?: Record<string, any>;
+    status?: string;
+    environment?: string;
+  }): Promise<Tenant> {
+    const response = await this.client.put(`/api/auth/tenants/${tenantId}`, tenantData);
+    return response.data;
+  }
+
+  async deleteTenant(tenantId: string): Promise<void> {
+    await this.client.delete(`/api/auth/tenants/${tenantId}`);
+  }
+
+  async getUserTenants(): Promise<Tenant[]> {
+    const response = await this.client.get('/api/auth/tenants');
+    return response.data;
+  }
+
+  // Tenant Configuration Endpoints
+  async getTenantConfigurations(): Promise<TenantConfiguration[]> {
+    const response = await this.client.get('/api/tenant/configurations');
+    return response.data;
+  }
+
+  async getTenantConfigSummary(): Promise<TenantConfigSummary> {
+    const response = await this.client.get('/api/tenant/configurations/summary');
+    return response.data;
+  }
+
+  async getTenantConfiguration(configType: 'llm' | 'rate_limits'): Promise<TenantConfiguration> {
+    const response = await this.client.get(`/api/tenant/configurations/${configType}`);
+    return response.data;
+  }
+
+  async createTenantConfiguration(config: {
+    config_type: 'llm' | 'rate_limits';
+    config_data: LLMConfig | TenantLLMConfigs | RateLimitsConfig;
+    is_active?: boolean;
+  }): Promise<TenantConfiguration> {
+    const response = await this.client.post('/api/tenant/configurations', config);
+    return response.data;
+  }
+
+  async updateTenantConfiguration(
+    configType: 'llm' | 'rate_limits',
+    updates: {
+      config_data?: LLMConfig | RateLimitsConfig;
+      is_active?: boolean;
+    }
+  ): Promise<TenantConfiguration> {
+    const response = await this.client.put(`/api/tenant/configurations/${configType}`, updates);
+    return response.data;
+  }
+
+  async deleteTenantConfiguration(configType: 'llm' | 'rate_limits'): Promise<void> {
+    await this.client.delete(`/api/tenant/configurations/${configType}`);
+  }
+
+  async getRateLimitStatus(): Promise<Record<string, TenantRateLimit>> {
+    const response = await this.client.get('/api/tenant/rate-limits');
+    return response.data;
+  }
+
+  async resetRateLimits(): Promise<{ message: string }> {
+    const response = await this.client.post('/api/tenant/rate-limits/reset');
+    return response.data;
+  }
+
+  async checkLLMHealth(configType: string = 'field_extraction'): Promise<{
+    provider: string;
+    model: string;
+    healthy: boolean;
+    checked_at: string;
+    error?: string;
+  }> {
+    const response = await this.client.post('/api/tenant/llm/health-check', {}, {
+      params: { config_type: configType }
+    });
+    return response.data;
+  }
+
+  async testLLMExtraction(testData: {
+    config_type?: string;
+    document_text: string;
+    schema: Record<string, any>;
+    prompt_config: Record<string, any>;
+  }): Promise<any> {
+    const response = await this.client.post('/api/tenant/llm/test-extraction', testData);
+    return response.data;
+  }
+
+  async getAvailableModels(provider: string): Promise<AvailableModelsResponse> {
+    const response = await this.client.get(`/api/tenant/available-models/${provider}`);
+    return response.data;
   }
 
   // Health Endpoints
