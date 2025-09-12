@@ -534,7 +534,10 @@ const TooltipIcon = styled.div`
     padding: 8px 12px;
     border-radius: 6px;
     font-size: 12px;
-    white-space: nowrap;
+    white-space: normal;
+    width: 280px;
+    text-align: center;
+    line-height: 1.4;
     z-index: ${props => props.theme.zIndex.tooltip};
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   }

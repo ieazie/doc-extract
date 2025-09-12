@@ -7,15 +7,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 import uuid
+import logging
 
 from ..models.database import get_db, Template, TemplateExample, Tenant, User
 from ..models.database import DocumentType, DocumentCategory
 from .auth import get_current_user, require_permission
-from ..services.ai_service import ai_service
+from ..services.ai_service import AIService
 from pydantic import BaseModel, Field, validator
 import json
 
 router = APIRouter(tags=["templates"])
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # PYDANTIC MODELS FOR API
@@ -731,31 +733,66 @@ async def test_template(
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
         
-        # Mock extraction result (will be replaced with LangExtract in Phase 4)
-        mock_result = {
-            "status": "success",
-            "message": "Template test completed (mock mode)",
-            "extracted_data": {},
-            "confidence_score": 0.85,
-            "processing_time_ms": 150,
-            "template_id": template_id,
-            "note": "This is a mock result. Real extraction will be available in Phase 4."
-        }
+        # Perform real extraction using tenant-specific LLM config
+        from ..services.extraction_service import ExtractionService, ExtractionRequest
         
-        # Try to extract some basic fields based on schema
-        for field_name, field_def in template.schema.items():
-            if field_def.get('type') == 'text':
-                mock_result['extracted_data'][field_name] = f"Sample {field_name} value"
-            elif field_def.get('type') == 'number':
-                mock_result['extracted_data'][field_name] = 123.45
-            elif field_def.get('type') == 'date':
-                mock_result['extracted_data'][field_name] = "2024-01-15"
-            elif field_def.get('type') == 'array':
-                mock_result['extracted_data'][field_name] = ["Sample item 1", "Sample item 2"]
-            elif field_def.get('type') == 'object':
-                mock_result['extracted_data'][field_name] = {"nested_field": "nested value"}
-        
-        return mock_result
+        try:
+            # Create extraction service with tenant context
+            extraction_service = ExtractionService(db)
+            
+            # Create extraction request
+            extraction_request = ExtractionRequest(
+                document_text=test_document,
+                schema=template.schema,
+                prompt_config={
+                    "system_prompt": f"Extract data from this {template.document_type} document according to the schema.",
+                    "few_shot_examples": []
+                },
+                tenant_id=tenant_id
+            )
+            
+            # Perform extraction
+            result = await extraction_service.extract_data(extraction_request)
+            
+            return {
+                "status": result.status,
+                "message": "Template test completed successfully" if result.status == "success" else "Template test failed",
+                "extracted_data": result.extracted_data,
+                "confidence_score": result.confidence_score,
+                "processing_time_ms": result.processing_time_ms,
+                "template_id": template_id,
+                "provider": result.provider,
+                "model": result.model,
+                "error_message": result.error_message
+            }
+            
+        except Exception as e:
+            # Fallback to mock if extraction fails
+            logger.warning(f"Template extraction failed, using fallback: {str(e)}")
+            mock_result = {
+                "status": "success",
+                "message": "Template test completed (fallback mode)",
+                "extracted_data": {},
+                "confidence_score": 0.85,
+                "processing_time_ms": 150,
+                "template_id": template_id,
+                "note": f"Real extraction failed: {str(e)}. Using fallback."
+            }
+            
+            # Try to extract some basic fields based on schema
+            for field_name, field_def in template.schema.items():
+                if field_def.get('type') == 'text':
+                    mock_result['extracted_data'][field_name] = f"Sample {field_name} value"
+                elif field_def.get('type') == 'number':
+                    mock_result['extracted_data'][field_name] = 123.45
+                elif field_def.get('type') == 'date':
+                    mock_result['extracted_data'][field_name] = "2024-01-15"
+                elif field_def.get('type') == 'array':
+                    mock_result['extracted_data'][field_name] = ["Sample item 1", "Sample item 2"]
+                elif field_def.get('type') == 'object':
+                    mock_result['extracted_data'][field_name] = {"nested_field": "nested value"}
+            
+            return mock_result
         
     except HTTPException:
         raise
@@ -800,10 +837,12 @@ async def generate_fields_from_prompt(
                 detail="Prompt must be at least 10 characters long"
             )
         
-        # Generate fields using AI service
+        # Generate fields using AI service with tenant-specific config
+        ai_service = AIService(db)
         generated_fields = await ai_service.generate_fields_from_prompt(
             prompt=request.prompt.strip(),
-            document_type=request.document_type
+            document_type=request.document_type,
+            tenant_id=current_user.tenant_id
         )
         
         # Convert to response format
@@ -852,11 +891,13 @@ async def generate_fields_from_document(
                 detail="Document content must be at least 50 characters long"
             )
         
-        # Generate fields using AI service
+        # Generate fields using AI service with tenant-specific config
+        ai_service = AIService(db)
         generated_fields = await ai_service.generate_fields_from_document(
             prompt=request.prompt.strip(),
             document_content=request.document_content.strip(),
-            document_type=request.document_type
+            document_type=request.document_type,
+            tenant_id=current_user.tenant_id
         )
         
         # Convert to response format

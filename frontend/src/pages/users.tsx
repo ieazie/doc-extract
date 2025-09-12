@@ -32,7 +32,7 @@ interface User {
   role: string;
   status: string;
   tenant_id: string;
-  last_login: string | null;
+  last_login?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -367,7 +367,7 @@ const UsersPage: React.FC = () => {
   };
 
   // Format date
-  const formatDate = (dateString: string | null) => {
+  const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'Never';
     return new Date(dateString).toLocaleDateString();
   };

@@ -57,6 +57,8 @@ class Tenant(Base):
     document_categories = relationship("DocumentCategory", back_populates="tenant", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")
     templates = relationship("Template", back_populates="tenant", cascade="all, delete-orphan")
+    configurations = relationship("TenantConfiguration", back_populates="tenant", cascade="all, delete-orphan")
+    rate_limits = relationship("TenantRateLimit", back_populates="tenant", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Tenant(id={self.id}, name='{self.name}')>"
@@ -402,6 +404,59 @@ class TemplateUsage(Base):
 
     def __repr__(self):
         return f"<TemplateUsage(id={self.id}, status='{self.extraction_status}')>"
+
+
+class TenantConfiguration(Base):
+    """Tenant Configuration Model"""
+    __tablename__ = "tenant_configurations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    config_type = Column(String(50), nullable=False)
+    config_data = Column(JSONB, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    tenant = relationship("Tenant", back_populates="configurations")
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("config_type IN ('llm', 'rate_limits')", name="valid_config_type"),
+        UniqueConstraint("tenant_id", "config_type", name="unique_active_config", deferrable=True),
+    )
+
+    def __repr__(self):
+        return f"<TenantConfiguration(id={self.id}, tenant_id={self.tenant_id}, config_type='{self.config_type}')>"
+
+
+class TenantRateLimit(Base):
+    """Tenant Rate Limit Model"""
+    __tablename__ = "tenant_rate_limits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    limit_type = Column(String(50), nullable=False)
+    current_count = Column(Integer, default=0)
+    window_start = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    tenant = relationship("Tenant", back_populates="rate_limits")
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "limit_type IN ('api_requests_per_minute', 'api_requests_per_hour', 'document_uploads_per_hour', 'extractions_per_hour', 'max_concurrent_extractions')",
+            name="valid_limit_type"
+        ),
+        UniqueConstraint("tenant_id", "limit_type", name="unique_tenant_limit_type"),
+    )
+
+    def __repr__(self):
+        return f"<TenantRateLimit(id={self.id}, tenant_id={self.tenant_id}, limit_type='{self.limit_type}')>"
 
 
 # ============================================================================

@@ -1,44 +1,46 @@
 """
-AI Service for OpenAI integration
+AI Service for tenant-specific LLM integration
 Handles schema field generation from prompts and documents
 """
 import json
 import logging
 import asyncio
 from typing import List, Dict, Any, Optional
-from openai import OpenAI
+from sqlalchemy.orm import Session
 from ..config import settings
+from .tenant_config_service import TenantConfigService
+from .llm_provider_service import LLMProviderService
 
 logger = logging.getLogger(__name__)
 
 
 class AIService:
-    """Service for AI-powered schema field generation"""
+    """Service for AI-powered schema field generation with tenant-specific LLM providers"""
     
-    def __init__(self):
-        self.client = OpenAI(api_key=settings.openai_api_key)
-        self.model = settings.openai_model
-        self.max_tokens = settings.openai_max_tokens
-        self.temperature = settings.openai_temperature
+    def __init__(self, db: Session):
+        self.db = db
+        self.config_service = TenantConfigService(db)
     
-    async def generate_fields_from_prompt(self, prompt: str, document_type: str = "other") -> List[Dict[str, Any]]:
+    async def generate_fields_from_prompt(self, prompt: str, document_type: str = "other", tenant_id: str = None) -> List[Dict[str, Any]]:
         """
         Generate schema fields based on extraction prompt only
         
         Args:
             prompt: The extraction prompt describing what to extract
             document_type: Type of document (invoice, receipt, contract, etc.)
+            tenant_id: Tenant ID for getting tenant-specific LLM config
             
         Returns:
             List of generated schema fields
         """
-        return await self._generate_with_retry(
+        return await self._generate_with_tenant_config(
             self._get_system_prompt_for_prompt_only(),
             self._get_user_prompt_for_prompt_only(prompt, document_type),
-            "prompt"
+            "prompt",
+            tenant_id
         )
     
-    async def generate_fields_from_document(self, prompt: str, document_content: str, document_type: str = "other") -> List[Dict[str, Any]]:
+    async def generate_fields_from_document(self, prompt: str, document_content: str, document_type: str = "other", tenant_id: str = None) -> List[Dict[str, Any]]:
         """
         Generate schema fields based on extraction prompt and document content
         
@@ -46,81 +48,141 @@ class AIService:
             prompt: The extraction prompt describing what to extract
             document_content: The actual content of the document
             document_type: Type of document (invoice, receipt, contract, etc.)
+            tenant_id: Tenant ID for getting tenant-specific LLM config
             
         Returns:
             List of generated schema fields
         """
-        return await self._generate_with_retry(
+        return await self._generate_with_tenant_config(
             self._get_system_prompt_for_document(),
             self._get_user_prompt_for_document(prompt, document_content, document_type),
-            "document"
+            "document",
+            tenant_id
         )
     
-    async def _call_openai(self, system_prompt: str, user_prompt: str) -> str:
-        """Make API call to OpenAI with comprehensive error handling"""
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                timeout=30  # 30 second timeout
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            error_msg = str(e).lower()
-            
-            # Handle specific OpenAI errors
-            if "rate_limit" in error_msg or "quota" in error_msg:
-                logger.error(f"OpenAI rate limit exceeded: {str(e)}")
-                raise Exception("OpenAI API rate limit exceeded. Please try again in a few minutes.")
-            elif "invalid_api_key" in error_msg or "authentication" in error_msg:
-                logger.error(f"OpenAI authentication failed: {str(e)}")
-                raise Exception("OpenAI API authentication failed. Please check API key configuration.")
-            elif "timeout" in error_msg:
-                logger.error(f"OpenAI request timeout: {str(e)}")
-                raise Exception("Request timed out. The prompt or document might be too complex. Please try again.")
-            elif "context_length" in error_msg or "token" in error_msg:
-                logger.error(f"OpenAI context length exceeded: {str(e)}")
-                raise Exception("Document content is too long. Please try with a shorter document or more specific prompt.")
-            elif "model" in error_msg and "not found" in error_msg:
-                logger.error(f"OpenAI model not found: {str(e)}")
-                raise Exception("AI model not available. Please try again later.")
-            else:
-                logger.error(f"OpenAI API call failed: {str(e)}")
-                raise Exception(f"AI service temporarily unavailable: {str(e)}")
-    
-    async def _generate_with_retry(self, system_prompt: str, user_prompt: str, mode: str) -> List[Dict[str, Any]]:
-        """Generate fields with retry logic for transient failures"""
+    async def _generate_with_tenant_config(self, system_prompt: str, user_prompt: str, mode: str, tenant_id: str = None) -> List[Dict[str, Any]]:
+        """Generate fields using tenant-specific LLM configuration"""
         max_retries = 3
         base_delay = 1  # seconds
         
         for attempt in range(max_retries):
             try:
-                response = await self._call_openai(system_prompt, user_prompt)
-                return self._parse_fields_response(response)
+                # Get tenant's LLM configuration
+                llm_config = self.config_service.get_llm_config(tenant_id)
+                if not llm_config:
+                    # Fallback to global settings if no tenant config
+                    logger.warning(f"No LLM configuration found for tenant {tenant_id}, using fallback")
+                    return await self._generate_with_fallback(system_prompt, user_prompt, mode)
+                
+                # Use Field Extraction configuration for schema generation
+                if hasattr(llm_config, 'field_extraction') and llm_config.field_extraction:
+                    config_to_use = llm_config.field_extraction
+                else:
+                    # Fallback to old single config structure
+                    config_to_use = llm_config
+                
+                # Create LLM provider service
+                llm_service = LLMProviderService.from_config(config_to_use)
+                
+                # For field generation, use the LLM provider's direct API call
+                # This is more appropriate than using extract_data which is for document extraction
+                if config_to_use.provider == 'openai':
+                    return await self._generate_with_openai_tenant_config(config_to_use, system_prompt, user_prompt)
+                elif config_to_use.provider == 'ollama':
+                    return await self._generate_with_ollama_tenant_config(config_to_use, system_prompt, user_prompt)
+                else:
+                    # Fallback to OpenAI for other providers
+                    return await self._generate_with_fallback(system_prompt, user_prompt, mode)
+                
             except Exception as e:
                 error_msg = str(e).lower()
                 
                 # Don't retry for certain errors
-                if any(no_retry in error_msg for no_retry in [
-                    "authentication", "invalid_api_key", "model not found", 
-                    "context_length", "token", "quota"
-                ]):
-                    logger.error(f"Non-retryable error in {mode} generation: {str(e)}")
-                    raise Exception(f"Failed to generate fields from {mode}: {str(e)}")
+                if any(err in error_msg for err in ["authentication", "invalid_api_key", "quota", "rate_limit"]):
+                    logger.error(f"Non-retryable error in field generation: {str(e)}")
+                    raise Exception(f"LLM configuration error: {str(e)}")
                 
                 # Retry for transient errors
                 if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)  # Exponential backoff
-                    logger.warning(f"Attempt {attempt + 1} failed for {mode} generation, retrying in {delay}s: {str(e)}")
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning(f"Field generation attempt {attempt + 1} failed, retrying in {delay}s: {str(e)}")
                     await asyncio.sleep(delay)
                 else:
-                    logger.error(f"All retry attempts failed for {mode} generation: {str(e)}")
-                    raise Exception(f"Failed to generate fields from {mode} after {max_retries} attempts: {str(e)}")
+                    logger.error(f"Field generation failed after {max_retries} attempts: {str(e)}")
+                    raise Exception(f"Field generation failed: {str(e)}")
+    
+    async def _generate_with_openai_tenant_config(self, config: Any, system_prompt: str, user_prompt: str) -> List[Dict[str, Any]]:
+        """Generate fields using tenant-specific OpenAI configuration"""
+        try:
+            from openai import OpenAI
+            client = OpenAI(
+                api_key=config.api_key,
+                base_url=config.base_url or "https://api.openai.com/v1"
+            )
+            
+            response = client.chat.completions.create(
+                model=config.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=config.max_tokens or 4000,
+                temperature=config.temperature or 0.1,
+                timeout=30
+            )
+            return self._parse_fields_response(response.choices[0].message.content)
+        except Exception as e:
+            logger.error(f"Tenant-specific OpenAI field generation failed: {str(e)}")
+            raise Exception(f"Field generation failed: {str(e)}")
+    
+    async def _generate_with_ollama_tenant_config(self, config: Any, system_prompt: str, user_prompt: str) -> List[Dict[str, Any]]:
+        """Generate fields using tenant-specific Ollama configuration"""
+        try:
+            import httpx
+            
+            ollama_url = config.ollama_config.get('base_url', 'http://ollama:11434') if hasattr(config, 'ollama_config') and config.ollama_config else 'http://ollama:11434'
+            
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{ollama_url}/api/generate",
+                    json={
+                        "model": config.model_name,
+                        "prompt": f"{system_prompt}\n\n{user_prompt}",
+                        "stream": False,
+                        "options": {
+                            "temperature": config.temperature or 0.1,
+                            "num_predict": config.max_tokens or 4000
+                        }
+                    }
+                )
+                response.raise_for_status()
+                result = response.json()
+                return self._parse_fields_response(result.get("response", ""))
+        except Exception as e:
+            logger.error(f"Tenant-specific Ollama field generation failed: {str(e)}")
+            raise Exception(f"Field generation failed: {str(e)}")
+
+    async def _generate_with_fallback(self, system_prompt: str, user_prompt: str, mode: str) -> List[Dict[str, Any]]:
+        """Fallback generation using global OpenAI settings"""
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=settings.openai_api_key)
+            
+            response = client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=settings.openai_max_tokens,
+                temperature=settings.openai_temperature,
+                timeout=30
+            )
+            return self._parse_fields_response(response.choices[0].message.content)
+        except Exception as e:
+            logger.error(f"Fallback field generation failed: {str(e)}")
+            raise Exception(f"Field generation failed: {str(e)}")
+    
     
     def _get_system_prompt_for_prompt_only(self) -> str:
         """System prompt for prompt-only field generation"""
@@ -194,6 +256,38 @@ Please analyze both the extraction prompt and the document content to generate c
 
 Return the fields as a JSON array."""
 
+    def _validate_fields_list(self, fields: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Validate and clean a list of field objects"""
+        try:
+            validated_fields = []
+            for field in fields:
+                if isinstance(field, dict) and all(key in field for key in ['name', 'type', 'description', 'required']):
+                    validated_field = {
+                        'name': str(field['name']).strip(),
+                        'type': str(field['type']).lower(),
+                        'description': str(field['description']).strip(),
+                        'required': bool(field['required'])
+                    }
+                    
+                    # Validate type and map to backend-compatible types
+                    valid_types = ['string', 'number', 'date', 'boolean', 'array', 'object']
+                    if validated_field['type'] not in valid_types:
+                        validated_field['type'] = 'string'  # Default fallback
+                    
+                    # Map frontend types to backend types
+                    if validated_field['type'] == 'string':
+                        validated_field['type'] = 'text'
+                    elif validated_field['type'] == 'boolean':
+                        validated_field['type'] = 'text'  # Backend doesn't support boolean, use text
+                    
+                    validated_fields.append(validated_field)
+            
+            return validated_fields
+            
+        except Exception as e:
+            logger.error(f"Error validating fields list: {str(e)}")
+            raise Exception("Failed to validate fields response")
+
     def _parse_fields_response(self, response: str) -> List[Dict[str, Any]]:
         """Parse OpenAI response into field objects"""
         try:
@@ -242,5 +336,5 @@ Return the fields as a JSON array."""
             raise Exception("Failed to parse AI response")
 
 
-# Global AI service instance
-ai_service = AIService()
+# Note: AI service instances should be created with database session
+# ai_service = AIService(db)  # Create instance in API endpoints

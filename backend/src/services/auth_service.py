@@ -156,6 +156,7 @@ class AuthService:
                 "users:read", "users:write", "users:delete",
                 "tenants:read", "tenants:write", "tenants:delete",
                 "api-keys:read", "api-keys:write", "api-keys:delete",
+                "tenant_config:read", "tenant_config:write", "tenant_config:delete",
                 "analytics:read"
             ],
             UserRole.USER: [
@@ -163,6 +164,7 @@ class AuthService:
                 "templates:read", "templates:write", "templates:delete",
                 "extractions:read", "extractions:write", "extractions:delete",
                 "categories:read", "categories:write", "categories:delete",
+                "tenant_config:read", "tenant_config:write",
                 "analytics:read"
             ],
             UserRole.VIEWER: [

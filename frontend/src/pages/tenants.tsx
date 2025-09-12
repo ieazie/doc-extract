@@ -4,7 +4,6 @@ import styled from 'styled-components';
 import { 
   Building2, 
   Plus, 
-  Edit, 
   Trash2, 
   Users, 
   Settings,
@@ -22,6 +21,7 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { SuccessMessage } from '@/components/common/SuccessMessage';
 import { Table, ColumnDefinition } from '@/components/table/Table';
 import { ActionButton, ActionGroup } from '@/components/table/Table.styled';
+import TenantConfigModal from '@/components/tenants/TenantConfigModal';
 
 // Types
 interface Tenant {
@@ -271,7 +271,7 @@ const TenantsPage: React.FC = () => {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Fetch tenants
@@ -456,10 +456,10 @@ const TenantsPage: React.FC = () => {
   const renderActions = (tenant: Tenant) => (
     <ActionGroup>
       <ActionButton
-        onClick={() => setEditingTenant(tenant)}
-        title="Edit tenant"
+        onClick={() => setSelectedTenant(tenant)}
+        title="Manage tenant"
       >
-        <Edit size={16} />
+        <Settings size={16} />
       </ActionButton>
       <ActionButton
         onClick={() => handleDeleteTenant(tenant.id)}
@@ -604,90 +604,11 @@ const TenantsPage: React.FC = () => {
           </ModalOverlay>
         )}
 
-        {/* Edit Tenant Modal */}
-        {editingTenant && (
-          <ModalOverlay onClick={() => setEditingTenant(null)}>
-            <ModalContent onClick={(e) => e.stopPropagation()}>
-              <ModalHeader>
-                <ModalTitle>Edit Tenant</ModalTitle>
-                <CloseButton onClick={() => setEditingTenant(null)}>
-                  <XCircle size={20} />
-                </CloseButton>
-              </ModalHeader>
-              <form onSubmit={handleUpdateTenant}>
-                <FormGroup>
-                  <Label htmlFor="edit_name">Tenant Name</Label>
-                  <Input
-                    type="text"
-                    id="edit_name"
-                    name="name"
-                    defaultValue={editingTenant.name}
-                    required
-                  />
-                </FormGroup>
-                <FormGroup>
-                  <Label htmlFor="edit_environment">Environment</Label>
-                  <Select
-                    id="edit_environment"
-                    name="environment"
-                    defaultValue={editingTenant.environment}
-                  >
-                    <option value="development">Development</option>
-                    <option value="staging">Staging</option>
-                    <option value="production">Production</option>
-                  </Select>
-                </FormGroup>
-                <FormGroup>
-                  <Label htmlFor="edit_status">Status</Label>
-                  <Select
-                    id="edit_status"
-                    name="status"
-                    defaultValue={editingTenant.status}
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="suspended">Suspended</option>
-                  </Select>
-                </FormGroup>
-                <FormGroup>
-                  <Label htmlFor="edit_max_documents">Max Documents</Label>
-                  <Input
-                    type="number"
-                    id="edit_max_documents"
-                    name="max_documents"
-                    defaultValue={editingTenant.settings?.max_documents || 1000}
-                    min="1"
-                  />
-                </FormGroup>
-                <FormGroup>
-                  <Label htmlFor="edit_max_templates">Max Templates</Label>
-                  <Input
-                    type="number"
-                    id="edit_max_templates"
-                    name="max_templates"
-                    defaultValue={editingTenant.settings?.max_templates || 50}
-                    min="1"
-                  />
-                </FormGroup>
-                <ModalActions>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setEditingTenant(null)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={updateTenantMutation.isLoading}
-                  >
-                    {updateTenantMutation.isLoading ? 'Updating...' : 'Update Tenant'}
-                  </Button>
-                </ModalActions>
-              </form>
-            </ModalContent>
-          </ModalOverlay>
-        )}
+        {/* Tenant Management Modal */}
+        <TenantConfigModal
+          tenant={selectedTenant}
+          onClose={() => setSelectedTenant(null)}
+        />
     </PageContainer>
   );
 };

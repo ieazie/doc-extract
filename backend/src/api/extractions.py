@@ -700,8 +700,9 @@ async def process_extraction(
     template_schema: dict,
     prompt_config: dict
 ):
-    """Background task to process extraction using LangExtract"""
+    """Background task to process extraction using tenant-specific LLM provider"""
     from ..models.database import SessionLocal
+    from ..services.extraction_service import ExtractionService, ExtractionRequest
     
     db = SessionLocal()
     try:
@@ -718,14 +719,25 @@ async def process_extraction(
         extraction.status = "processing"
         db.commit()
         
-        # Get LangExtract service
-        langextract_service = get_langextract_service()
+        # Get tenant ID from the extraction's document
+        document = db.query(Document).filter(
+            Document.id == extraction.document_id
+        ).first()
         
-        # Check if service is healthy
-        health = await langextract_service.health_check()
+        if not document:
+            extraction.status = "failed"
+            extraction.error_message = "Document not found"
+            db.commit()
+            return
+        
+        # Create extraction service with tenant context
+        extraction_service = ExtractionService(db)
+        
+        # Check if tenant's LLM provider is healthy
+        health = await extraction_service.health_check(document.tenant_id)
         if health["status"] != "healthy":
             extraction.status = "failed"
-            extraction.error_message = f"LangExtract service unhealthy: {health['message']}"
+            extraction.error_message = f"LLM provider unhealthy: {health['message']}"
             db.commit()
             return
         
@@ -733,13 +745,12 @@ async def process_extraction(
         extraction_request = ExtractionRequest(
             document_text=document_text,
             schema=template_schema,
-            system_prompt=prompt_config.get("system_prompt", "You are an expert at extracting structured data from documents."),
-            instructions=prompt_config.get("instructions", "Extract the specified fields from this document."),
-            output_format=prompt_config.get("output_format", "json")
+            prompt_config=prompt_config,
+            tenant_id=document.tenant_id
         )
         
-        # Perform extraction
-        result = await langextract_service.extract_data(extraction_request)
+        # Perform extraction using tenant-specific LLM provider
+        result = await extraction_service.extract_data(extraction_request)
         
         # Update extraction record
         if result.status == "success":
@@ -756,7 +767,7 @@ async def process_extraction(
             extraction.processing_time = result.processing_time_ms
         
         db.commit()
-        logger.info(f"Extraction {extraction_id} completed with status: {extraction.status}")
+        logger.info(f"Extraction {extraction_id} completed with status: {extraction.status} using {result.provider}/{result.model}")
         
     except Exception as e:
         logger.error(f"Background extraction failed for {extraction_id}: {str(e)}")

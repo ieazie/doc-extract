@@ -184,6 +184,72 @@ export interface Tenant {
   updated_at: string;
 }
 
+// Tenant Configuration Types
+export interface OllamaConfig {
+  host: string;
+  model_path?: string;
+}
+
+export interface LLMConfig {
+  provider: 'ollama' | 'openai' | 'anthropic' | 'custom';
+  model_name: string;
+  api_key?: string;
+  base_url?: string;
+  max_tokens?: number;
+  temperature?: number;
+  ollama_config?: OllamaConfig;
+  // Support for dual configuration structure
+  field_extraction?: LLMConfig;
+  document_extraction?: LLMConfig;
+}
+
+export interface TenantLLMConfigs {
+  field_extraction: LLMConfig;
+  document_extraction: LLMConfig;
+}
+
+export interface AvailableModelsResponse {
+  provider: string;
+  models: string[];
+  default_model?: string;
+}
+
+export interface RateLimitsConfig {
+  api_requests_per_minute: number;
+  api_requests_per_hour: number;
+  document_uploads_per_hour: number;
+  extractions_per_hour: number;
+  max_concurrent_extractions: number;
+  burst_limit?: number;
+}
+
+export interface TenantConfiguration {
+  id: string;
+  tenant_id: string;
+  config_type: 'llm' | 'rate_limits';
+  config_data: LLMConfig | RateLimitsConfig;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantRateLimit {
+  id: string;
+  tenant_id: string;
+  limit_type: string;
+  current_count: number;
+  window_start: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantConfigSummary {
+  tenant_id: string;
+  llm_config?: LLMConfig;
+  rate_limits?: RateLimitsConfig;
+  rate_usage?: Record<string, number>;
+}
+
 // API Client Class
 class ApiClient {
   private client: AxiosInstance;
@@ -375,6 +441,84 @@ class ApiClient {
 
   async getUserTenants(): Promise<Tenant[]> {
     const response = await this.client.get('/api/auth/tenants');
+    return response.data;
+  }
+
+  // Tenant Configuration Endpoints
+  async getTenantConfigurations(): Promise<TenantConfiguration[]> {
+    const response = await this.client.get('/api/tenant/configurations');
+    return response.data;
+  }
+
+  async getTenantConfigSummary(): Promise<TenantConfigSummary> {
+    const response = await this.client.get('/api/tenant/configurations/summary');
+    return response.data;
+  }
+
+  async getTenantConfiguration(configType: 'llm' | 'rate_limits'): Promise<TenantConfiguration> {
+    const response = await this.client.get(`/api/tenant/configurations/${configType}`);
+    return response.data;
+  }
+
+  async createTenantConfiguration(config: {
+    config_type: 'llm' | 'rate_limits';
+    config_data: LLMConfig | TenantLLMConfigs | RateLimitsConfig;
+    is_active?: boolean;
+  }): Promise<TenantConfiguration> {
+    const response = await this.client.post('/api/tenant/configurations', config);
+    return response.data;
+  }
+
+  async updateTenantConfiguration(
+    configType: 'llm' | 'rate_limits',
+    updates: {
+      config_data?: LLMConfig | RateLimitsConfig;
+      is_active?: boolean;
+    }
+  ): Promise<TenantConfiguration> {
+    const response = await this.client.put(`/api/tenant/configurations/${configType}`, updates);
+    return response.data;
+  }
+
+  async deleteTenantConfiguration(configType: 'llm' | 'rate_limits'): Promise<void> {
+    await this.client.delete(`/api/tenant/configurations/${configType}`);
+  }
+
+  async getRateLimitStatus(): Promise<Record<string, TenantRateLimit>> {
+    const response = await this.client.get('/api/tenant/rate-limits');
+    return response.data;
+  }
+
+  async resetRateLimits(): Promise<{ message: string }> {
+    const response = await this.client.post('/api/tenant/rate-limits/reset');
+    return response.data;
+  }
+
+  async checkLLMHealth(configType: string = 'field_extraction'): Promise<{
+    provider: string;
+    model: string;
+    healthy: boolean;
+    checked_at: string;
+    error?: string;
+  }> {
+    const response = await this.client.post('/api/tenant/llm/health-check', {}, {
+      params: { config_type: configType }
+    });
+    return response.data;
+  }
+
+  async testLLMExtraction(testData: {
+    config_type?: string;
+    document_text: string;
+    schema: Record<string, any>;
+    prompt_config: Record<string, any>;
+  }): Promise<any> {
+    const response = await this.client.post('/api/tenant/llm/test-extraction', testData);
+    return response.data;
+  }
+
+  async getAvailableModels(provider: string): Promise<AvailableModelsResponse> {
+    const response = await this.client.get(`/api/tenant/available-models/${provider}`);
     return response.data;
   }
 

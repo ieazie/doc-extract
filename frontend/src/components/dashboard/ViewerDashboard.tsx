@@ -432,7 +432,6 @@ export const ViewerDashboard: React.FC = () => {
                 // Viewers cannot delete documents
                 console.log('Delete action blocked for viewers');
               }}
-              readOnly={true}
             />
           ) : (
             <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
