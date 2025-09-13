@@ -10,9 +10,13 @@ from datetime import datetime
 
 class UserRole(str, Enum):
     """User roles for role-based access control"""
+    # Legacy role (will be deprecated)
     ADMIN = "admin"
-    USER = "user"
-    VIEWER = "viewer"
+    # New role hierarchy
+    SYSTEM_ADMIN = "system_admin"    # Platform-wide admin
+    TENANT_ADMIN = "tenant_admin"    # Tenant admin
+    USER = "user"                    # Regular user
+    VIEWER = "viewer"                # Read-only user
 
 
 class UserStatus(str, Enum):
@@ -45,7 +49,7 @@ class UserUpdate(BaseModel):
     """User update request"""
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    role: Optional[UserRole] = None
+    role: Optional[str] = None  # Changed from UserRole enum to string for database compatibility
     status: Optional[UserStatus] = None
 
 
@@ -55,7 +59,7 @@ class UserResponse(BaseModel):
     email: str
     first_name: str
     last_name: str
-    role: UserRole
+    role: str  # Changed from UserRole enum to string for database compatibility
     status: UserStatus
     tenant_id: UUID
     last_login: Optional[datetime]

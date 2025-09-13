@@ -268,7 +268,7 @@ const ModalActions = styled.div`
 
 // Main Component
 const TenantsPage: React.FC = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isSystemAdmin, hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
@@ -305,7 +305,7 @@ const TenantsPage: React.FC = () => {
     {
       onSuccess: () => {
         queryClient.invalidateQueries('tenants');
-        setEditingTenant(null);
+        setSelectedTenant(null);
         setMessage({ type: 'success', text: 'Tenant updated successfully' });
       },
       onError: (error: any) => {
@@ -346,7 +346,7 @@ const TenantsPage: React.FC = () => {
   // Handle update tenant
   const handleUpdateTenant = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!editingTenant) return;
+    if (!selectedTenant) return;
     
     const formData = new FormData(e.currentTarget);
     const tenantData: UpdateTenantData = {
@@ -358,7 +358,7 @@ const TenantsPage: React.FC = () => {
         max_templates: parseInt(formData.get('max_templates') as string) || 50,
       },
     };
-    updateTenantMutation.mutate({ tenantId: editingTenant.id, tenantData });
+    updateTenantMutation.mutate({ tenantId: selectedTenant.id, tenantData });
   };
 
   // Handle delete tenant
@@ -470,13 +470,12 @@ const TenantsPage: React.FC = () => {
     </ActionGroup>
   );
 
-  if (currentUser?.role !== 'admin') {
+  // Check if user has permission to access tenant management
+  if (!hasPermission('tenants:read_all')) {
     return (
-      <Layout>
-        <PageContainer>
-          <ErrorMessage message="Access denied. Admin privileges required." />
-        </PageContainer>
-      </Layout>
+      <PageContainer>
+        <ErrorMessage message="Access denied. System admin privileges required." />
+      </PageContainer>
     );
   }
 
@@ -505,7 +504,7 @@ const TenantsPage: React.FC = () => {
           </PageTitle>
           <Button
             onClick={() => setShowCreateModal(true)}
-            disabled={currentUser?.role !== 'admin'}
+            disabled={!hasPermission('tenants:create')}
           >
             <Plus size={16} />
             Add Tenant

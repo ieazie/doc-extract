@@ -67,12 +67,12 @@ const DropdownList = styled.ul<{ $isOpen: boolean }>`
 const DropdownItem = styled.li<{ $isSelected?: boolean; $isDisabled?: boolean }>`
   padding: 0.75rem 1rem;
   cursor: pointer;
-  color: ${props => props.$isDisabled ? props.theme.colors.text.disabled : props.theme.colors.text.primary};
+  color: ${props => props.$isDisabled ? props.theme.colors.text.muted : props.theme.colors.text.primary};
   background: ${props => props.$isSelected ? `${props.theme.colors.primary}10` : 'transparent'};
   transition: background-color 0.15s ease;
   
   &:hover {
-    background: ${props => props.$isDisabled ? 'transparent' : props.theme.colors.background.hover};
+    background: ${props => props.$isDisabled ? 'transparent' : props.theme.colors.surfaceHover};
   }
   
   &:first-child {

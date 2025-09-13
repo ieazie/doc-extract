@@ -21,6 +21,7 @@ const nextConfig = {
   
   // Output standalone for Docker
   output: 'standalone',
+  
 };
 
 module.exports = nextConfig;

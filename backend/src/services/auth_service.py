@@ -159,6 +159,56 @@ class AuthService:
                 "tenant_config:read", "tenant_config:write", "tenant_config:delete",
                 "analytics:read"
             ],
+            UserRole.SYSTEM_ADMIN: [
+                # Cross-tenant Tenant Management
+                "tenants:create", "tenants:read_all", "tenants:update", "tenants:delete",
+                "tenants:suspend", "tenants:activate", "tenants:configure",
+                
+                # System Configuration
+                "system:config", "system:maintenance", "system:backup",
+                
+                # Global Analytics
+                "analytics:global", "analytics:cross_tenant", "analytics:system",
+                
+                # Cross-tenant User Management
+                "users:create_global", "users:read_all", "users:assign_tenants",
+                "users:read", "users:write", "users:delete",
+                
+                # All content permissions (cross-tenant)
+                "documents:read", "documents:write", "documents:delete",
+                "templates:read", "templates:write", "templates:delete",
+                "extractions:read", "extractions:write", "extractions:delete",
+                "categories:read", "categories:write", "categories:delete",
+                
+                # API and Configuration
+                "api-keys:read", "api-keys:write", "api-keys:delete",
+                "tenant_config:read", "tenant_config:write", "tenant_config:delete",
+                "analytics:read"
+            ],
+            UserRole.TENANT_ADMIN: [
+                # Tenant-scoped User Management
+                "users:read", "users:write", "users:delete", "users:invite",
+                
+                # Tenant Management (own tenant only)
+                "tenants:read",
+                
+                # Tenant Configuration
+                "tenant:config_llm", "tenant:config_limits", "tenant:config_settings",
+                "tenant_config:read", "tenant_config:write",
+                
+                # Tenant Analytics
+                "analytics:tenant", "analytics:usage", "analytics:performance",
+                "analytics:read",
+                
+                # Content Management (within tenant)
+                "documents:read", "documents:write", "documents:delete",
+                "templates:read", "templates:write", "templates:delete",
+                "extractions:read", "extractions:write", "extractions:delete",
+                "categories:read", "categories:write", "categories:delete",
+                
+                # API Management
+                "api-keys:read", "api-keys:write", "api-keys:delete"
+            ],
             UserRole.USER: [
                 "documents:read", "documents:write", "documents:delete",
                 "templates:read", "templates:write", "templates:delete",
@@ -290,6 +340,70 @@ class AuthService:
         db.commit()
         
         return True
+    
+    # Enhanced methods for role-based operations
+    
+    def is_system_admin(self, user: User) -> bool:
+        """Check if user is a system admin"""
+        return user.role == UserRole.SYSTEM_ADMIN.value
+    
+    def is_tenant_admin(self, user: User) -> bool:
+        """Check if user is a tenant admin (including legacy admin)"""
+        return user.role in [UserRole.TENANT_ADMIN.value, UserRole.ADMIN.value]
+    
+    def is_admin(self, user: User) -> bool:
+        """Check if user has admin privileges (system or tenant)"""
+        return user.role in [UserRole.SYSTEM_ADMIN.value, UserRole.TENANT_ADMIN.value, UserRole.ADMIN.value]
+    
+    def can_access_tenant(self, user: User, target_tenant_id: UUID) -> bool:
+        """Check if user can access a specific tenant"""
+        # System admins can access any tenant
+        if self.is_system_admin(user):
+            return True
+        
+        # Other users can only access their own tenant
+        return user.tenant_id == target_tenant_id
+    
+    def get_tenant_users(self, db: Session, tenant_id: UUID) -> List[User]:
+        """Get all users in a specific tenant"""
+        return db.query(User).filter(User.tenant_id == tenant_id).all()
+    
+    def get_all_tenants(self, db: Session) -> List[Tenant]:
+        """Get all tenants (for system admin use)"""
+        return db.query(Tenant).all()
+    
+    def update_user_role(self, db: Session, user_id: UUID, new_role: str, actor_user: User) -> bool:
+        """Update user role with permission checking"""
+        user = self.get_user_by_id(db, user_id)
+        if not user:
+            return False
+        
+        # Check if actor has permission to modify this user
+        # System admins can modify anyone, tenant admins can only modify users in their tenant
+        if not self.is_system_admin(actor_user):
+            if not self.is_tenant_admin(actor_user) or user.tenant_id != actor_user.tenant_id:
+                return False
+        
+        # Update role
+        user.role = new_role
+        db.commit()
+        return True
+    
+    def create_user_in_tenant(self, db: Session, email: str, password: str, first_name: str, 
+                             last_name: str, role: str, tenant_id: UUID, actor_user: User) -> Optional[User]:
+        """Create a user in a specific tenant with permission checking"""
+        # Check if actor has permission to create users in this tenant
+        if not self.is_system_admin(actor_user):
+            if not self.is_tenant_admin(actor_user) or tenant_id != actor_user.tenant_id:
+                return None
+        
+        # Check if user already exists
+        existing_user = self.get_user_by_email(db, email)
+        if existing_user:
+            return None
+        
+        # Create user
+        return self.create_user(db, email, password, first_name, last_name, UserRole(role), tenant_id)
 
 
 # Global auth service instance

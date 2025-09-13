@@ -189,16 +189,21 @@ export const LoginForm: React.FC = () => {
     }
   };
 
-  const fillDemoCredentials = (type: 'admin' | 'user') => {
+  const fillDemoCredentials = (type: 'admin' | 'user' | 'system_admin') => {
     if (type === 'admin') {
       setFormData({
         email: 'admin@docextract.com',
         password: 'admin123'
       });
-    } else {
+    } else if (type === 'user') {
       setFormData({
         email: 'user@docextract.com',
         password: 'admin123'
+      });
+    } else if (type === 'system_admin') {
+      setFormData({
+        email: 'system@docextract.com',
+        password: 'system123'
       });
     }
   };
@@ -266,7 +271,11 @@ export const LoginForm: React.FC = () => {
           <DemoText>Use these credentials to test the application:</DemoText>
           <DemoCredentialsList>
             <DemoCredential>
-              <DemoLabel>Admin:</DemoLabel>
+              <DemoLabel>System Admin:</DemoLabel>
+              <DemoValue>system@docextract.com / system123</DemoValue>
+            </DemoCredential>
+            <DemoCredential>
+              <DemoLabel>Tenant Admin:</DemoLabel>
               <DemoValue>admin@docextract.com / admin123</DemoValue>
             </DemoCredential>
             <DemoCredential>
@@ -274,14 +283,22 @@ export const LoginForm: React.FC = () => {
               <DemoValue>user@docextract.com / admin123</DemoValue>
             </DemoCredential>
           </DemoCredentialsList>
-          <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+          <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <Button
+              size="small"
+              variant="outline"
+              onClick={() => fillDemoCredentials('system_admin')}
+              disabled={isLoading}
+            >
+              Fill System Admin
+            </Button>
             <Button
               size="small"
               variant="outline"
               onClick={() => fillDemoCredentials('admin')}
               disabled={isLoading}
             >
-              Fill Admin
+              Fill Tenant Admin
             </Button>
             <Button
               size="small"

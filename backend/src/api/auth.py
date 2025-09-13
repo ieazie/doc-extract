@@ -70,14 +70,45 @@ async def get_current_tenant(
 
 
 # Dependency to check permissions
-def require_permission(permission: str):
-    """Dependency factory to check user permissions"""
+def require_permission(permission: str, allow_cross_tenant: bool = False):
+    """Dependency factory to check user permissions with tenant scoping"""
     def permission_checker(current_user: User = Depends(get_current_user)) -> User:
+        # Check basic permission
         if not auth_service.has_permission(current_user, permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied: {permission} required"
             )
+        
+        # For cross-tenant permissions, only system admins are allowed
+        if allow_cross_tenant and not auth_service.is_system_admin(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cross-tenant access requires system admin privileges"
+            )
+        
+        return current_user
+    return permission_checker
+
+
+# Enhanced dependency for tenant-scoped permissions
+def require_tenant_permission(permission: str, target_tenant_id: Optional[UUID] = None):
+    """Dependency factory to check permissions with specific tenant scoping"""
+    def permission_checker(current_user: User = Depends(get_current_user)) -> User:
+        # Check basic permission
+        if not auth_service.has_permission(current_user, permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {permission} required"
+            )
+        
+        # Check tenant access
+        if target_tenant_id and not auth_service.can_access_tenant(current_user, target_tenant_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: Cannot access tenant {target_tenant_id}"
+            )
+        
         return current_user
     return permission_checker
 
@@ -442,7 +473,7 @@ async def update_user(
 @router.post("/tenants", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
     tenant_data: TenantCreate,
-    current_user: User = Depends(require_permission("tenants:write")),
+    current_user: User = Depends(require_permission("tenants:create", allow_cross_tenant=True)),
     db: Session = Depends(get_db)
 ):
     """Create a new tenant (admin only)"""
@@ -469,7 +500,7 @@ async def create_tenant(
 
 @router.get("/tenants/all", response_model=List[TenantResponse])
 async def list_all_tenants(
-    current_user: User = Depends(require_permission("tenants:read")),
+    current_user: User = Depends(require_permission("tenants:read_all", allow_cross_tenant=True)),
     db: Session = Depends(get_db)
 ):
     """List all tenants (admin only)"""
@@ -496,6 +527,13 @@ async def get_tenant(
     db: Session = Depends(get_db)
 ):
     """Get tenant by ID (admin only)"""
+    # Check if user can access this tenant
+    if not auth_service.can_access_tenant(current_user, tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: Cannot access this tenant"
+        )
+    
     tenant = auth_service.get_tenant_by_id(db, tenant_id)
     if not tenant:
         raise HTTPException(
@@ -518,10 +556,17 @@ async def get_tenant(
 async def update_tenant(
     tenant_id: UUID,
     tenant_data: TenantUpdate,
-    current_user: User = Depends(require_permission("tenants:write")),
+    current_user: User = Depends(require_permission("tenants:update")),
     db: Session = Depends(get_db)
 ):
     """Update a tenant (admin only)"""
+    # Check if user can access this tenant
+    if not auth_service.can_access_tenant(current_user, tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: Cannot access this tenant"
+        )
+    
     tenant = auth_service.get_tenant_by_id(db, tenant_id)
     if not tenant:
         raise HTTPException(
@@ -560,6 +605,13 @@ async def delete_tenant(
     db: Session = Depends(get_db)
 ):
     """Delete a tenant (admin only)"""
+    # Check if user can access this tenant
+    if not auth_service.can_access_tenant(current_user, tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: Cannot access this tenant"
+        )
+    
     tenant = auth_service.get_tenant_by_id(db, tenant_id)
     if not tenant:
         raise HTTPException(

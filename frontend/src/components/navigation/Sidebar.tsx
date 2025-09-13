@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 // TenantSwitcher removed as per design requirements
 import { 
   BarChart3, 
+  Building2,
   FileText, 
   Settings, 
   Zap, 
@@ -122,6 +123,17 @@ const NavSection = styled.div`
   &:last-child {
     margin-bottom: 0;
   }
+`;
+
+const NavSectionTitle = styled.div<{ $isCollapsed: boolean }>`
+  font-size: ${props => props.theme.typography.sizes.xs};
+  font-weight: ${props => props.theme.typography.weights.semibold};
+  color: ${props => props.theme.colors.text.muted};
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: ${props => props.$isCollapsed ? '0' : `${props.theme.spacing.sm} ${props.theme.spacing.lg}`};
+  margin-bottom: ${props => props.$isCollapsed ? '0' : props.theme.spacing.sm};
+  display: ${props => props.$isCollapsed ? 'none' : 'block'};
 `;
 
 const NavItem = styled.a<{ $active: boolean; $isCollapsed: boolean }>`
@@ -350,10 +362,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ children, showHeader = false }
     { path: '/documents', icon: FileText, label: 'Documents', permission: 'documents:read' },
   ];
 
-  const managementItems: NavigationItem[] = [
+  const tenantManagementItems: NavigationItem[] = [
     { path: '/users', icon: Users, label: 'User Management', permission: 'users:read' },
     { path: '/api-keys', icon: Key, label: 'API Keys', permission: 'api-keys:read' },
+    { path: '/tenant-config', icon: Settings, label: 'Tenant Settings', permission: 'tenant_config:read' },
     { path: '/analytics', icon: BarChart3, label: 'Analytics', permission: 'analytics:read' },
+  ];
+
+  const systemAdminItems: NavigationItem[] = [
+    { path: '/system/tenants', icon: Building2, label: 'Tenant Management', permission: 'tenants:read_all', role: 'system_admin' },
+    { path: '/system/users', icon: Users, label: 'All Users', permission: 'users:read_all', role: 'system_admin' },
+    { path: '/system/analytics', icon: BarChart3, label: 'System Analytics', permission: 'analytics:global', role: 'system_admin' },
+    { path: '/system/config', icon: Settings, label: 'System Config', permission: 'system:config', role: 'system_admin' },
   ];
 
   // Support items removed as per design requirements
@@ -418,6 +438,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ children, showHeader = false }
         )}
 
         <Navigation>
+          {/* Main Navigation Items */}
           <NavSection>
             {navigationItems
               .filter(shouldShowItem)
@@ -434,9 +455,35 @@ export const Sidebar: React.FC<SidebarProps> = ({ children, showHeader = false }
               ))}
           </NavSection>
 
-          {managementItems.some(shouldShowItem) && (
+          {/* Tenant Management Items (for tenant admins and system admins) */}
+          {tenantManagementItems.some(shouldShowItem) && (
             <NavSection>
-              {managementItems
+              <NavSectionTitle $isCollapsed={isCollapsed}>
+                {!isCollapsed && "Management"}
+              </NavSectionTitle>
+              {tenantManagementItems
+                .filter(shouldShowItem)
+                .map((item) => (
+                  <NavItem
+                    key={item.path}
+                    href={item.path}
+                    $active={isActive(item.path)}
+                    $isCollapsed={isCollapsed}
+                  >
+                    <item.icon size={20} />
+                    <NavText $isCollapsed={isCollapsed}>{item.label}</NavText>
+                  </NavItem>
+                ))}
+            </NavSection>
+          )}
+
+          {/* System Admin Items (only for system admins) */}
+          {user?.role === 'system_admin' && systemAdminItems.some(shouldShowItem) && (
+            <NavSection>
+              <NavSectionTitle $isCollapsed={isCollapsed}>
+                {!isCollapsed && "System Admin"}
+              </NavSectionTitle>
+              {systemAdminItems
                 .filter(shouldShowItem)
                 .map((item) => (
                   <NavItem

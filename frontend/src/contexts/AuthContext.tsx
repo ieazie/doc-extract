@@ -53,6 +53,11 @@ export interface AuthContextType {
   // Permissions
   hasPermission: (permission: string) => boolean;
   hasRole: (role: string) => boolean;
+  
+  // Role helpers
+  isSystemAdmin: () => boolean;
+  isTenantAdmin: () => boolean;
+  isAdmin: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -235,6 +240,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     // Get user permissions based on role
     const permissions = {
+      // Legacy admin role (backward compatibility)
       admin: [
         'documents:read', 'documents:write', 'documents:delete',
         'templates:read', 'templates:write', 'templates:delete',
@@ -243,6 +249,51 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'tenants:read', 'tenants:write', 'tenants:delete',
         'api-keys:read', 'api-keys:write', 'api-keys:delete',
         'analytics:read'
+      ],
+      // New system admin role (platform-wide access)
+      system_admin: [
+        // Tenant Management (cross-tenant)
+        'tenants:create', 'tenants:read_all', 'tenants:update', 'tenants:delete',
+        'tenants:suspend', 'tenants:activate', 'tenants:configure',
+        
+        // System Configuration
+        'system:config', 'system:maintenance', 'system:backup',
+        
+        // Global Analytics
+        'analytics:global', 'analytics:cross_tenant', 'analytics:system',
+        
+        // Cross-tenant User Management
+        'users:create_global', 'users:read_all', 'users:assign_tenants',
+        'users:write', 'users:delete',
+        
+        // All content permissions (cross-tenant)
+        'documents:read', 'documents:write', 'documents:delete',
+        'templates:read', 'templates:write', 'templates:delete',
+        'extractions:read', 'extractions:write', 'extractions:delete',
+        
+        // API and Configuration
+        'api-keys:read', 'api-keys:write', 'api-keys:delete',
+        'analytics:read'
+      ],
+      // New tenant admin role (tenant-scoped access)
+      tenant_admin: [
+        // Tenant-scoped User Management
+        'users:read', 'users:write', 'users:delete', 'users:invite',
+        
+        // Tenant Configuration
+        'tenant:config_llm', 'tenant:config_limits', 'tenant:config_settings',
+        
+        // Tenant Analytics
+        'analytics:tenant', 'analytics:usage', 'analytics:performance',
+        'analytics:read',
+        
+        // Content Management (within tenant)
+        'documents:read', 'documents:write', 'documents:delete',
+        'templates:read', 'templates:write', 'templates:delete',
+        'extractions:read', 'extractions:write', 'extractions:delete',
+        
+        // API Management
+        'api-keys:read', 'api-keys:write', 'api-keys:delete'
       ],
       user: [
         'documents:read', 'documents:write', 'documents:delete',
@@ -264,6 +315,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const hasRole = (role: string): boolean => {
     return user?.role === role;
+  };
+
+  const isSystemAdmin = (): boolean => {
+    return user?.role === 'system_admin';
+  };
+
+  const isTenantAdmin = (): boolean => {
+    return user?.role === 'tenant_admin' || user?.role === 'admin'; // Include legacy admin
+  };
+
+  const isAdmin = (): boolean => {
+    return user?.role === 'system_admin' || user?.role === 'tenant_admin' || user?.role === 'admin';
   };
 
   const isAuthenticated = !!user && !!tokens;
@@ -289,7 +352,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshToken,
     switchTenant,
     hasPermission,
-    hasRole
+    hasRole,
+    isSystemAdmin,
+    isTenantAdmin,
+    isAdmin
   };
 
   return (
