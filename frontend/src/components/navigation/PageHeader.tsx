@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { Bell, Globe, Shield, ChevronDown, Users, Settings, ExternalLink } from 'lucide-react';
+import { Bell, Globe, Shield, ChevronDown, Users, Settings, ExternalLink, User, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/services/api';
 
@@ -115,7 +115,71 @@ const UserAvatar = styled.div`
   border-radius: 50%;
   font-weight: 600;
   font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #0056CC;
+  }
 `;
+
+const UserDropdown = styled.div<{ $isOpen: boolean }>`
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  z-index: ${props => props.theme.zIndex.dropdown};
+  opacity: ${props => props.$isOpen ? 1 : 0};
+  visibility: ${props => props.$isOpen ? 'visible' : 'hidden'};
+  transform: ${props => props.$isOpen ? 'translateY(0)' : 'translateY(-8px)'};
+  transition: all 0.2s ease;
+  margin-top: 4px;
+  overflow: hidden;
+  min-width: 280px;
+`;
+
+const UserDropdownHeader = styled.div`
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+`;
+
+const UserAvatarLarge = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: #007AFF;
+  color: white;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 1rem;
+`;
+
+const UserInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+`;
+
+const UserName = styled.div`
+  font-weight: ${props => props.theme.typography.weights.medium};
+  color: #1f2937;
+  font-size: 0.875rem;
+`;
+
+const UserEmail = styled.div`
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.125rem;
+`;
+
 
 // Tenant Switcher Components
 const TenantSwitcher = styled.div`
@@ -289,11 +353,12 @@ interface Tenant {
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
-  const { user, tenant, switchTenant, hasPermission } = useAuth();
+  const { user, tenant, switchTenant, hasPermission, logout } = useAuth();
   const [availableTenants, setAvailableTenants] = useState<Tenant[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoadingTenants, setIsLoadingTenants] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
 
   const getUserInitials = () => {
     if (!user) return 'U';
@@ -307,7 +372,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
       
       setIsLoadingTenants(true);
       try {
-        const tenants = await apiClient.getUserTenants();
+        let tenants;
+        if (user.role === 'system_admin') {
+          // System admin can see all tenants
+          tenants = await apiClient.getTenants();
+        } else {
+          // Regular users see only their assigned tenants
+          tenants = await apiClient.getUserTenants();
+        }
         setAvailableTenants(tenants);
       } catch (error) {
         console.error('Failed to load tenants:', error);
@@ -335,22 +407,37 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
 
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
+    setIsUserDropdownOpen(false); // Close user dropdown when tenant dropdown opens
   };
 
-  // Close dropdown when clicking outside
+  const toggleUserDropdown = () => {
+    setIsUserDropdownOpen(!isUserDropdownOpen);
+    setIsDropdownOpen(false); // Close tenant dropdown when user dropdown opens
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element;
-      if (!target.closest('[data-tenant-switcher]')) {
+      if (!target.closest('[data-tenant-switcher]') && !target.closest('[data-user-dropdown]')) {
         setIsDropdownOpen(false);
+        setIsUserDropdownOpen(false);
       }
     };
 
-    if (isDropdownOpen) {
+    if (isDropdownOpen || isUserDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [isDropdownOpen]);
+  }, [isDropdownOpen, isUserDropdownOpen]);
 
   return (
     <HeaderContainer className={className}>
@@ -440,9 +527,46 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
           <NotificationBadge />
         </NotificationButton>
         
-        <UserAvatar>
-          {getUserInitials()}
-        </UserAvatar>
+        <div style={{ position: 'relative' }} data-user-dropdown>
+          <UserAvatar onClick={toggleUserDropdown}>
+            {getUserInitials()}
+          </UserAvatar>
+          
+          <UserDropdown $isOpen={isUserDropdownOpen}>
+            <UserDropdownHeader>
+              <UserAvatarLarge>
+                {getUserInitials()}
+              </UserAvatarLarge>
+              <UserInfo>
+                <UserName>
+                  {user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User' : 'User'}
+                </UserName>
+                <UserEmail>
+                  {user?.email || 'user@example.com'}
+                </UserEmail>
+              </UserInfo>
+            </UserDropdownHeader>
+            
+            
+            <DropdownItem onClick={() => window.location.href = '/profile'}>
+              <DropdownItemIcon>
+                <User size={16} />
+              </DropdownItemIcon>
+              <DropdownItemText>
+                <DropdownItemName>Your profile</DropdownItemName>
+              </DropdownItemText>
+            </DropdownItem>
+            
+            <DropdownItem onClick={handleLogout}>
+              <DropdownItemIcon>
+                <LogOut size={16} />
+              </DropdownItemIcon>
+              <DropdownItemText>
+                <DropdownItemName>Log out</DropdownItemName>
+              </DropdownItemText>
+            </DropdownItem>
+          </UserDropdown>
+        </div>
       </HeaderRight>
     </HeaderContainer>
   );

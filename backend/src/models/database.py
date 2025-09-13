@@ -20,9 +20,13 @@ Base = declarative_base()
 
 # Enums for database
 class UserRoleEnum(str, enum.Enum):
+    # Legacy role (will be deprecated)
     ADMIN = "admin"
-    USER = "user"
-    VIEWER = "viewer"
+    # New role hierarchy
+    SYSTEM_ADMIN = "system_admin"    # Platform-wide admin
+    TENANT_ADMIN = "tenant_admin"    # Tenant admin
+    USER = "user"                    # Regular user
+    VIEWER = "viewer"                # Read-only user
 
 
 class UserStatusEnum(str, enum.Enum):
@@ -73,7 +77,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
-    role = Column(Enum(UserRoleEnum), default=UserRoleEnum.USER)
+    role = Column(String(20), default="user", nullable=False)
     status = Column(Enum(UserStatusEnum), default=UserStatusEnum.ACTIVE)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     last_login = Column(DateTime(timezone=True))

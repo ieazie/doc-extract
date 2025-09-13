@@ -23,20 +23,6 @@ export const FilterLabel = styled.label`
   color: #374151;
 `;
 
-export const FilterSelect = styled.select`
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  background: white;
-  font-size: 0.875rem;
-  min-width: 120px;
-  
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-`;
 
 export const SearchInputWrapper = styled.div`
   position: relative;
@@ -51,15 +37,33 @@ export const SearchInput = styled.input`
   border-radius: 0.375rem;
   background: white;
   font-size: 0.875rem;
-  min-width: 250px;
-  width: 250px;
+  min-width: 200px;
+  width: 200px;
   transition: width 0.3s ease, border-color 0.2s ease;
   
   &:focus {
     outline: none;
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-    width: 350px;
+    width: 300px;
+  }
+`;
+
+export const DateInput = styled.input`
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: white;
+  font-size: 0.875rem;
+  width: 140px;
+  min-width: 140px;
+  max-width: 140px;
+  flex-shrink: 0;
+  
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 `;
 

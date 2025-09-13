@@ -7,8 +7,8 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc, asc, and_, or_, func
-from pydantic import BaseModel, Field
+from sqlalchemy import desc, asc, or_
+from pydantic import BaseModel
 
 from ..models.database import Document, DocumentType, DocumentCategory, DocumentTag, SessionLocal
 from ..core.document_processor import document_processor
@@ -83,8 +83,8 @@ def get_db():
 
 
 # Import authentication dependencies
-from .auth import get_current_user, get_current_tenant, require_permission
-from ..models.database import User, Tenant
+from .auth import require_permission
+from ..models.database import User
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)

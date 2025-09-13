@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
+import Dropdown from '@/components/ui/Dropdown';
 import { 
   FilterBar, 
   FilterGroup, 
   FilterLabel, 
-  FilterSelect, 
   SearchInputWrapper,
   SearchInput,
+  DateInput,
   SearchIcon,
   ClearButton,
   TableContainer,
@@ -348,19 +349,18 @@ export const Table = <T extends Record<string, any>>({
             <FilterGroup key={filter.key}>
               <FilterLabel>{filter.label}</FilterLabel>
               {filter.type === 'select' ? (
-                <FilterSelect
+                <Dropdown
                   value={onFilterChange ? (filterValues[filter.key] || '') : localFilters[filter.key] || ''}
-                  onChange={(e) => handleFilterChange(filter.key, e.target.value)}
-                >
-                  <option value="">All {filter.label}</option>
-                  {filter.options?.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </FilterSelect>
+                  onChange={(value) => handleFilterChange(filter.key, value)}
+                  options={[
+                    { value: '', label: `All ${filter.label}` },
+                    ...(filter.options || [])
+                  ]}
+                  placeholder={`Select ${filter.label}`}
+                  size="compact"
+                />
               ) : filter.type === 'date' ? (
-                <SearchInput
+                <DateInput
                   type="date"
                   value={onFilterChange ? (filterValues[filter.key] || '') : localFilters[filter.key] || ''}
                   onChange={(e) => handleFilterChange(filter.key, e.target.value)}
@@ -393,15 +393,18 @@ export const Table = <T extends Record<string, any>>({
           {(pagination || isClientPagination) && (
             <FilterGroup>
               <FilterLabel>Per Page</FilterLabel>
-              <FilterSelect
-                value={isServerPagination ? pagination?.perPage : localPagination.perPage}
-                onChange={(e) => handlePerPageChange(Number(e.target.value))}
-              >
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </FilterSelect>
+              <Dropdown
+                value={isServerPagination ? pagination?.perPage?.toString() : localPagination.perPage.toString()}
+                onChange={(value) => handlePerPageChange(Number(value))}
+                options={[
+                  { value: "10", label: "10" },
+                  { value: "25", label: "25" },
+                  { value: "50", label: "50" },
+                  { value: "100", label: "100" }
+                ]}
+                placeholder="Select per page"
+                size="compact"
+              />
             </FilterGroup>
           )}
         </FilterBar>

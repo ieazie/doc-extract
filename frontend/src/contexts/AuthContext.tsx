@@ -9,7 +9,7 @@ export interface User {
   last_name: string;
   role: string;
   status: string;
-  tenant_id: string;
+  tenant_id: string | null;  // Allow null for system admin users
   last_login?: string;
   created_at: string;
   updated_at: string;
@@ -53,6 +53,11 @@ export interface AuthContextType {
   // Permissions
   hasPermission: (permission: string) => boolean;
   hasRole: (role: string) => boolean;
+  
+  // Role helpers
+  isSystemAdmin: () => boolean;
+  isTenantAdmin: () => boolean;
+  isAdmin: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -75,10 +80,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const storedUser = localStorage.getItem('auth_user');
         const storedTenant = localStorage.getItem('auth_tenant');
 
-        if (storedTokens && storedUser && storedTenant) {
+        if (storedTokens && storedUser) {
           const parsedTokens = JSON.parse(storedTokens);
           const parsedUser = JSON.parse(storedUser);
-          const parsedTenant = JSON.parse(storedTenant);
+          
+          // Parse tenant data if it exists (system admin users might not have tenant data)
+          let parsedTenant = null;
+          if (storedTenant) {
+            parsedTenant = JSON.parse(storedTenant);
+          }
 
           // Set the token in the API client
           apiClient.setAuthToken(parsedTokens.access_token);
@@ -91,7 +101,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Verify token in the background (non-blocking)
           try {
             const currentUser = await apiClient.getCurrentUser();
-            const currentTenant = await apiClient.getCurrentTenant();
+            
+            // Only fetch tenant data for non-system-admin users
+            let currentTenant = null;
+            if (currentUser.role !== 'system_admin' && currentUser.tenant_id) {
+              try {
+                currentTenant = await apiClient.getCurrentTenant();
+              } catch (tenantError: any) {
+                console.warn('Failed to fetch tenant data during verification:', tenantError.message);
+                // Don't fail the entire verification for tenant fetch errors
+              }
+            }
             
             // Update with fresh data if verification succeeds
             setUser(currentUser);
@@ -164,14 +184,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
       setUser(response.user);
       
-      // Get tenant information
+      // Get tenant information (skip for system admin users)
       let tenantData = null;
-      try {
-        tenantData = await apiClient.getCurrentTenant();
-        setTenant(tenantData);
-      } catch (error: any) {
-        console.error('Failed to get tenant data after login:', error);
-        // Don't throw here - login was successful, tenant data can be fetched later
+      if (response.user.role !== 'system_admin' && response.user.tenant_id) {
+        try {
+          tenantData = await apiClient.getCurrentTenant();
+          setTenant(tenantData);
+        } catch (error: any) {
+          console.error('Failed to get tenant data after login:', error);
+          // Don't throw here - login was successful, tenant data can be fetched later
+          setTenant(null);
+        }
+      } else {
+        // System admin users don't have a tenant
         setTenant(null);
       }
       
@@ -235,14 +260,50 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     // Get user permissions based on role
     const permissions = {
-      admin: [
+      // New system admin role (platform-wide access)
+      system_admin: [
+        // Tenant Management (cross-tenant)
+        'tenants:create', 'tenants:read_all', 'tenants:update', 'tenants:delete',
+        'tenants:suspend', 'tenants:activate', 'tenants:configure',
+        
+        // System Configuration
+        'system:config', 'system:maintenance', 'system:backup',
+        
+        // Global Analytics
+        'analytics:global', 'analytics:cross_tenant', 'analytics:system',
+        
+        // Cross-tenant User Management
+        'users:create_global', 'users:read_all', 'users:assign_tenants',
+        'users:write', 'users:delete',
+        
+        // All content permissions (cross-tenant)
         'documents:read', 'documents:write', 'documents:delete',
         'templates:read', 'templates:write', 'templates:delete',
         'extractions:read', 'extractions:write', 'extractions:delete',
-        'users:read', 'users:write', 'users:delete',
-        'tenants:read', 'tenants:write', 'tenants:delete',
+        
+        // API and Configuration
         'api-keys:read', 'api-keys:write', 'api-keys:delete',
         'analytics:read'
+      ],
+      // New tenant admin role (tenant-scoped access)
+      tenant_admin: [
+        // Tenant-scoped User Management
+        'users:read', 'users:write', 'users:delete', 'users:invite',
+        
+        // Tenant Configuration
+        'tenant:config_llm', 'tenant:config_limits', 'tenant:config_settings',
+        
+        // Tenant Analytics
+        'analytics:tenant', 'analytics:usage', 'analytics:performance',
+        'analytics:read',
+        
+        // Content Management (within tenant)
+        'documents:read', 'documents:write', 'documents:delete',
+        'templates:read', 'templates:write', 'templates:delete',
+        'extractions:read', 'extractions:write', 'extractions:delete',
+        
+        // API Management
+        'api-keys:read', 'api-keys:write', 'api-keys:delete'
       ],
       user: [
         'documents:read', 'documents:write', 'documents:delete',
@@ -264,6 +325,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const hasRole = (role: string): boolean => {
     return user?.role === role;
+  };
+
+  const isSystemAdmin = (): boolean => {
+    return user?.role === 'system_admin';
+  };
+
+  const isTenantAdmin = (): boolean => {
+    return user?.role === 'tenant_admin';
+  };
+
+  const isAdmin = (): boolean => {
+    return user?.role === 'system_admin' || user?.role === 'tenant_admin';
   };
 
   const isAuthenticated = !!user && !!tokens;
@@ -289,7 +362,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshToken,
     switchTenant,
     hasPermission,
-    hasRole
+    hasRole,
+    isSystemAdmin,
+    isTenantAdmin,
+    isAdmin
   };
 
   return (

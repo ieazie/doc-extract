@@ -43,6 +43,7 @@ interface CreateUserData {
   first_name: string;
   last_name: string;
   role: string;
+  tenant_id?: string;
 }
 
 interface UpdateUserData {
@@ -272,11 +273,23 @@ const ModalActions = styled.div`
 
 // Main Component
 const UsersPage: React.FC = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isSystemAdmin, isTenantAdmin, hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Check if user has permission to access user management
+  if (!hasPermission('users:read')) {
+    return (
+      <PageContainer>
+        <PageHeader>
+          <PageTitle>Access Denied</PageTitle>
+        </PageHeader>
+        <ErrorMessage message="You don't have permission to access user management." />
+      </PageContainer>
+    );
+  }
 
   // Fetch users
   const { data: users, isLoading, error } = useQuery<User[]>(
@@ -329,6 +342,12 @@ const UsersPage: React.FC = () => {
       last_name: formData.get('last_name') as string,
       role: formData.get('role') as string,
     };
+    
+    // Add tenant_id for system admins
+    if (isSystemAdmin() && formData.get('tenant_id')) {
+      userData.tenant_id = formData.get('tenant_id') as string;
+    }
+    
     createUserMutation.mutate(userData);
   };
 
@@ -383,7 +402,7 @@ const UsersPage: React.FC = () => {
       key: 'user',
       label: 'User',
       width: '2fr',
-      align: 'left',
+      align: 'left' as const,
       render: (_, user) => (
         <UserInfo>
           <UserAvatar>
@@ -400,7 +419,7 @@ const UsersPage: React.FC = () => {
       key: 'role',
       label: 'Role',
       width: '1fr',
-      align: 'left',
+      align: 'left' as const,
       render: (_, user) => (
         <RoleBadge $role={user.role}>
           {getRoleIcon(user.role)}
@@ -408,11 +427,22 @@ const UsersPage: React.FC = () => {
         </RoleBadge>
       )
     },
+    ...(isSystemAdmin() ? [{
+      key: 'tenant',
+      label: 'Tenant',
+      width: '1fr',
+      align: 'left' as const,
+      render: (_: any, user: User) => (
+        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+          {user.tenant_id || 'N/A'}
+        </span>
+      )
+    }] : []),
     {
       key: 'status',
       label: 'Status',
       width: '1fr',
-      align: 'left',
+      align: 'left' as const,
       render: (_, user) => (
         <StatusBadge $status={user.status}>
           {getStatusIcon(user.status)}
@@ -424,29 +454,50 @@ const UsersPage: React.FC = () => {
       key: 'last_login',
       label: 'Last Login',
       width: '1fr',
-      align: 'left',
+      align: 'left' as const,
       render: (_, user) => formatDate(user.last_login)
     },
     {
       key: 'created_at',
       label: 'Created',
       width: '1fr',
-      align: 'left',
+      align: 'left' as const,
       render: (_, user) => formatDate(user.created_at)
     }
   ];
 
   // Actions for each row
-  const renderActions = (user: User) => (
-    <ActionGroup>
-      <ActionButton
-        onClick={() => setEditingUser(user)}
-        title="Edit user"
-      >
-        <Edit size={16} />
-      </ActionButton>
-    </ActionGroup>
-  );
+  const renderActions = (user: User) => {
+    // Check if current user can edit this user
+    const canEdit = hasPermission('users:write') && (
+      isSystemAdmin() || // System admins can edit anyone
+      (isTenantAdmin() && user.tenant_id === currentUser?.tenant_id) // Tenant admins can only edit users in their tenant
+    );
+
+    if (!canEdit) {
+      return (
+        <ActionGroup>
+          <ActionButton
+            title="View user"
+            disabled
+          >
+            <Eye size={16} />
+          </ActionButton>
+        </ActionGroup>
+      );
+    }
+
+    return (
+      <ActionGroup>
+        <ActionButton
+          onClick={() => setEditingUser(user)}
+          title="Edit user"
+        >
+          <Edit size={16} />
+        </ActionButton>
+      </ActionGroup>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -473,7 +524,7 @@ const UsersPage: React.FC = () => {
           </PageTitle>
           <Button
             onClick={() => setShowCreateModal(true)}
-            disabled={currentUser?.role !== 'admin'}
+            disabled={!hasPermission('users:write')}
           >
             <Plus size={16} />
             Add User
@@ -557,11 +608,22 @@ const UsersPage: React.FC = () => {
                 <FormGroup>
                   <Label htmlFor="role">Role</Label>
                   <Select id="role" name="role" defaultValue="user">
-                    <option value="admin">Admin</option>
+                    {isSystemAdmin() && <option value="system_admin">System Admin</option>}
+                    <option value="tenant_admin">Tenant Admin</option>
                     <option value="user">User</option>
                     <option value="viewer">Viewer</option>
                   </Select>
                 </FormGroup>
+                {isSystemAdmin() && (
+                  <FormGroup>
+                    <Label htmlFor="tenant_id">Tenant</Label>
+                    <Select id="tenant_id" name="tenant_id" required>
+                      <option value="">Select Tenant</option>
+                      {/* TODO: Fetch tenants from API */}
+                      <option value="00000000-0000-0000-0000-000000000001">Default Tenant</option>
+                    </Select>
+                  </FormGroup>
+                )}
                 <ModalActions>
                   <Button
                     type="button"
@@ -620,7 +682,8 @@ const UsersPage: React.FC = () => {
                     name="role"
                     defaultValue={editingUser.role}
                   >
-                    <option value="admin">Admin</option>
+                    <option value="system_admin">System Admin</option>
+                    <option value="tenant_admin">Tenant Admin</option>
                     <option value="user">User</option>
                     <option value="viewer">Viewer</option>
                   </Select>
