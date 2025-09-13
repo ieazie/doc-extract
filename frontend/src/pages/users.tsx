@@ -610,7 +610,6 @@ const UsersPage: React.FC = () => {
                   <Select id="role" name="role" defaultValue="user">
                     {isSystemAdmin() && <option value="system_admin">System Admin</option>}
                     <option value="tenant_admin">Tenant Admin</option>
-                    <option value="admin">Admin (Legacy)</option>
                     <option value="user">User</option>
                     <option value="viewer">Viewer</option>
                   </Select>
@@ -685,7 +684,6 @@ const UsersPage: React.FC = () => {
                   >
                     <option value="system_admin">System Admin</option>
                     <option value="tenant_admin">Tenant Admin</option>
-                    <option value="admin">Admin (Legacy)</option>
                     <option value="user">User</option>
                     <option value="viewer">Viewer</option>
                   </Select>

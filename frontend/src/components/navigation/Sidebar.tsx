@@ -149,6 +149,8 @@ const NavItem = styled.a<{ $active: boolean; $isCollapsed: boolean }>`
   position: relative;
   border-radius: ${props => props.theme.borderRadius.md};
   margin: ${props => props.$isCollapsed ? `0 ${props.theme.spacing.sm}` : '0'};
+  border: none;
+  outline: none;
   
   svg {
     flex-shrink: 0;
@@ -161,11 +163,20 @@ const NavItem = styled.a<{ $active: boolean; $isCollapsed: boolean }>`
     background: ${props => props.theme.colors.surfaceHover};
     color: ${props => props.theme.colors.primary};
     transform: ${props => props.$isCollapsed ? 'scale(1.1)' : 'translateX(4px)'};
+    text-decoration: none;
+  }
+  
+  &:focus,
+  &:active {
+    outline: none;
+    border: none;
+    text-decoration: none;
   }
   
   ${props => props.$active && `
     background: ${props.theme.colors.primary}15;
     color: ${props.theme.colors.primary};
+    text-decoration: none;
     
     &::before {
       content: '';

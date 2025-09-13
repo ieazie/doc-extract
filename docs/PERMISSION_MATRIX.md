@@ -16,17 +16,13 @@ This document defines the comprehensive permission matrix for the Document Extra
 - **Purpose**: Tenant-specific user and content management
 - **Access**: Own tenant only
 
-### 3. **Legacy Admin** (`admin`)
-- **Scope**: Single tenant (backward compatibility)
-- **Purpose**: Full tenant admin access (same as tenant_admin)
-- **Access**: Own tenant only
 
-### 4. **User** (`user`)
+### 3. **User** (`user`)
 - **Scope**: Single tenant, standard access
 - **Purpose**: Regular content management and extraction
 - **Access**: Own tenant content only
 
-### 5. **Viewer** (`viewer`)
+### 4. **Viewer** (`viewer`)
 - **Scope**: Single tenant, read-only access
 - **Purpose**: Read-only content viewing
 - **Access**: Own tenant content only (read)
@@ -35,8 +31,8 @@ This document defines the comprehensive permission matrix for the Document Extra
 
 ## 📊 Permission Matrix
 
-| Permission Category | System Admin | Tenant Admin | Legacy Admin | User | Viewer |
-|-------------------|-------------|-------------|-------------|------|--------|
+| Permission Category | System Admin | Tenant Admin | User | Viewer |
+|-------------------|-------------|-------------|------|--------|
 | **Cross-Tenant Operations** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Tenant Management** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **User Management** | ✅ | ✅ | ✅ | ❌ | ❌ |
@@ -134,9 +130,6 @@ This document defines the comprehensive permission matrix for the Document Extra
 
 ---
 
-### **Legacy Admin Permissions**
-
-Same as Tenant Admin - maintained for backward compatibility.
 
 ---
 
@@ -203,7 +196,6 @@ Same as Tenant Admin - maintained for backward compatibility.
 ### **Permission Inheritance**
 - Higher roles inherit all permissions from lower roles
 - System Admin > Tenant Admin > User > Viewer
-- Legacy Admin has same permissions as Tenant Admin
 
 ---
 

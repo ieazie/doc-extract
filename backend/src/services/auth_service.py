@@ -148,17 +148,6 @@ class AuthService:
     def get_user_permissions(self, user: User) -> List[str]:
         """Get user permissions based on role"""
         permissions = {
-            UserRole.ADMIN: [
-                "documents:read", "documents:write", "documents:delete",
-                "templates:read", "templates:write", "templates:delete",
-                "extractions:read", "extractions:write", "extractions:delete",
-                "categories:read", "categories:write", "categories:delete",
-                "users:read", "users:write", "users:delete",
-                "tenants:read", "tenants:write", "tenants:delete",
-                "api-keys:read", "api-keys:write", "api-keys:delete",
-                "tenant_config:read", "tenant_config:write", "tenant_config:delete",
-                "analytics:read"
-            ],
             UserRole.SYSTEM_ADMIN: [
                 # Cross-tenant Tenant Management
                 "tenants:create", "tenants:read_all", "tenants:update", "tenants:delete",
@@ -328,7 +317,18 @@ class AuthService:
         if not user:
             return False
         
-        # Check if user has access to the tenant
+        # System admin users can switch to any tenant
+        if user.role == UserRole.SYSTEM_ADMIN:
+            # Verify the tenant exists
+            tenant = self.get_tenant_by_id(db, tenant_id)
+            if not tenant:
+                return False
+            
+            # For system admin, we don't update their tenant_id in the database
+            # Instead, we just return success - the frontend will handle the context switch
+            return True
+        
+        # For regular users, check if they have access to the tenant
         user_tenants = self.get_user_tenants(db, user_id)
         tenant_ids = [t.id for t in user_tenants]
         
@@ -348,12 +348,12 @@ class AuthService:
         return user.role == UserRole.SYSTEM_ADMIN.value
     
     def is_tenant_admin(self, user: User) -> bool:
-        """Check if user is a tenant admin (including legacy admin)"""
-        return user.role in [UserRole.TENANT_ADMIN.value, UserRole.ADMIN.value]
+        """Check if user is a tenant admin"""
+        return user.role == UserRole.TENANT_ADMIN.value
     
     def is_admin(self, user: User) -> bool:
         """Check if user has admin privileges (system or tenant)"""
-        return user.role in [UserRole.SYSTEM_ADMIN.value, UserRole.TENANT_ADMIN.value, UserRole.ADMIN.value]
+        return user.role in [UserRole.SYSTEM_ADMIN.value, UserRole.TENANT_ADMIN.value]
     
     def can_access_tenant(self, user: User, target_tenant_id: UUID) -> bool:
         """Check if user can access a specific tenant"""

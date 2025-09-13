@@ -15,7 +15,7 @@ from ..schemas.auth import (
     TenantCreate, TenantResponse, TenantUpdate, TenantStatus,
     APIKeyCreate, APIKeyResponse, APIKeyListResponse,
     PasswordChange, PasswordReset, PasswordResetConfirm,
-    TenantSwitch, PermissionResponse, UserRole, UserStatus
+    TenantSwitch, PermissionResponse, UserStatus
 )
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ async def login_user(
         
         # Create access token
         access_token = auth_service.create_access_token(
-            data={"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id)}
+            data={"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None}
         )
         
         return TokenResponse(

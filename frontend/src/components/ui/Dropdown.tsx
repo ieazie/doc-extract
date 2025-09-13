@@ -2,14 +2,16 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { ChevronDown } from 'lucide-react';
 
-const DropdownContainer = styled.div`
+const DropdownContainer = styled.div<{ $size?: 'default' | 'compact' }>`
   position: relative;
   width: 100%;
+  min-width: ${props => props.$size === 'compact' ? '140px' : 'auto'};
+  flex-shrink: 0;
 `;
 
-const DropdownButton = styled.button<{ $isOpen: boolean; $hasError?: boolean }>`
+const DropdownButton = styled.button<{ $isOpen: boolean; $hasError?: boolean; $size?: 'default' | 'compact' }>`
   width: 100%;
-  padding: 0.75rem 1rem;
+  padding: ${props => props.$size === 'compact' ? '0.5rem' : '0.75rem 1rem'};
   border: 1px solid ${props => props.$hasError ? props.theme.colors.error : props.theme.colors.border};
   border-radius: 8px;
   background: white;
@@ -64,12 +66,13 @@ const DropdownList = styled.ul<{ $isOpen: boolean }>`
   display: ${props => props.$isOpen ? 'block' : 'none'};
 `;
 
-const DropdownItem = styled.li<{ $isSelected?: boolean; $isDisabled?: boolean }>`
-  padding: 0.75rem 1rem;
+const DropdownItem = styled.li<{ $isSelected?: boolean; $isDisabled?: boolean; $size?: 'default' | 'compact' }>`
+  padding: ${props => props.$size === 'compact' ? '0.5rem' : '0.75rem 1rem'};
   cursor: pointer;
   color: ${props => props.$isDisabled ? props.theme.colors.text.muted : props.theme.colors.text.primary};
   background: ${props => props.$isSelected ? `${props.theme.colors.primary}10` : 'transparent'};
   transition: background-color 0.15s ease;
+  font-size: ${props => props.$size === 'compact' ? '0.8rem' : '0.875rem'};
   
   &:hover {
     background: ${props => props.$isDisabled ? 'transparent' : props.theme.colors.surfaceHover};
@@ -104,6 +107,7 @@ interface DropdownProps {
   disabled?: boolean;
   hasError?: boolean;
   className?: string;
+  size?: 'default' | 'compact';
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -113,7 +117,8 @@ const Dropdown: React.FC<DropdownProps> = ({
   onChange,
   disabled = false,
   hasError = false,
-  className
+  className,
+  size = 'default'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -145,12 +150,13 @@ const Dropdown: React.FC<DropdownProps> = ({
   };
 
   return (
-    <DropdownContainer ref={dropdownRef} className={className}>
+    <DropdownContainer ref={dropdownRef} className={className} $size={size}>
       <DropdownButton
         type="button"
         onClick={handleToggle}
         $isOpen={isOpen}
         $hasError={hasError}
+        $size={size}
         disabled={disabled}
       >
         {selectedOption ? (
@@ -168,6 +174,7 @@ const Dropdown: React.FC<DropdownProps> = ({
             onClick={() => handleSelect(option.value)}
             $isSelected={option.value === value}
             $isDisabled={option.disabled}
+            $size={size}
           >
             {option.label}
           </DropdownItem>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { Bell, Globe, Shield, ChevronDown, Users, Settings, ExternalLink, User, LogOut, Sun, Moon } from 'lucide-react';
+import { Bell, Globe, Shield, ChevronDown, Users, Settings, ExternalLink, User, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/services/api';
 
@@ -180,33 +180,6 @@ const UserEmail = styled.div`
   margin-top: 0.125rem;
 `;
 
-const ThemeSelector = styled.div`
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-`;
-
-const ThemeLabel = styled.span`
-  font-size: 0.875rem;
-  color: #1f2937;
-`;
-
-const ThemeDropdown = styled.select`
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-  background: white;
-  color: #1f2937;
-  cursor: pointer;
-  
-  &:focus {
-    outline: none;
-    border-color: #007AFF;
-  }
-`;
 
 // Tenant Switcher Components
 const TenantSwitcher = styled.div`
@@ -386,7 +359,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
   const [isLoadingTenants, setIsLoadingTenants] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
-  const [theme, setTheme] = useState('light');
 
   const getUserInitials = () => {
     if (!user) return 'U';
@@ -400,7 +372,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
       
       setIsLoadingTenants(true);
       try {
-        const tenants = await apiClient.getUserTenants();
+        let tenants;
+        if (user.role === 'system_admin') {
+          // System admin can see all tenants
+          tenants = await apiClient.getTenants();
+        } else {
+          // Regular users see only their assigned tenants
+          tenants = await apiClient.getUserTenants();
+        }
         setAvailableTenants(tenants);
       } catch (error) {
         console.error('Failed to load tenants:', error);
@@ -568,19 +547,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
               </UserInfo>
             </UserDropdownHeader>
             
-            <ThemeSelector>
-              <ThemeLabel>Theme</ThemeLabel>
-              <ThemeDropdown 
-                value={theme} 
-                onChange={(e) => setTheme(e.target.value)}
-              >
-                <option value="light">☀️ Light</option>
-                <option value="dark">🌙 Dark</option>
-                <option value="system">🖥️ System</option>
-              </ThemeDropdown>
-            </ThemeSelector>
-            
-            <DropdownSeparator />
             
             <DropdownItem onClick={() => window.location.href = '/profile'}>
               <DropdownItemIcon>

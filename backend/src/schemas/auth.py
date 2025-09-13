@@ -10,9 +10,6 @@ from datetime import datetime
 
 class UserRole(str, Enum):
     """User roles for role-based access control"""
-    # Legacy role (will be deprecated)
-    ADMIN = "admin"
-    # New role hierarchy
     SYSTEM_ADMIN = "system_admin"    # Platform-wide admin
     TENANT_ADMIN = "tenant_admin"    # Tenant admin
     USER = "user"                    # Regular user
@@ -61,7 +58,7 @@ class UserResponse(BaseModel):
     last_name: str
     role: str  # Changed from UserRole enum to string for database compatibility
     status: UserStatus
-    tenant_id: UUID
+    tenant_id: Optional[UUID]  # Allow NULL for system admin users
     last_login: Optional[datetime]
     created_at: datetime
     updated_at: datetime

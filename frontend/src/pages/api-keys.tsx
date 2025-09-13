@@ -421,7 +421,10 @@ const ApiKeysPage: React.FC = () => {
         data={apiKeys}
         columns={columns}
         loading={false}
-        emptyMessage="No API keys found"
+        emptyState={{
+          title: "No API keys found",
+          description: "Create your first API key to get started."
+        }}
       />
 
       {/* Create API Key Modal */}
