@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, asc, or_
 from pydantic import BaseModel
 
-from ..models.database import Document, DocumentType, DocumentCategory, DocumentTag, SessionLocal
+from ..models.database import Document, DocumentType, DocumentCategory, DocumentTag, DocumentExtractionTracking, ExtractionJob, SessionLocal
 from ..core.document_processor import document_processor
 from ..services.background_tasks import background_task_service
 from ..services.s3_service import s3_service
@@ -71,6 +71,59 @@ class DocumentStatsResponse(BaseModel):
     status_counts: Dict[str, int]
     processing_rate: Dict[str, float]
     completion_rate: float
+
+
+class DocumentTrackingResponse(BaseModel):
+    """Document extraction tracking response"""
+    id: UUID
+    document_id: UUID
+    job_id: UUID
+    extraction_id: Optional[UUID]
+    status: str
+    triggered_by: str
+    queued_at: str
+    started_at: Optional[str]
+    completed_at: Optional[str]
+    processing_time_ms: Optional[int]
+    error_message: Optional[str]
+    retry_count: int
+    created_at: str
+    updated_at: str
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentWithTrackingResponse(BaseModel):
+    """Enhanced document response with job tracking information"""
+    id: UUID
+    tenant_id: UUID
+    original_filename: str
+    file_size: int
+    mime_type: Optional[str]
+    document_type: Optional[str]
+    category: Optional[Dict[str, Any]]
+    tags: List[str]
+    status: str
+    extraction_status: str
+    extraction_error: Optional[str]
+    page_count: Optional[int]
+    character_count: Optional[int]
+    word_count: Optional[int]
+    has_thumbnail: bool
+    is_test_document: bool
+    created_at: str
+    updated_at: str
+    extraction_completed_at: Optional[str]
+    # Job tracking information
+    job_tracking: List[DocumentTrackingResponse]
+    total_jobs_processed: int
+    successful_jobs: int
+    failed_jobs: int
+    pending_jobs: int
+
+    class Config:
+        from_attributes = True
 
 
 # Database dependency
@@ -309,6 +362,217 @@ async def list_documents(
         
     except Exception as e:
         logger.error(f"Document listing failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
+
+
+@router.get("/with-tracking", response_model=DocumentListResponse)
+async def list_documents_with_tracking(
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(20, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search in filename and content"),
+    category_id: Optional[str] = Query(None, description="Filter by category"),
+    document_type_id: Optional[str] = Query(None, description="Filter by document type"),
+    tags: Optional[str] = Query(None, description="Filter by tags (comma-separated)"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    extraction_status: Optional[str] = Query(None, description="Filter by extraction status"),
+    job_status: Optional[str] = Query(None, description="Filter by job processing status"),
+    sort_by: str = Query("created_at", description="Sort field"),
+    sort_order: str = Query("desc", description="Sort order (asc/desc)"),
+    include_tracking: bool = Query(True, description="Include job tracking information"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("documents:read"))
+):
+    """
+    List documents with job tracking information
+    
+    - **page**: Page number (starts from 1)
+    - **per_page**: Number of items per page (max 100)
+    - **search**: Search term for filename and content
+    - **category_id**: Filter by category UUID
+    - **document_type_id**: Filter by document type UUID
+    - **tags**: Comma-separated list of tags to filter by
+    - **status**: Filter by document status
+    - **extraction_status**: Filter by extraction status
+    - **job_status**: Filter by job processing status (pending, processing, completed, failed)
+    - **sort_by**: Field to sort by
+    - **sort_order**: Sort order (asc/desc)
+    - **include_tracking**: Include job tracking information in response
+    """
+    try:
+        # Build base query with tracking data if requested
+        if include_tracking:
+            query = db.query(Document).options(
+                joinedload(Document.document_type),
+                joinedload(Document.category),
+                joinedload(Document.tags),
+                joinedload(Document.extraction_tracking).joinedload(DocumentExtractionTracking.job)
+            ).filter(Document.tenant_id == current_user.tenant_id)
+        else:
+            query = db.query(Document).options(
+                joinedload(Document.document_type),
+                joinedload(Document.category),
+                joinedload(Document.tags)
+            ).filter(Document.tenant_id == current_user.tenant_id)
+        
+        # Apply filters
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Document.original_filename.ilike(search_term),
+                    Document.raw_content.ilike(search_term)
+                )
+            )
+        
+        if category_id:
+            query = query.filter(Document.category_id == UUID(category_id))
+        
+        if document_type_id:
+            query = query.filter(Document.document_type_id == UUID(document_type_id))
+        
+        if status:
+            query = query.filter(Document.status == status)
+        
+        if extraction_status:
+            query = query.filter(Document.extraction_status == extraction_status)
+        
+        if tags:
+            tag_list = [tag.strip() for tag in tags.split(",")]
+            # Filter documents that have ANY of the specified tags
+            query = query.join(DocumentTag).filter(
+                DocumentTag.tag_name.in_(tag_list)
+            ).distinct()
+        
+        # Filter by job status if specified
+        if job_status:
+            if include_tracking:
+                # Filter documents that have tracking records with the specified status
+                query = query.join(DocumentExtractionTracking).filter(
+                    DocumentExtractionTracking.status == job_status
+                ).distinct()
+            else:
+                # Need to include tracking data for job status filtering
+                query = query.options(
+                    joinedload(Document.extraction_tracking)
+                ).join(DocumentExtractionTracking).filter(
+                    DocumentExtractionTracking.status == job_status
+                ).distinct()
+        
+        # Apply sorting
+        sort_column = getattr(Document, sort_by, Document.created_at)
+        if sort_order.lower() == "asc":
+            query = query.order_by(asc(sort_column))
+        else:
+            query = query.order_by(desc(sort_column))
+        
+        # Count total items
+        total = query.count()
+        
+        # Apply pagination
+        offset = (page - 1) * per_page
+        documents = query.offset(offset).limit(per_page).all()
+        
+        # Convert to response format
+        document_responses = []
+        for doc in documents:
+            if include_tracking:
+                # Calculate job statistics
+                tracking_records = doc.extraction_tracking
+                total_jobs = len(tracking_records)
+                successful_jobs = len([t for t in tracking_records if t.status == 'completed'])
+                failed_jobs = len([t for t in tracking_records if t.status == 'failed'])
+                pending_jobs = len([t for t in tracking_records if t.status in ['pending', 'processing']])
+                
+                # Convert tracking records
+                job_tracking = []
+                for record in tracking_records:
+                    job_tracking.append(DocumentTrackingResponse(
+                        id=record.id,
+                        document_id=record.document_id,
+                        job_id=record.job_id,
+                        extraction_id=record.extraction_id,
+                        status=record.status,
+                        triggered_by=record.triggered_by,
+                        queued_at=record.queued_at.isoformat(),
+                        started_at=record.started_at.isoformat() if record.started_at else None,
+                        completed_at=record.completed_at.isoformat() if record.completed_at else None,
+                        processing_time_ms=record.processing_time_ms,
+                        error_message=record.error_message,
+                        retry_count=record.retry_count,
+                        created_at=record.created_at.isoformat(),
+                        updated_at=record.updated_at.isoformat()
+                    ))
+                
+                document_responses.append(DocumentWithTrackingResponse(
+                    id=doc.id,
+                    tenant_id=doc.tenant_id,
+                    original_filename=doc.original_filename,
+                    file_size=doc.file_size,
+                    mime_type=doc.mime_type,
+                    document_type=doc.document_type.name if doc.document_type else None,
+                    category={
+                        "id": str(doc.category.id),
+                        "name": doc.category.name,
+                        "color": doc.category.color
+                    } if doc.category else None,
+                    tags=[tag.tag_name for tag in doc.tags],
+                    status=doc.status,
+                    extraction_status=doc.extraction_status,
+                    extraction_error=doc.extraction_error,
+                    page_count=doc.page_count,
+                    character_count=doc.character_count,
+                    word_count=doc.word_count,
+                    has_thumbnail=bool(doc.thumbnail_s3_key),
+                    is_test_document=doc.is_test_document,
+                    created_at=doc.created_at.isoformat(),
+                    updated_at=doc.updated_at.isoformat(),
+                    extraction_completed_at=doc.extraction_completed_at.isoformat() if doc.extraction_completed_at else None,
+                    job_tracking=job_tracking,
+                    total_jobs_processed=total_jobs,
+                    successful_jobs=successful_jobs,
+                    failed_jobs=failed_jobs,
+                    pending_jobs=pending_jobs
+                ))
+            else:
+                # Standard document response
+                document_responses.append(DocumentResponse(
+                    id=doc.id,
+                    tenant_id=doc.tenant_id,
+                    original_filename=doc.original_filename,
+                    file_size=doc.file_size,
+                    mime_type=doc.mime_type,
+                    document_type=doc.document_type.name if doc.document_type else None,
+                    category={
+                        "id": str(doc.category.id),
+                        "name": doc.category.name,
+                        "color": doc.category.color
+                    } if doc.category else None,
+                    tags=[tag.tag_name for tag in doc.tags],
+                    status=doc.status,
+                    extraction_status=doc.extraction_status,
+                    extraction_error=doc.extraction_error,
+                    page_count=doc.page_count,
+                    character_count=doc.character_count,
+                    word_count=doc.word_count,
+                    has_thumbnail=bool(doc.thumbnail_s3_key),
+                    is_test_document=doc.is_test_document,
+                    created_at=doc.created_at.isoformat(),
+                    updated_at=doc.updated_at.isoformat(),
+                    extraction_completed_at=doc.extraction_completed_at.isoformat() if doc.extraction_completed_at else None
+                ))
+        
+        total_pages = (total + per_page - 1) // per_page
+        
+        return DocumentListResponse(
+            documents=document_responses,
+            total=total,
+            page=page,
+            per_page=per_page,
+            total_pages=total_pages
+        )
+        
+    except Exception as e:
+        logger.error(f"Document listing with tracking failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
 
 
@@ -834,3 +1098,157 @@ async def regenerate_document_preview(
     except Exception as e:
         logger.error(f"Preview regeneration failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to regenerate preview: {str(e)}")
+
+
+# ==================== Document Job Tracking Endpoints ====================
+
+@router.get("/{document_id}/tracking", response_model=List[DocumentTrackingResponse])
+async def get_document_job_tracking(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("documents:read"))
+):
+    """
+    Get job tracking information for a specific document
+    
+    - **document_id**: Document UUID
+    """
+    try:
+        # Verify document exists and belongs to tenant
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Get all tracking records for this document
+        tracking_records = db.query(DocumentExtractionTracking).options(
+            joinedload(DocumentExtractionTracking.job)
+        ).filter(
+            DocumentExtractionTracking.document_id == document_id
+        ).order_by(desc(DocumentExtractionTracking.created_at)).all()
+        
+        # Convert to response format
+        tracking_responses = []
+        for record in tracking_records:
+            tracking_responses.append(DocumentTrackingResponse(
+                id=record.id,
+                document_id=record.document_id,
+                job_id=record.job_id,
+                extraction_id=record.extraction_id,
+                status=record.status,
+                triggered_by=record.triggered_by,
+                queued_at=record.queued_at.isoformat(),
+                started_at=record.started_at.isoformat() if record.started_at else None,
+                completed_at=record.completed_at.isoformat() if record.completed_at else None,
+                processing_time_ms=record.processing_time_ms,
+                error_message=record.error_message,
+                retry_count=record.retry_count,
+                created_at=record.created_at.isoformat(),
+                updated_at=record.updated_at.isoformat()
+            ))
+        
+        return tracking_responses
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get document tracking: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get tracking information: {str(e)}")
+
+
+@router.get("/{document_id}/with-tracking", response_model=DocumentWithTrackingResponse)
+async def get_document_with_tracking(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("documents:read"))
+):
+    """
+    Get document with complete job tracking information
+    
+    - **document_id**: Document UUID
+    """
+    try:
+        # Get document with all related data
+        document = db.query(Document).options(
+            joinedload(Document.document_type),
+            joinedload(Document.category),
+            joinedload(Document.tags),
+            joinedload(Document.extraction_tracking).joinedload(DocumentExtractionTracking.job)
+        ).filter(
+            Document.id == document_id,
+            Document.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Get tracking records
+        tracking_records = document.extraction_tracking
+        
+        # Calculate job statistics
+        total_jobs = len(tracking_records)
+        successful_jobs = len([t for t in tracking_records if t.status == 'completed'])
+        failed_jobs = len([t for t in tracking_records if t.status == 'failed'])
+        pending_jobs = len([t for t in tracking_records if t.status in ['pending', 'processing']])
+        
+        # Convert tracking records to response format
+        job_tracking = []
+        for record in tracking_records:
+            job_tracking.append(DocumentTrackingResponse(
+                id=record.id,
+                document_id=record.document_id,
+                job_id=record.job_id,
+                extraction_id=record.extraction_id,
+                status=record.status,
+                triggered_by=record.triggered_by,
+                queued_at=record.queued_at.isoformat(),
+                started_at=record.started_at.isoformat() if record.started_at else None,
+                completed_at=record.completed_at.isoformat() if record.completed_at else None,
+                processing_time_ms=record.processing_time_ms,
+                error_message=record.error_message,
+                retry_count=record.retry_count,
+                created_at=record.created_at.isoformat(),
+                updated_at=record.updated_at.isoformat()
+            ))
+        
+        return DocumentWithTrackingResponse(
+            id=document.id,
+            tenant_id=document.tenant_id,
+            original_filename=document.original_filename,
+            file_size=document.file_size,
+            mime_type=document.mime_type,
+            document_type=document.document_type.name if document.document_type else None,
+            category={
+                "id": str(document.category.id),
+                "name": document.category.name,
+                "color": document.category.color
+            } if document.category else None,
+            tags=[tag.tag_name for tag in document.tags],
+            status=document.status,
+            extraction_status=document.extraction_status,
+            extraction_error=document.extraction_error,
+            page_count=document.page_count,
+            character_count=document.character_count,
+            word_count=document.word_count,
+            has_thumbnail=bool(document.thumbnail_s3_key),
+            is_test_document=document.is_test_document,
+            created_at=document.created_at.isoformat(),
+            updated_at=document.updated_at.isoformat(),
+            extraction_completed_at=document.extraction_completed_at.isoformat() if document.extraction_completed_at else None,
+            job_tracking=job_tracking,
+            total_jobs_processed=total_jobs,
+            successful_jobs=successful_jobs,
+            failed_jobs=failed_jobs,
+            pending_jobs=pending_jobs
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get document with tracking: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get document with tracking: {str(e)}")
+
+

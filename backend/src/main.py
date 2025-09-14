@@ -16,6 +16,7 @@ from .api import categories
 from .api import templates
 from .api import extractions
 from .api import tenant_configurations
+from .api import jobs
 
 # Configure logging
 logging.basicConfig(
@@ -102,6 +103,7 @@ app.include_router(categories.router, prefix="/api")
 app.include_router(templates.router, prefix="/api/templates")
 app.include_router(extractions.router, prefix="/api/extractions")
 app.include_router(tenant_configurations.router, prefix="/api/tenant")
+app.include_router(jobs.router)
 
 @app.get("/")
 async def root():

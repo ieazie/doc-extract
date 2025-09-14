@@ -63,6 +63,7 @@ class Tenant(Base):
     templates = relationship("Template", back_populates="tenant", cascade="all, delete-orphan")
     configurations = relationship("TenantConfiguration", back_populates="tenant", cascade="all, delete-orphan")
     rate_limits = relationship("TenantRateLimit", back_populates="tenant", cascade="all, delete-orphan")
+    extraction_jobs = relationship("ExtractionJob", back_populates="tenant", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Tenant(id={self.id}, name='{self.name}')>"
@@ -152,6 +153,7 @@ class DocumentCategory(Base):
     # Relationships
     tenant = relationship("Tenant", back_populates="document_categories")
     documents = relationship("Document", back_populates="category")
+    extraction_jobs = relationship("ExtractionJob", back_populates="category")
 
     def __repr__(self):
         return f"<DocumentCategory(id={self.id}, name='{self.name}')>"
@@ -210,6 +212,7 @@ class Document(Base):
     category = relationship("DocumentCategory", back_populates="documents")
     tags = relationship("DocumentTag", back_populates="document", cascade="all, delete-orphan")
     extractions = relationship("Extraction", back_populates="document", cascade="all, delete-orphan")
+    extraction_tracking = relationship("DocumentExtractionTracking", back_populates="document", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Document(id={self.id}, filename='{self.original_filename}')>"
@@ -244,6 +247,7 @@ class Extraction(Base):
     document = relationship("Document", back_populates="extractions")
     template = relationship("Template", back_populates="extractions")
     fields = relationship("ExtractionField", back_populates="extraction", cascade="all, delete-orphan")
+    job_tracking = relationship("DocumentExtractionTracking", back_populates="extraction")
 
     def __repr__(self):
         return f"<Extraction(id={self.id}, status='{self.status}')>"
@@ -306,6 +310,7 @@ class Template(Base):
     template_versions = relationship("TemplateVersion", back_populates="template", cascade="all, delete-orphan")
     template_usage = relationship("TemplateUsage", back_populates="template", cascade="all, delete-orphan")
     extractions = relationship("Extraction", back_populates="template")
+    extraction_jobs = relationship("ExtractionJob", back_populates="template")
     
     # Table constraints
     __table_args__ = (
@@ -463,6 +468,93 @@ class TenantRateLimit(Base):
         return f"<TenantRateLimit(id={self.id}, tenant_id={self.tenant_id}, limit_type='{self.limit_type}')>"
 
 
+class ExtractionJob(Base):
+    """Extraction Job Model for tenant-centric job scheduling"""
+    __tablename__ = "extraction_jobs"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    
+    # Basic Job Information
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    
+    # Job Configuration
+    category_id = Column(UUID(as_uuid=True), ForeignKey("document_categories.id"), nullable=False)
+    template_id = Column(UUID(as_uuid=True), ForeignKey("templates.id"), nullable=False)
+    
+    # Scheduling Configuration
+    schedule_type = Column(String(20), nullable=False)  # 'immediate', 'scheduled', 'recurring'
+    schedule_config = Column(JSONB)  # For recurring jobs: {"cron": "0 9 * * 1-5", "timezone": "UTC"}
+    run_at = Column(DateTime(timezone=True))  # For scheduled jobs (one-time execution)
+    
+    # Execution Settings
+    priority = Column(Integer, default=5)  # 1=lowest, 10=highest
+    max_concurrency = Column(Integer, default=5)  # Max concurrent extractions per job
+    retry_policy = Column(JSONB, default={"max_retries": 3, "retry_delay_minutes": 5})
+    
+    # Status and Control
+    is_active = Column(Boolean, default=True)
+    last_run_at = Column(DateTime(timezone=True))
+    next_run_at = Column(DateTime(timezone=True))
+    
+    # Statistics
+    total_executions = Column(Integer, default=0)
+    successful_executions = Column(Integer, default=0)
+    failed_executions = Column(Integer, default=0)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    tenant = relationship("Tenant", back_populates="extraction_jobs")
+    category = relationship("DocumentCategory", back_populates="extraction_jobs")
+    template = relationship("Template", back_populates="extraction_jobs")
+    document_tracking = relationship("DocumentExtractionTracking", back_populates="job", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<ExtractionJob(id={self.id}, name='{self.name}', tenant_id={self.tenant_id})>"
+
+
+class DocumentExtractionTracking(Base):
+    """Document Extraction Tracking Model for job execution status"""
+    __tablename__ = "document_extraction_tracking"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Relationships
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("extraction_jobs.id", ondelete="CASCADE"), nullable=False)
+    extraction_id = Column(UUID(as_uuid=True), ForeignKey("extractions.id"))  # Links to actual extraction
+    
+    # Execution Details
+    status = Column(String(20), nullable=False)  # 'pending', 'processing', 'completed', 'failed', 'skipped'
+    triggered_by = Column(String(20), nullable=False)  # 'schedule', 'manual', 'immediate'
+    
+    # Timing Information
+    queued_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
+    processing_time_ms = Column(Integer)
+    
+    # Results and Errors
+    error_message = Column(Text)
+    retry_count = Column(Integer, default=0)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    document = relationship("Document", back_populates="extraction_tracking")
+    job = relationship("ExtractionJob", back_populates="document_tracking")
+    extraction = relationship("Extraction", back_populates="job_tracking")
+    
+    def __repr__(self):
+        return f"<DocumentExtractionTracking(id={self.id}, document_id={self.document_id}, job_id={self.job_id}, status='{self.status}')>"
+
+
 # ============================================================================
 
 
@@ -485,4 +577,14 @@ def create_tables():
 def drop_tables():
     """Drop all tables (use with caution)"""
     Base.metadata.drop_all(bind=engine)
+
+
+# Database dependency for FastAPI
+def get_db():
+    """Get database session for FastAPI dependency injection"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 

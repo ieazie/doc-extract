@@ -60,14 +60,14 @@ class ExtractionService:
         self.config_service = TenantConfigService(db)
         self.rate_limit_service = RateLimitService(db)
     
-    async def extract_data(self, request: ExtractionRequest) -> ExtractionResult:
+    def extract_data(self, request: ExtractionRequest) -> ExtractionResult:
         """Extract structured data using tenant-specific LLM provider with rate limiting"""
         
         start_time = time.time()
         
         try:
             # Check rate limits
-            await self._check_rate_limits(request.tenant_id)
+            self._check_rate_limits(request.tenant_id)
             
             # Get tenant's LLM configuration
             llm_config = self.config_service.get_llm_config(request.tenant_id)
@@ -86,14 +86,14 @@ class ExtractionService:
             llm_service = LLMProviderService.from_config(config_to_use)
             
             # Perform extraction
-            result = await llm_service.extract_data(
+            result = llm_service.extract_data(
                 document_text=request.document_text,
                 schema=request.schema,
                 prompt_config=request.prompt_config
             )
             
             # Increment rate limit counters
-            await self._increment_rate_limits(request.tenant_id)
+            self._increment_rate_limits(request.tenant_id)
             
             processing_time_ms = int((time.time() - start_time) * 1000)
             
@@ -120,7 +120,7 @@ class ExtractionService:
                 error_message=str(e)
             )
     
-    async def _check_rate_limits(self, tenant_id: UUID) -> None:
+    def _check_rate_limits(self, tenant_id: UUID) -> None:
         """Check if tenant has exceeded rate limits"""
         
         # Get rate limits configuration
@@ -143,7 +143,7 @@ class ExtractionService:
         # For now, we'll skip this check
         pass
     
-    async def _increment_rate_limits(self, tenant_id: UUID) -> None:
+    def _increment_rate_limits(self, tenant_id: UUID) -> None:
         """Increment rate limit counters"""
         
         # Increment extraction counter
@@ -153,7 +153,7 @@ class ExtractionService:
             window_minutes=60
         )
     
-    async def health_check(self, tenant_id: UUID) -> Dict[str, Any]:
+    def health_check(self, tenant_id: UUID) -> Dict[str, Any]:
         """Check the health of the tenant's LLM provider"""
         
         try:
@@ -177,7 +177,7 @@ class ExtractionService:
             
             # Create LLM provider service and check health
             llm_service = LLMProviderService.from_config(config_to_use)
-            is_healthy = await llm_service.health_check()
+            is_healthy = llm_service.health_check()
             
             return {
                 "status": "healthy" if is_healthy else "unhealthy",

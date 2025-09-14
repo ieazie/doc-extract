@@ -281,6 +281,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'templates:read', 'templates:write', 'templates:delete',
         'extractions:read', 'extractions:write', 'extractions:delete',
         
+        // Job Management (cross-tenant)
+        'jobs:read', 'jobs:write', 'jobs:delete', 'jobs:execute',
+        
         // API and Configuration
         'api-keys:read', 'api-keys:write', 'api-keys:delete',
         'analytics:read'
@@ -302,6 +305,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'templates:read', 'templates:write', 'templates:delete',
         'extractions:read', 'extractions:write', 'extractions:delete',
         
+        // Job Management
+        'jobs:read', 'jobs:write', 'jobs:delete', 'jobs:execute',
+        
         // API Management
         'api-keys:read', 'api-keys:write', 'api-keys:delete'
       ],
@@ -309,12 +315,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'documents:read', 'documents:write', 'documents:delete',
         'templates:read', 'templates:write', 'templates:delete',
         'extractions:read', 'extractions:write', 'extractions:delete',
+        'jobs:read', 'jobs:write', 'jobs:execute',
         'analytics:read'
       ],
       viewer: [
         'documents:read',
         'templates:read',
         'extractions:read',
+        'jobs:read',
         'analytics:read'
       ]
     };

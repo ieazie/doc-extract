@@ -50,6 +50,133 @@ export interface Category {
   updated_at: string;
 }
 
+// Job Management Types
+export interface ExtractionJob {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description?: string;
+  category_id: string;
+  template_id: string;
+  schedule_type: 'immediate' | 'scheduled' | 'recurring';
+  schedule_config?: {
+    cron?: string;
+    timezone?: string;
+  };
+  run_at?: string;
+  priority: number;
+  max_concurrency: number;
+  retry_policy: {
+    max_retries: number;
+    retry_delay_minutes: number;
+  };
+  is_active: boolean;
+  last_run_at?: string;
+  next_run_at?: string;
+  total_executions: number;
+  successful_executions: number;
+  failed_executions: number;
+  created_at: string;
+  updated_at: string;
+  category?: Category;
+  template?: Template;
+}
+
+export interface ExtractionJobCreate {
+  name: string;
+  description?: string;
+  category_id: string;
+  template_id: string;
+  schedule_type: 'immediate' | 'scheduled' | 'recurring';
+  schedule_config?: {
+    cron?: string;
+    timezone?: string;
+  };
+  run_at?: string;
+  priority?: number;
+  max_concurrency?: number;
+  retry_policy?: {
+    max_retries: number;
+    retry_delay_minutes: number;
+  };
+  is_active?: boolean;
+}
+
+export interface ExtractionJobUpdate {
+  name?: string;
+  description?: string;
+  schedule_type?: 'immediate' | 'scheduled' | 'recurring';
+  schedule_config?: {
+    cron?: string;
+    timezone?: string;
+  };
+  run_at?: string;
+  priority?: number;
+  max_concurrency?: number;
+  retry_policy?: {
+    max_retries: number;
+    retry_delay_minutes: number;
+  };
+  is_active?: boolean;
+}
+
+export interface ExtractionJobListResponse {
+  jobs: ExtractionJob[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface JobExecutionRequest {
+  triggered_by: 'manual' | 'immediate';
+}
+
+export interface JobExecutionResponse {
+  job_id: string;
+  execution_started: boolean;
+  documents_queued: number;
+  task_id?: string;
+  message: string;
+}
+
+export interface DocumentExtractionTracking {
+  id: string;
+  document_id: string;
+  job_id: string;
+  extraction_id?: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+  triggered_by: 'schedule' | 'manual' | 'immediate';
+  queued_at: string;
+  started_at?: string;
+  completed_at?: string;
+  processing_time_ms?: number;
+  error_message?: string;
+  retry_count: number;
+  created_at: string;
+  updated_at: string;
+  document?: Document;
+}
+
+export interface DocumentWithTracking extends Document {
+  job_tracking: DocumentExtractionTracking[];
+  total_jobs_processed: number;
+  successful_jobs: number;
+  failed_jobs: number;
+  pending_jobs: number;
+}
+
+export interface JobStatistics {
+  total_executions: number;
+  successful_executions: number;
+  failed_executions: number;
+  success_rate: number;
+  avg_processing_time_ms: number;
+  total_documents_processed: number;
+  last_execution_at?: string;
+  next_execution_at?: string;
+}
+
 export interface CategoryListResponse {
   categories: Category[];
   total: number;
@@ -1119,6 +1246,81 @@ class ApiClient {
     return response.data;
   }
 
+  // Job Management Endpoints
+  async getJobs(
+    page: number = 1,
+    perPage: number = 20,
+    search?: string,
+    categoryId?: string,
+    templateId?: string,
+    scheduleType?: 'immediate' | 'scheduled' | 'recurring',
+    isActive?: boolean,
+    sortBy?: string,
+    sortOrder?: 'asc' | 'desc'
+  ): Promise<ExtractionJobListResponse> {
+    const params: any = { page, per_page: perPage };
+    if (search) params.search = search;
+    if (categoryId) params.category_id = categoryId;
+    if (templateId) params.template_id = templateId;
+    if (scheduleType) params.schedule_type = scheduleType;
+    if (isActive !== undefined) params.is_active = isActive;
+    if (sortBy) params.sort_by = sortBy;
+    if (sortOrder) params.sort_order = sortOrder;
+
+    const response = await this.client.get('/api/jobs', { params });
+    return response.data;
+  }
+
+  async getJob(jobId: string): Promise<ExtractionJob> {
+    const response = await this.client.get(`/api/jobs/${jobId}`);
+    return response.data;
+  }
+
+  async createJob(jobData: ExtractionJobCreate): Promise<ExtractionJob> {
+    const response = await this.client.post('/api/jobs', jobData);
+    return response.data;
+  }
+
+  async updateJob(jobId: string, jobData: ExtractionJobUpdate): Promise<ExtractionJob> {
+    const response = await this.client.put(`/api/jobs/${jobId}`, jobData);
+    return response.data;
+  }
+
+  async deleteJob(jobId: string): Promise<void> {
+    await this.client.delete(`/api/jobs/${jobId}`);
+  }
+
+  async executeJob(jobId: string, triggeredBy: 'manual' | 'immediate' = 'manual'): Promise<JobExecutionResponse> {
+    const response = await this.client.post(`/api/jobs/${jobId}/execute`, {
+      triggered_by: triggeredBy
+    });
+    return response.data;
+  }
+
+  async getJobHistory(
+    jobId: string,
+    page: number = 1,
+    perPage: number = 20,
+    status?: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'
+  ): Promise<{
+    tracking: DocumentExtractionTracking[];
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+  }> {
+    const params: any = { page, per_page: perPage };
+    if (status) params.status = status;
+
+    const response = await this.client.get(`/api/jobs/${jobId}/history`, { params });
+    return response.data;
+  }
+
+  async getJobStatistics(jobId: string): Promise<JobStatistics> {
+    const response = await this.client.get(`/api/jobs/${jobId}/statistics`);
+    return response.data;
+  }
+
   // Utility Methods
   formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 B';
@@ -1175,6 +1377,51 @@ class ApiClient {
     };
     
     return statusIcons[status] || '📄';
+  }
+
+  // Document Tracking Endpoints
+  async getDocuments(
+    page: number = 1,
+    perPage: number = 20,
+    search?: string,
+    categoryId?: string,
+    documentTypeId?: string,
+    tags?: string,
+    status?: string,
+    extractionStatus?: string,
+    jobStatus?: string,
+    sortBy: string = 'created_at',
+    sortOrder: 'asc' | 'desc' = 'desc',
+    includeTracking: boolean = false
+  ): Promise<DocumentListResponse> {
+    const params: any = { page, per_page: perPage, sort_by: sortBy, sort_order: sortOrder };
+    if (search) params.search = search;
+    if (categoryId) params.category_id = categoryId;
+    if (documentTypeId) params.document_type_id = documentTypeId;
+    if (tags) params.tags = tags;
+    if (status) params.status = status;
+    if (extractionStatus) params.extraction_status = extractionStatus;
+    if (jobStatus) params.job_status = jobStatus;
+    if (includeTracking) params.include_tracking = includeTracking;
+
+    const endpoint = includeTracking ? '/api/documents/with-tracking' : '/api/documents/';
+    const response = await this.client.get(endpoint, { params });
+    return response.data;
+  }
+
+  async getDocument(documentId: string): Promise<Document> {
+    const response = await this.client.get(`/api/documents/${documentId}`);
+    return response.data;
+  }
+
+  async getDocumentWithTracking(documentId: string): Promise<DocumentWithTracking> {
+    const response = await this.client.get(`/api/documents/${documentId}/with-tracking`);
+    return response.data;
+  }
+
+  async getDocumentTracking(documentId: string): Promise<DocumentExtractionTracking[]> {
+    const response = await this.client.get(`/api/documents/${documentId}/tracking`);
+    return response.data;
   }
 
 }

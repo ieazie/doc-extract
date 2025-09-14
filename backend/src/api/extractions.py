@@ -694,7 +694,7 @@ async def correct_field(
 # BACKGROUND TASKS
 # ============================================================================
 
-async def process_extraction(
+def process_extraction(
     extraction_id: str,
     document_text: str,
     template_schema: dict,
@@ -734,7 +734,7 @@ async def process_extraction(
         extraction_service = ExtractionService(db)
         
         # Check if tenant's LLM provider is healthy
-        health = await extraction_service.health_check(document.tenant_id)
+        health = extraction_service.health_check(document.tenant_id)
         if health["status"] != "healthy":
             extraction.status = "failed"
             extraction.error_message = f"LLM provider unhealthy: {health['message']}"
@@ -750,7 +750,7 @@ async def process_extraction(
         )
         
         # Perform extraction using tenant-specific LLM provider
-        result = await extraction_service.extract_data(extraction_request)
+        result = extraction_service.extract_data(extraction_request)
         
         # Update extraction record
         if result.status == "success":
