@@ -7,7 +7,7 @@ import { useRouter } from 'next/router';
 import { Plus, Play, Pause, Edit, Trash2, Clock, BarChart3 } from 'lucide-react';
 import Table, { ColumnDefinition, FilterDefinition, PaginationConfig } from '@/components/table/Table';
 import { Button } from '@/components/ui/Button';
-import { apiClient, ExtractionJob, Category, Template } from '@/services/api';
+import { apiClient, ExtractionJob, Category } from '@/services/api';
 import styled from 'styled-components';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -56,28 +56,28 @@ const StatusBadge = styled.span<{ status: 'active' | 'inactive' | 'running' | 'f
     switch (props.status) {
       case 'active':
         return `
-          background-color: ${props.theme.colors.success.light};
-          color: ${props.theme.colors.success.dark};
+          background-color: ${props.theme.colors.successLight};
+          color: ${props.theme.colors.success};
         `;
       case 'inactive':
         return `
-          background-color: ${props.theme.colors.gray.light};
-          color: ${props.theme.colors.gray.dark};
+          background-color: ${props.theme.colors.surfaceHover};
+          color: ${props.theme.colors.text.secondary};
         `;
       case 'running':
         return `
-          background-color: ${props.theme.colors.warning.light};
-          color: ${props.theme.colors.warning.dark};
+          background-color: ${props.theme.colors.warningLight};
+          color: ${props.theme.colors.warning};
         `;
       case 'failed':
         return `
-          background-color: ${props.theme.colors.error.light};
-          color: ${props.theme.colors.error.dark};
+          background-color: ${props.theme.colors.errorLight};
+          color: ${props.theme.colors.error};
         `;
       default:
         return `
-          background-color: ${props.theme.colors.gray.light};
-          color: ${props.theme.colors.gray.dark};
+          background-color: ${props.theme.colors.surfaceHover};
+          color: ${props.theme.colors.text.secondary};
         `;
     }
   }}
@@ -95,23 +95,23 @@ const ScheduleBadge = styled.span<{ type: 'immediate' | 'scheduled' | 'recurring
     switch (props.type) {
       case 'immediate':
         return `
-          background-color: ${props.theme.colors.primary.light};
-          color: ${props.theme.colors.primary.dark};
+          background-color: ${props.theme.colors.primaryLight};
+          color: ${props.theme.colors.primaryDark};
         `;
       case 'scheduled':
         return `
-          background-color: ${props.theme.colors.info.light};
-          color: ${props.theme.colors.info.dark};
+          background-color: ${props.theme.colors.info}20;
+          color: ${props.theme.colors.info};
         `;
       case 'recurring':
         return `
-          background-color: ${props.theme.colors.warning.light};
-          color: ${props.theme.colors.warning.dark};
+          background-color: ${props.theme.colors.warningLight};
+          color: ${props.theme.colors.warning};
         `;
       default:
         return `
-          background-color: ${props.theme.colors.gray.light};
-          color: ${props.theme.colors.gray.dark};
+          background-color: ${props.theme.colors.surfaceHover};
+          color: ${props.theme.colors.text.secondary};
         `;
     }
   }}
@@ -145,7 +145,7 @@ export const JobList: React.FC<JobListProps> = ({
   const { user, hasPermission } = useAuth();
   const [jobs, setJobs] = useState<ExtractionJob[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({
@@ -339,7 +339,7 @@ export const JobList: React.FC<JobListProps> = ({
       render: (value, job) => (
         <div style={{ display: 'flex', gap: 8 }}>
           <Button
-            size="sm"
+            size="small"
             variant="outline"
             onClick={() => handleExecuteJob(job)}
             disabled={!job.is_active}
@@ -347,21 +347,21 @@ export const JobList: React.FC<JobListProps> = ({
             <Play size={14} />
           </Button>
           <Button
-            size="sm"
+            size="small"
             variant="outline"
             onClick={() => handleToggleJob(job)}
           >
             {job.is_active ? <Pause size={14} /> : <Play size={14} />}
           </Button>
           <Button
-            size="sm"
+            size="small"
             variant="outline"
             onClick={() => onJobEdit && onJobEdit(job)}
           >
             <Edit size={14} />
           </Button>
           <Button
-            size="sm"
+            size="small"
             variant="outline"
             onClick={() => handleDeleteJob(job)}
             style={{ color: '#ef4444' }}
@@ -429,9 +429,13 @@ export const JobList: React.FC<JobListProps> = ({
   ];
 
   const paginationConfig: PaginationConfig = {
-    ...pagination,
+    page: pagination.page,
+    perPage: pagination.per_page,
+    total: pagination.total,
+    totalPages: pagination.total_pages,
     onPageChange: (page) => loadJobs({ page }),
-    onPerPageChange: (per_page) => loadJobs({ per_page, page: 1 })
+    onPerPageChange: (per_page) => loadJobs({ per_page, page: 1 }),
+    mode: 'server'
   };
 
   if (error) {
@@ -465,15 +469,11 @@ export const JobList: React.FC<JobListProps> = ({
         filters={filters}
         pagination={paginationConfig}
         loading={loading}
-        onFiltersChange={loadJobs}
-        onSortChange={loadJobs}
+        onFilterChange={(key, value) => loadJobs({ [key]: value })}
+        onSort={(key, direction) => loadJobs({ sort_by: key, sort_order: direction })}
         emptyState={{
           title: 'No Jobs Found',
-          description: 'Create your first extraction job to get started.',
-          action: onJobCreate ? {
-            label: 'Create Job',
-            onClick: onJobCreate
-          } : undefined
+          description: 'Create your first extraction job to get started.'
         }}
       />
     </PageContainer>

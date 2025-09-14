@@ -340,7 +340,7 @@ async def test_llm_extraction(
     
     try:
         llm_service = LLMProviderService.from_config(config_to_use)
-        result = await llm_service.extract_data(
+        result = llm_service.extract_data(
             document_text=test_data["document_text"],
             schema=test_data["schema"],
             prompt_config=test_data["prompt_config"]

@@ -77,10 +77,7 @@ const JobsPage: React.FC = () => {
   return (
     <>
       {successMessage && (
-        <SuccessMessage
-          message={successMessage}
-          onClose={() => setSuccessMessage(null)}
-        />
+        <SuccessMessage message={successMessage} />
       )}
 
       {viewMode === 'list' && (

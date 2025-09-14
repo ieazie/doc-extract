@@ -6,9 +6,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { 
   FileText, 
-  Download, 
-  Eye, 
-  Trash2, 
   RefreshCw, 
   Filter,
   Search,
@@ -17,7 +14,9 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Play
+  Settings,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 
 import { apiClient } from '../services/api';
@@ -53,8 +52,64 @@ const PageTitle = styled.h1`
 
 const HeaderActions = styled.div`
   display: flex;
-  gap: 1rem;
+  gap: 1.5rem;
   align-items: center;
+`;
+
+const ToggleContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+  }
+`;
+
+const ToggleLabel = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+`;
+
+const ToggleSwitch = styled.div<{ $active: boolean }>`
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: ${props => props.$active ? '#3b82f6' : '#d1d5db'};
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: ${props => props.$active ? '22px' : '2px'};
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const HiddenCheckbox = styled.input`
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 `;
 
 const RefreshButton = styled.button`
@@ -177,7 +232,7 @@ const DocumentsPage: React.FC = () => {
   
   const [pagination, setPagination] = useState({
     page: 1,
-    per_page: 20,
+    per_page: 25,
     total: 0,
     total_pages: 0
   });
@@ -317,10 +372,29 @@ const DocumentsPage: React.FC = () => {
       key: 'original_filename',
       label: 'Document',
       sortable: true,
+      width: '2fr',
       render: (value: string, row: any) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <FileText size={16} color="#6b7280" />
-          <span style={{ fontWeight: '500' }}>{value}</span>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '0.75rem',
+          minWidth: 0,
+          overflow: 'hidden'
+        }}>
+          <FileText size={18} color="#6b7280" style={{ flexShrink: 0 }} />
+          <span 
+            title={value}
+            style={{ 
+              fontWeight: '500',
+              fontSize: '0.875rem',
+              color: '#1f2937',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+          >
+            {value}
+          </span>
         </div>
       )
     },
@@ -328,13 +402,16 @@ const DocumentsPage: React.FC = () => {
       key: 'category',
       label: 'Category',
       sortable: false,
+      width: '120px',
       render: (value: any) => value ? (
         <StatusBadge 
           status="active" 
           style={{ 
             backgroundColor: value.color + '20', 
             color: value.color,
-            border: `1px solid ${value.color}40`
+            border: `1px solid ${value.color}40`,
+            fontSize: '0.75rem',
+            padding: '0.25rem 0.5rem'
           }}
         >
           {value.name}
@@ -345,8 +422,9 @@ const DocumentsPage: React.FC = () => {
       key: 'status',
       label: 'Document Status',
       sortable: true,
+      width: '140px',
       render: (value: string) => (
-        <StatusBadge status={value}>
+        <StatusBadge status={value} style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}>
           {value}
         </StatusBadge>
       )
@@ -355,8 +433,9 @@ const DocumentsPage: React.FC = () => {
       key: 'extraction_status',
       label: 'Extraction Status',
       sortable: true,
+      width: '140px',
       render: (value: string) => (
-        <StatusBadge status={value}>
+        <StatusBadge status={value} style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}>
           {value}
         </StatusBadge>
       )
@@ -366,6 +445,7 @@ const DocumentsPage: React.FC = () => {
         key: 'job_tracking',
         label: 'Job Status',
         sortable: false,
+        width: '120px',
         render: (value: any[], row: any) => (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             {row.total_jobs_processed > 0 ? (
@@ -390,7 +470,7 @@ const DocumentsPage: React.FC = () => {
                 )}
               </JobStatsContainer>
             ) : (
-              <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>No jobs</span>
+              <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>No jobs</span>
             )}
           </div>
         )
@@ -400,50 +480,37 @@ const DocumentsPage: React.FC = () => {
       key: 'created_at',
       label: 'Uploaded',
       sortable: true,
-      render: (value: string) => new Date(value).toLocaleDateString()
+      width: '120px',
+      align: 'center',
+      render: (value: string) => (
+        <span style={{ 
+          fontSize: '0.875rem',
+          color: '#6b7280',
+          fontFamily: 'monospace'
+        }}>
+          {new Date(value).toLocaleDateString()}
+        </span>
+      )
     }
   ];
 
   // Pagination configuration
   const paginationConfig: PaginationConfig = {
-    ...pagination,
+    page: pagination.page,
+    perPage: pagination.per_page,
+    total: pagination.total,
+    totalPages: pagination.total_pages,
     onPageChange: (page) => loadDocuments({ page }),
     onPerPageChange: (per_page) => loadDocuments({ per_page, page: 1 }),
     mode: 'server'
   };
 
-  // Actions render function
-  const renderActions = (row: any) => (
-    <ActionGroup>
-      <ActionButton
-        title="View Document"
-        onClick={() => handleViewDocument(row.id)}
-      >
-        <Eye size={16} />
-      </ActionButton>
-      <ActionButton
-        title="Download Document"
-        onClick={() => handleDownloadDocument(row.id)}
-      >
-        <Download size={16} />
-      </ActionButton>
-      <ActionButton
-        variant="danger"
-        title="Delete Document"
-        onClick={() => handleDeleteDocument(row.id)}
-      >
-        <Trash2 size={16} />
-      </ActionButton>
-    </ActionGroup>
-  );
+  // Removed actions column as requested - this is a processed documents log, not document management
 
   return (
     <PageContainer>
       {successMessage && (
-        <SuccessMessage
-          message={successMessage}
-          onClose={() => setSuccessMessage(null)}
-        />
+        <SuccessMessage message={successMessage} />
       )}
 
       <PageHeader>
@@ -452,14 +519,22 @@ const DocumentsPage: React.FC = () => {
           Documents
         </PageTitle>
         <HeaderActions>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-            <input
+          <ToggleContainer>
+            <ToggleLabel>
+              <Settings size={16} color="#6b7280" />
+              <span>Job Tracking</span>
+            </ToggleLabel>
+            <HiddenCheckbox
               type="checkbox"
               checked={includeTracking}
               onChange={(e) => setIncludeTracking(e.target.checked)}
             />
-            Show Job Tracking
-          </label>
+            <ToggleSwitch 
+              $active={includeTracking}
+              onClick={() => setIncludeTracking(!includeTracking)}
+            />
+          </ToggleContainer>
+          
           <RefreshButton onClick={() => loadDocuments()} disabled={loading}>
             <RefreshCw size={16} />
             Refresh
@@ -485,7 +560,7 @@ const DocumentsPage: React.FC = () => {
           title: 'No documents found',
           description: 'Upload documents to get started with document processing.'
         }}
-        actions={renderActions}
+        actions={undefined}
         onFilterChange={handleFilterChange}
         onSort={handleSort}
         onClearFilters={handleClearFilters}

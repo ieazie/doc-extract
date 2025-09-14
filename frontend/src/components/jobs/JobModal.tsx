@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Clock, Calendar, Repeat, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
-import { apiClient, ExtractionJob, ExtractionJobCreate, ExtractionJobUpdate, Category, Template } from '@/services/api';
+import { apiClient, ExtractionJob, ExtractionJobCreate, ExtractionJobUpdate, Category } from '@/services/api';
 import styled from 'styled-components';
 
 // Styled Components
@@ -152,27 +152,50 @@ const ScheduleTypeGrid = styled.div`
 
 const ScheduleTypeOption = styled.div<{ selected: boolean }>`
   padding: 16px;
-  border: 2px solid ${props => props.selected ? props.theme.colors.primary.main : props.theme.colors.border};
+  border: 2px solid ${props => props.selected ? props.theme.colors.primary : props.theme.colors.border};
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
-  background-color: ${props => props.selected ? `${props.theme.colors.primary.light}20` : 'white'};
+  background-color: ${props => props.selected ? `${props.theme.colors.primaryLight}20` : 'white'};
   
   &:hover {
     border-color: #2563eb;
   }
 `;
 
-const ScheduleTypeIcon = styled.div`
+const ScheduleTypeIcon = styled.div<{ type: 'immediate' | 'scheduled' | 'recurring' }>`
   display: flex;
   align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background-color: ${props => props.theme.colors.primary.light};
-  color: ${props => props.theme.colors.primary.main};
   margin-bottom: 8px;
+  
+  ${props => {
+    switch (props.type) {
+      case 'immediate':
+        return `
+          background-color: ${props.theme.colors.successLight};
+          color: ${props.theme.colors.success};
+        `;
+      case 'scheduled':
+        return `
+          background-color: ${props.theme.colors.info}20;
+          color: ${props.theme.colors.info};
+        `;
+      case 'recurring':
+        return `
+          background-color: ${props.theme.colors.warningLight};
+          color: ${props.theme.colors.warning};
+        `;
+      default:
+        return `
+          background-color: ${props.theme.colors.surfaceHover};
+          color: ${props.theme.colors.text.secondary};
+        `;
+    }
+  }}
 `;
 
 const ScheduleTypeLabel = styled.div`
@@ -223,6 +246,64 @@ const ModalFooter = styled.div`
   background-color: #f1f5f9;
 `;
 
+const ToggleContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+  }
+`;
+
+const ToggleLabel = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+  flex: 1;
+`;
+
+const ToggleSwitch = styled.div<{ $active: boolean }>`
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: ${props => props.$active ? '#3b82f6' : '#d1d5db'};
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: ${props => props.$active ? '22px' : '2px'};
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const HiddenCheckbox = styled.input`
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+`;
+
 const ErrorMessage = styled.div`
   background-color: #f87171;
   color: #7f1d1d;
@@ -248,7 +329,7 @@ export const JobModal: React.FC<JobModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
   
   // Form state
   const [formData, setFormData] = useState<ExtractionJobCreate>({
@@ -470,7 +551,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                   selected={formData.schedule_type === 'immediate'}
                   onClick={() => handleScheduleTypeChange('immediate')}
                 >
-                  <ScheduleTypeIcon>
+                  <ScheduleTypeIcon type="immediate">
                     <Clock size={16} />
                   </ScheduleTypeIcon>
                   <ScheduleTypeLabel>Immediate</ScheduleTypeLabel>
@@ -483,7 +564,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                   selected={formData.schedule_type === 'scheduled'}
                   onClick={() => handleScheduleTypeChange('scheduled')}
                 >
-                  <ScheduleTypeIcon>
+                  <ScheduleTypeIcon type="scheduled">
                     <Calendar size={16} />
                   </ScheduleTypeIcon>
                   <ScheduleTypeLabel>Scheduled</ScheduleTypeLabel>
@@ -496,7 +577,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                   selected={formData.schedule_type === 'recurring'}
                   onClick={() => handleScheduleTypeChange('recurring')}
                 >
-                  <ScheduleTypeIcon>
+                  <ScheduleTypeIcon type="recurring">
                     <Repeat size={16} />
                   </ScheduleTypeIcon>
                   <ScheduleTypeLabel>Recurring</ScheduleTypeLabel>
@@ -569,7 +650,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                     type="number"
                     min="0"
                     max="10"
-                    value={formData.retry_policy.max_retries}
+                    value={formData.retry_policy?.max_retries || 0}
                     onChange={(e) => handleInputChange('retry_policy', {
                       ...formData.retry_policy,
                       max_retries: parseInt(e.target.value)
@@ -583,7 +664,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                     type="number"
                     min="1"
                     max="60"
-                    value={formData.retry_policy.retry_delay_minutes}
+                    value={formData.retry_policy?.retry_delay_minutes || 1}
                     onChange={(e) => handleInputChange('retry_policy', {
                       ...formData.retry_policy,
                       retry_delay_minutes: parseInt(e.target.value)
@@ -593,14 +674,21 @@ export const JobModal: React.FC<JobModalProps> = ({
               </AdvancedGrid>
 
               <FormGroup style={{ marginTop: '16px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
+                <ToggleContainer>
+                  <ToggleLabel>
+                    <Settings size={16} color="#6b7280" />
+                    <span>Active (job will be scheduled and can be executed)</span>
+                  </ToggleLabel>
+                  <HiddenCheckbox
                     type="checkbox"
                     checked={formData.is_active}
                     onChange={(e) => handleInputChange('is_active', e.target.checked)}
                   />
-                  <span>Active (job will be scheduled and can be executed)</span>
-                </label>
+                  <ToggleSwitch 
+                    $active={!!formData.is_active}
+                    onClick={() => handleInputChange('is_active', !formData.is_active)}
+                  />
+                </ToggleContainer>
               </FormGroup>
             </AdvancedSection>
 
@@ -608,7 +696,7 @@ export const JobModal: React.FC<JobModalProps> = ({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit" loading={loading}>
+              <Button type="submit" isLoading={loading}>
                 {job ? 'Update Job' : 'Create Job'}
               </Button>
             </ModalFooter>

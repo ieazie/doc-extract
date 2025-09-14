@@ -79,7 +79,7 @@ export interface ExtractionJob {
   created_at: string;
   updated_at: string;
   category?: Category;
-  template?: Template;
+  template?: any;
 }
 
 export interface ExtractionJobCreate {
@@ -660,27 +660,7 @@ class ApiClient {
     return response.data;
   }
 
-  // Document Endpoints
-  async getDocuments(params: {
-    page?: number;
-    per_page?: number;
-    search?: string;
-    category_id?: string;
-    document_type_id?: string;
-    tags?: string;
-    status?: string;
-    extraction_status?: string;
-    sort_by?: string;
-    sort_order?: 'asc' | 'desc';
-  } = {}): Promise<DocumentListResponse> {
-    const response = await this.client.get('/api/documents/', { params });
-    return response.data;
-  }
-
-  async getDocument(documentId: string): Promise<Document> {
-    const response = await this.client.get(`/api/documents/${documentId}`);
-    return response.data;
-  }
+  // Document Endpoints (duplicate removed - using the more comprehensive version below)
 
   async uploadDocument(
     file: File,

@@ -113,28 +113,28 @@ const StatusBadge = styled.span<{ status: 'active' | 'inactive' | 'running' | 'f
     switch (props.status) {
       case 'active':
         return `
-          background-color: ${props.theme.colors.success.light};
-          color: ${props.theme.colors.success.dark};
+          background-color: ${props.theme.colors.successLight};
+          color: ${props.theme.colors.success};
         `;
       case 'inactive':
         return `
-          background-color: ${props.theme.colors.gray.light};
-          color: ${props.theme.colors.gray.dark};
+          background-color: ${props.theme.colors.surfaceHover};
+          color: ${props.theme.colors.text.secondary};
         `;
       case 'running':
         return `
-          background-color: ${props.theme.colors.warning.light};
-          color: ${props.theme.colors.warning.dark};
+          background-color: ${props.theme.colors.warningLight};
+          color: ${props.theme.colors.warning};
         `;
       case 'failed':
         return `
-          background-color: ${props.theme.colors.error.light};
-          color: ${props.theme.colors.error.dark};
+          background-color: ${props.theme.colors.errorLight};
+          color: ${props.theme.colors.error};
         `;
       default:
         return `
-          background-color: ${props.theme.colors.gray.light};
-          color: ${props.theme.colors.gray.dark};
+          background-color: ${props.theme.colors.surfaceHover};
+          color: ${props.theme.colors.text.secondary};
         `;
     }
   }}
@@ -153,23 +153,23 @@ const ScheduleBadge = styled.span<{ type: 'immediate' | 'scheduled' | 'recurring
     switch (props.type) {
       case 'immediate':
         return `
-          background-color: ${props.theme.colors.primary.light};
-          color: ${props.theme.colors.primary.dark};
+          background-color: ${props.theme.colors.primaryLight};
+          color: ${props.theme.colors.primaryDark};
         `;
       case 'scheduled':
         return `
-          background-color: ${props.theme.colors.info.light};
-          color: ${props.theme.colors.info.dark};
+          background-color: ${props.theme.colors.info}20;
+          color: ${props.theme.colors.info};
         `;
       case 'recurring':
         return `
-          background-color: ${props.theme.colors.warning.light};
-          color: ${props.theme.colors.warning.dark};
+          background-color: ${props.theme.colors.warningLight};
+          color: ${props.theme.colors.warning};
         `;
       default:
         return `
-          background-color: ${props.theme.colors.gray.light};
-          color: ${props.theme.colors.gray.dark};
+          background-color: ${props.theme.colors.surfaceHover};
+          color: ${props.theme.colors.text.secondary};
         `;
     }
   }}
@@ -194,8 +194,8 @@ const StatIcon = styled.div`
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background-color: ${props => props.theme.colors.primary.light};
-  color: ${props => props.theme.colors.primary.main};
+  background-color: ${props => props.theme.colors.primaryLight};
+  color: ${props => props.theme.colors.primary};
   margin: 0 auto 12px auto;
 `;
 
@@ -239,7 +239,7 @@ const Table = styled.table`
 `;
 
 const TableHeader = styled.thead`
-  background-color: ${props => props.theme.colors.gray.light}40;
+  background-color: ${props => props.theme.colors.surfaceHover}40;
 `;
 
 const TableHeaderCell = styled.th`
@@ -255,7 +255,7 @@ const TableRow = styled.tr`
   border-bottom: 1px solid ${props => props.theme.colors.border};
   
   &:hover {
-    background-color: ${props => props.theme.colors.gray.light}20;
+    background-color: ${props => props.theme.colors.surfaceHover}20;
   }
 `;
 
@@ -273,15 +273,15 @@ const StatusIcon = styled.span<{ status: string }>`
   ${props => {
     switch (props.status) {
       case 'completed':
-        return `color: ${props.theme.colors.success.main};`;
+        return `color: ${props.theme.colors.success};`;
       case 'failed':
-        return `color: ${props.theme.colors.error.main};`;
+        return `color: ${props.theme.colors.error};`;
       case 'processing':
-        return `color: ${props.theme.colors.warning.main};`;
+        return `color: ${props.theme.colors.warning};`;
       case 'pending':
-        return `color: ${props.theme.colors.info.main};`;
+        return `color: ${props.theme.colors.info};`;
       default:
-        return `color: ${props.theme.colors.gray.main};`;
+        return `color: ${props.theme.colors.text.secondary};`;
     }
   }}
 `;
@@ -301,7 +301,7 @@ const LoadingState = styled.div`
 const ErrorState = styled.div`
   text-align: center;
   padding: 40px;
-  color: ${props => props.theme.colors.error.main};
+  color: ${props => props.theme.colors.error};
 `;
 
 interface JobDetailsProps {
@@ -440,7 +440,7 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
         <JobTitle>{job.name}</JobTitle>
         <ActionButtons>
           <Button
-            size="sm"
+            size="small"
             variant="outline"
             onClick={handleExecuteJob}
             disabled={!job.is_active}
@@ -449,7 +449,7 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
             Execute
           </Button>
           <Button
-            size="sm"
+            size="small"
             variant="outline"
             onClick={handleToggleJob}
           >
@@ -457,7 +457,7 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
             {job.is_active ? 'Pause' : 'Activate'}
           </Button>
           <Button
-            size="sm"
+            size="small"
             variant="outline"
             onClick={() => onEdit(job)}
           >
@@ -465,7 +465,7 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
             Edit
           </Button>
           <Button
-            size="sm"
+            size="small"
             variant="outline"
             onClick={() => onDelete(job)}
             style={{ color: '#ef4444' }}
@@ -604,7 +604,7 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
 
       {/* Description */}
       {job.description && (
-        <InfoCard style={{ marginBottom: '24px' }}>
+        <InfoCard>
           <InfoTitle>Description</InfoTitle>
           <p style={{ color: '#666', margin: 0 }}>{job.description}</p>
         </InfoCard>
@@ -614,7 +614,7 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
       <HistorySection>
         <HistoryHeader>
           <HistoryTitle>Recent Executions</HistoryTitle>
-          <Button variant="outline" size="sm" onClick={loadJobDetails}>
+          <Button variant="outline" size="small" onClick={loadJobDetails}>
             Refresh
           </Button>
         </HistoryHeader>
