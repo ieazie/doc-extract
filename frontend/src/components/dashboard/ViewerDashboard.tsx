@@ -249,7 +249,7 @@ export const ViewerDashboard: React.FC = () => {
           console.error('Failed to load categories:', error);
           return { categories: [], total: 0 };
         }),
-        apiClient.getDocuments({ page: 1, per_page: 5, sort_by: 'created_at', sort_order: 'desc' }).catch((error) => {
+        apiClient.getDocuments(1, 5, undefined, undefined, undefined, undefined, undefined, undefined, 'created_at', 'desc').catch((error) => {
           console.error('Failed to load documents:', error);
           return null;
         })

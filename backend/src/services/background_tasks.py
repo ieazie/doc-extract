@@ -5,10 +5,14 @@ import logging
 from uuid import UUID
 from typing import Dict, Any
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 
 from ..core.document_processor import document_processor
-from ..models.database import Document, SessionLocal
+from ..models.database import (
+    Document, ExtractionJob, DocumentExtractionTracking, Extraction, 
+    SessionLocal
+)
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -363,6 +367,122 @@ class BackgroundTaskService:
             
         finally:
             db.close()
+
+
+    async def queue_job_execution(self, job_id: UUID) -> Dict[str, Any]:
+        """
+        Queue an extraction job for execution
+        
+        Args:
+            job_id: Extraction job identifier
+            
+        Returns:
+            Execution status and statistics
+        """
+        db = SessionLocal()
+        
+        try:
+            logger.info(f"Starting job execution for job {job_id}")
+            
+            # Get the job
+            job = db.query(ExtractionJob).filter(ExtractionJob.id == job_id).first()
+            if not job:
+                logger.error(f"Job {job_id} not found")
+                return {"status": "failed", "error": "Job not found"}
+            
+            if not job.is_active:
+                logger.warning(f"Job {job_id} is not active")
+                return {"status": "skipped", "error": "Job is not active"}
+            
+            # Find documents to process
+            processed_documents = db.query(DocumentExtractionTracking.document_id).filter(
+                DocumentExtractionTracking.job_id == job.id,
+                DocumentExtractionTracking.status.in_(['completed', 'processing'])
+            ).subquery()
+            
+            documents = db.query(Document).filter(
+                Document.category_id == job.category_id,
+                Document.tenant_id == job.tenant_id,
+                Document.raw_content.isnot(None),  # Only documents with extracted text
+                ~Document.id.in_(processed_documents)
+            ).all()
+            
+            if not documents:
+                logger.info(f"No new documents to process for job {job_id}")
+                return {"status": "completed", "documents_processed": 0}
+            
+            # Create tracking records and queue extractions
+            documents_processed = 0
+            for document in documents:
+                # Create tracking record
+                tracking = DocumentExtractionTracking(
+                    document_id=document.id,
+                    job_id=job.id,
+                    status='pending',
+                    triggered_by='schedule'
+                )
+                db.add(tracking)
+                db.flush()  # Get the ID
+                
+                # Create extraction record
+                extraction = Extraction(
+                    document_id=document.id,
+                    template_id=job.template_id,
+                    status='pending'
+                )
+                db.add(extraction)
+                db.flush()  # Get the ID
+                
+                # Update tracking with extraction ID
+                tracking.extraction_id = extraction.id
+                
+                # Queue the extraction task (will be implemented in Phase 10.3)
+                # For now, just mark as processing
+                tracking.status = 'processing'
+                documents_processed += 1
+            
+            # Update job statistics
+            job.total_executions += 1
+            job.last_run_at = datetime.now(timezone.utc)
+            
+            # Calculate next run time for recurring jobs
+            if job.schedule_type == 'recurring':
+                job.next_run_at = self._calculate_next_run_time(job.schedule_config)
+            
+            db.commit()
+            
+            logger.info(f"Job execution completed for job {job_id}, processed {documents_processed} documents")
+            
+            return {
+                "status": "completed",
+                "documents_processed": documents_processed,
+                "next_run_at": job.next_run_at
+            }
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Job execution failed for job {job_id}: {str(e)}")
+            return {"status": "failed", "error": str(e)}
+            
+        finally:
+            db.close()
+    
+    def _calculate_next_run_time(self, schedule_config: dict, current_time: datetime = None) -> Optional[datetime]:
+        """Calculate next run time for recurring jobs"""
+        if not schedule_config or 'cron' not in schedule_config:
+            return None
+        
+        if current_time is None:
+            current_time = datetime.now(timezone.utc)
+        
+        # Simple daily at 9 AM implementation
+        # In Phase 10.6, we'll implement proper cron parsing
+        next_run = current_time.replace(hour=9, minute=0, second=0, microsecond=0)
+        if next_run <= current_time:
+            from datetime import timedelta
+            next_run += timedelta(days=1)
+        
+        return next_run
 
 
 # Global background task service instance

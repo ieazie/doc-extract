@@ -49,8 +49,10 @@ class Settings(BaseSettings):
     # CORS Settings
     cors_origins: list = Field(default=["http://localhost:3000", "http://frontend:3000"])
     
-    # Redis (for future caching and background tasks)
-    redis_url: Optional[str] = Field(default=None, env="REDIS_URL")
+    # Redis and Celery Configuration
+    redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
+    celery_broker_url: str = Field(default="redis://localhost:6379/0", env="CELERY_BROKER_URL")
+    celery_result_backend: str = Field(default="redis://localhost:6379/0", env="CELERY_RESULT_BACKEND")
     
     # Monitoring
     sentry_dsn: Optional[str] = Field(default=None, env="SENTRY_DSN")

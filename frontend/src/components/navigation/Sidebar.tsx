@@ -18,7 +18,8 @@ import {
   ChevronRight,
   Shield,
   Menu,
-  X
+  X,
+  Clock
 } from 'lucide-react';
 
 const SidebarContainer = styled.aside<{ $isCollapsed: boolean; $isMobile: boolean }>`
@@ -369,6 +370,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ children, showHeader = false }
   const navigationItems: NavigationItem[] = [
     { path: '/', icon: BarChart3, label: 'Dashboard', permission: 'analytics:read' },
     { path: '/extractions', icon: Zap, label: 'Extractions', permission: 'extractions:read' },
+    { path: '/jobs', icon: Clock, label: 'Jobs', permission: 'jobs:read' },
     { path: '/templates', icon: Settings, label: 'Templates', permission: 'templates:read' },
     { path: '/documents', icon: FileText, label: 'Documents', permission: 'documents:read' },
   ];

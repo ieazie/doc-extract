@@ -26,6 +26,11 @@ services:
       # Database
       - DATABASE_URL=postgresql://postgres:password@db:5432/docextract
       
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      
       # S3/MinIO Configuration
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
@@ -50,8 +55,106 @@ services:
       - ./backend:/app
     depends_on:
       - db
+      - redis
       - minio
       - ollama
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A src.celery_app worker --loglevel=info --queues=celery,high_priority,normal_priority,low_priority,scheduled
+    environment:
+      # Database
+      - DATABASE_URL=postgresql://postgres:password@db:5432/docextract
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      
+      # S3/MinIO Configuration
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_REGION=us-east-1
+      - S3_BUCKET_NAME=documents
+      
+      # Ollama Configuration
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=gemma2:2b
+      
+      # OpenAI Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=gpt-4
+      - OPENAI_MAX_TOKENS=2000
+      - OPENAI_TEMPERATURE=0.3
+      
+      # Application Settings
+      - DEBUG=true
+      - MAX_FILE_SIZE=52428800  # 50MB
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+      - redis
+      - minio
+      - ollama
+    restart: unless-stopped
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A src.celery_app beat --loglevel=info
+    environment:
+      # Database
+      - DATABASE_URL=postgresql://postgres:password@db:5432/docextract
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      
+      # S3/MinIO Configuration
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_REGION=us-east-1
+      - S3_BUCKET_NAME=documents
+      
+      # Ollama Configuration
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=gemma2:2b
+      
+      # OpenAI Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=gpt-4
+      - OPENAI_MAX_TOKENS=2000
+      - OPENAI_TEMPERATURE=0.3
+      
+      # Application Settings
+      - DEBUG=true
+      - MAX_FILE_SIZE=52428800  # 50MB
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+      - redis
     restart: unless-stopped
 
   db:
@@ -159,6 +262,8 @@ volumes:
   minio_data:
     driver: local
   ollama_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:

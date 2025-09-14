@@ -306,6 +306,134 @@ A comprehensive document extraction platform that uses LangExtract and local LLM
 
 ---
 
+### Phase 10: Advanced Job Scheduling & Queue Management
+**Goal**: Implement tenant-centric extraction job system with automated scheduling and queue management
+
+#### 10.1 Database Foundation
+- Create extraction_jobs table with tenant isolation
+- Add document_extraction_tracking table for job status
+- Implement database indexes for performance optimization
+- Add job statistics and execution history tracking
+- Create database models and Pydantic schemas
+
+#### 10.2 Backend API Core
+- Implement job management CRUD endpoints
+- Add job execution logic with document filtering
+- Create job statistics calculation and tracking
+- Implement next run time calculation for recurring jobs
+- Add proper authentication and permission controls
+
+#### 10.3 Queue Infrastructure
+- Set up Celery + Redis for background task processing
+- Configure multiple queues with priority handling
+- Implement tenant-specific concurrency limits
+- Add Celery Beat for scheduled job execution
+- Create task monitoring and error handling
+
+#### 10.4 Frontend Job Management
+- Create job creation modal with category/template selection
+- Implement jobs list page using existing Table component
+- Add job actions (pause/resume/delete/execute)
+- Create schedule configuration interface (immediate/scheduled/recurring)
+- Add job status indicators and badges
+
+#### 10.5 Document Status Tracking
+- Enhance documents table with job status column
+- Create job status visualization components
+- Add job status filtering and search capabilities
+- Implement document-job relationship tracking
+- Add job execution progress indicators
+
+#### 10.6 Scheduling & Recurring Jobs
+- Implement cron expression parsing and validation
+- Add timezone handling for scheduled jobs
+- Create recurring job execution logic
+- Implement job execution monitoring and history
+- Add schedule conflict detection and resolution
+
+#### 10.7 Advanced Features & Analytics
+- Create job performance metrics dashboard
+- Implement job execution analytics and reporting
+- Add bulk job operations and job templates
+- Create job import/export functionality
+- Implement job cloning and duplication features
+
+#### 10.8 Testing & Documentation
+- Comprehensive unit and integration testing
+- Frontend component testing for job management
+- API documentation and usage examples
+- User documentation for job scheduling
+- Performance testing and optimization
+
+**Deliverable**: Complete tenant-centric job scheduling system with queue management, automated document processing, and comprehensive monitoring
+
+---
+
+### Phase 11: Webhook Notification Infrastructure
+**Goal**: Implement comprehensive event-driven notification system with tenant-configurable webhooks
+
+#### 11.1 Database Foundation
+- Create event_logs table for comprehensive event tracking
+- Add webhook_subscriptions table for tenant webhook configurations
+- Create webhook_delivery_logs table for delivery tracking and retry management
+- Implement database indexes for performance optimization
+- Add event type enumeration and webhook security models
+
+#### 11.2 Event System Core
+- Implement event publishing service with structured event data
+- Create event type definitions for all system events (document, extraction, job, user)
+- Add event filtering and routing logic
+- Implement event history and audit trail
+- Create event replay and debugging capabilities
+
+#### 11.3 Webhook Subscription Management
+- Build webhook subscription CRUD API with tenant isolation
+- Add environment-specific webhook configuration (dev, staging, prod)
+- Implement webhook authentication (API keys, signatures)
+- Create subscription validation and testing endpoints
+- Add bulk subscription management capabilities
+
+#### 11.4 Webhook Delivery Engine
+- Implement at-least-once delivery with retry logic
+- Create webhook signature generation and validation
+- Add delivery status tracking and monitoring
+- Implement exponential backoff and circuit breaker patterns
+- Create webhook health monitoring and alerting
+
+#### 11.5 Event Integration Points
+- Integrate event publishing into document processing workflow
+- Add event triggers to extraction completion and failure
+- Implement job execution event notifications
+- Create user action event tracking
+- Add system health and error event notifications
+
+#### 11.6 Frontend Webhook Management
+- Create webhook subscription management interface
+- Add webhook testing and validation tools
+- Implement delivery status monitoring dashboard
+- Create event history and debugging interface
+- Add webhook configuration templates and presets
+
+#### 11.7 Security & Compliance
+- Implement webhook signature verification
+- Add rate limiting and abuse prevention
+- Create audit logging for webhook activities
+- Implement tenant isolation and access controls
+- Add webhook payload encryption options
+
+#### 11.8 Monitoring & Analytics
+- Create webhook delivery success/failure metrics
+- Implement event volume and performance monitoring
+- Add webhook endpoint health monitoring
+- Create notification analytics and reporting
+- Implement alerting for webhook failures and anomalies
+
+**Deliverable**: Production-ready webhook notification system with comprehensive event tracking, tenant-configurable subscriptions, and reliable delivery guarantees
+
+**Implementation Details**: See `PHASE11_WEBHOOK_NOTIFICATIONS.md` for detailed technical specifications and implementation guide
+
+---
+
 ## Implementation Strategy
 
 ### MVP Path (Phases 1-4)
@@ -335,6 +463,20 @@ A comprehensive document extraction platform that uses LangExtract and local LLM
 - Monitoring and alerting
 - Security hardening
 - Documentation and support
+
+### Version 3.0 (Phase 10)
+**Timeline**: +8-10 weeks
+- Advanced job scheduling and queue management
+- Tenant-centric automation workflows
+- Comprehensive job monitoring and analytics
+- Production-ready queue infrastructure
+
+### Version 4.0 (Phase 11)
+**Timeline**: +6-8 weeks
+- Comprehensive webhook notification infrastructure
+- Event-driven system integration capabilities
+- Tenant-configurable notification subscriptions
+- Production-ready event delivery guarantees
 
 ## Technical Decisions
 

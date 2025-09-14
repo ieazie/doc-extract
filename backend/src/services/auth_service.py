@@ -12,9 +12,11 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
-from ..models.database import User, Tenant, APIKey, SessionLocal
+from ..models.database import User, Tenant, APIKey, SessionLocal, get_db
 from ..config import settings
 from ..schemas.auth import UserRole, UserStatus, TenantStatus, UserCreate, TenantCreate
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +171,9 @@ class AuthService:
                 "extractions:read", "extractions:write", "extractions:delete",
                 "categories:read", "categories:write", "categories:delete",
                 
+                # Cross-tenant Job Management
+                "jobs:read", "jobs:write", "jobs:delete", "jobs:execute",
+                
                 # API and Configuration
                 "api-keys:read", "api-keys:write", "api-keys:delete",
                 "tenant_config:read", "tenant_config:write", "tenant_config:delete",
@@ -195,6 +200,9 @@ class AuthService:
                 "extractions:read", "extractions:write", "extractions:delete",
                 "categories:read", "categories:write", "categories:delete",
                 
+                # Job Management (within tenant)
+                "jobs:read", "jobs:write", "jobs:delete", "jobs:execute",
+                
                 # API Management
                 "api-keys:read", "api-keys:write", "api-keys:delete"
             ],
@@ -203,6 +211,7 @@ class AuthService:
                 "templates:read", "templates:write", "templates:delete",
                 "extractions:read", "extractions:write", "extractions:delete",
                 "categories:read", "categories:write", "categories:delete",
+                "jobs:read", "jobs:write", "jobs:execute",
                 "tenant_config:read", "tenant_config:write",
                 "analytics:read"
             ],
@@ -211,6 +220,7 @@ class AuthService:
                 "templates:read",
                 "extractions:read",
                 "categories:read",
+                "jobs:read",
                 "analytics:read"
             ]
         }
@@ -408,3 +418,72 @@ class AuthService:
 
 # Global auth service instance
 auth_service = AuthService()
+
+# FastAPI Security
+security = HTTPBearer()
+
+# FastAPI Dependencies
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    """Get current authenticated user from JWT token"""
+    token = credentials.credentials
+    
+    # Verify token
+    payload = auth_service.verify_token(token, "access")
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get user
+    user_id = UUID(payload.get("sub"))
+    user = auth_service.get_user_by_id(db, user_id)
+    if not user or user.status != UserStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return user
+
+def require_permission(permission: str):
+    """Create a dependency that requires a specific permission"""
+    async def permission_dependency(current_user: User = Depends(get_current_user)) -> User:
+        user_permissions = auth_service.get_user_permissions(current_user)
+        if permission not in user_permissions:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {permission} required"
+            )
+        return current_user
+    
+    return permission_dependency
+
+def require_role(required_role: UserRole):
+    """Create a dependency that requires a specific role"""
+    async def role_dependency(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role != required_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Role required: {required_role.value}"
+            )
+        return current_user
+    
+    return role_dependency
+
+def require_admin():
+    """Create a dependency that requires admin role"""
+    return require_role(UserRole.ADMIN)
+
+def require_tenant_admin():
+    """Create a dependency that requires tenant admin role"""
+    return require_role(UserRole.TENANT_ADMIN)
+
+def require_system_admin():
+    """Create a dependency that requires system admin role"""
+    return require_role(UserRole.SYSTEM_ADMIN)

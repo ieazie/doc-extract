@@ -35,7 +35,8 @@ python-multipart==0.0.6
 
 # Background tasks and caching
 celery==5.3.4
-redis==5.0.1
+redis==4.6.0
+kombu==5.3.4
 
 # Utilities
 python-dotenv==1.0.0
