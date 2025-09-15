@@ -11,8 +11,10 @@ import io
 import hashlib
 import time
 import logging
+from sqlalchemy.orm import Session
 
-from ..config import settings
+from ..config import settings, get_platform_defaults
+from .tenant_infrastructure_service import TenantInfrastructureService
 
 logger = logging.getLogger(__name__)
 
@@ -20,18 +22,45 @@ logger = logging.getLogger(__name__)
 class S3Service:
     """Enhanced S3 service with progress tracking and robust error handling"""
     
-    def __init__(self):
+    def __init__(self, db: Optional[Session] = None, tenant_id: Optional[UUID] = None, environment: str = "development"):
         try:
+            platform_defaults = get_platform_defaults()
+            
+            # Initialize S3 client with platform defaults
             self.s3_client = boto3.client(
                 's3',
-                endpoint_url=settings.aws_endpoint_url,
-                aws_access_key_id=settings.aws_access_key_id,
-                aws_secret_access_key=settings.aws_secret_access_key,
-                region_name=settings.aws_region
+                endpoint_url=platform_defaults['minio_endpoint_url'],
+                aws_access_key_id='minioadmin',  # Default MinIO credentials
+                aws_secret_access_key='minioadmin',
+                region_name=platform_defaults['default_aws_region']
             )
-            self.bucket_name = settings.s3_bucket_name
+            
             # Store the external endpoint URL for presigned URLs
-            self.external_endpoint_url = settings.aws_endpoint_url.replace('minio:9000', 'localhost:9000') if 'minio:9000' in settings.aws_endpoint_url else settings.aws_endpoint_url
+            self.external_endpoint_url = platform_defaults['minio_endpoint_url'].replace('minio:9000', 'localhost:9000')
+            
+            # Set bucket name based on tenant configuration
+            if db and tenant_id:
+                # Use tenant-specific configuration
+                infrastructure_service = TenantInfrastructureService(db)
+                storage_config = infrastructure_service.get_storage_config(tenant_id, environment)
+                self.bucket_name = storage_config.get('bucket_prefix', 'documents')
+                
+                # Use tenant-specific credentials if available
+                if 'access_key_id' in storage_config and 'secret_access_key' in storage_config:
+                    self.s3_client = boto3.client(
+                        's3',
+                        endpoint_url=platform_defaults['minio_endpoint_url'],
+                        aws_access_key_id=storage_config['access_key_id'],
+                        aws_secret_access_key=storage_config['secret_access_key'],
+                        region_name=platform_defaults['default_aws_region']
+                    )
+                    
+                logger.info(f"Initialized S3Service with tenant bucket: {self.bucket_name}")
+            else:
+                # Use default bucket for platform-level operations
+                self.bucket_name = 'documents'
+                logger.info(f"Initialized S3Service with default bucket: {self.bucket_name}")
+            
             self._ensure_bucket_exists()
         except Exception as e:
             logger.error(f"Failed to initialize S3 service: {e}")

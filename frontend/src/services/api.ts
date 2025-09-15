@@ -304,6 +304,7 @@ export interface User {
 export interface Tenant {
   id: string;
   name: string;
+  slug: string;
   settings: Record<string, any>;
   status: string;
   environment: string;
@@ -348,6 +349,95 @@ export interface RateLimitsConfig {
   extractions_per_hour: number;
   max_concurrent_extractions: number;
   burst_limit?: number;
+}
+
+// Infrastructure Configuration Types
+export interface StorageConfig {
+  provider: 'minio' | 'aws_s3' | 'gcs';
+  bucket_prefix: string;
+  region: string;
+  endpoint_url?: string;
+  max_storage_gb: number;
+  allowed_file_types: string[];
+  access_key_id?: string;
+  secret_access_key?: string;
+}
+
+export interface CacheConfig {
+  provider: 'redis';
+  host: string;
+  port: number;
+  database_number: string | number;
+  max_memory_mb: number;
+  ttl_seconds: number;
+  password?: string;
+}
+
+export interface MessageQueueConfig {
+  provider: 'redis';
+  queue_prefix: string;
+  broker_url: string;
+  result_backend: string;
+  max_workers: number;
+  priority_queues: string[];
+  password?: string;
+}
+
+export interface InfrastructureStatus {
+  environment: string;
+  storage: {
+    configured: boolean;
+    healthy: boolean;
+    details?: string;
+  };
+  cache: {
+    configured: boolean;
+    healthy: boolean;
+    details?: string;
+  };
+  queue: {
+    configured: boolean;
+    healthy: boolean;
+    details?: string;
+  };
+  llm: {
+    configured: boolean;
+    healthy: boolean;
+    details?: string;
+  };
+}
+
+export interface InfrastructureConfig {
+  environment: string;
+  tenant_slug: string;
+  configurations: {
+    storage?: StorageConfig;
+    cache?: CacheConfig;
+    message_queue?: MessageQueueConfig;
+    llm?: TenantLLMConfigs | LLMConfig;
+  };
+}
+
+export interface EnvironmentSecrets {
+  storage_access_key?: string;
+  storage_secret_key?: string;
+  cache_password?: string;
+  redis_password?: string;
+  llm_api_key?: string;
+  llm_field_api_key?: string;
+  llm_document_api_key?: string;
+  webhook_secret?: string;
+  database_password?: string;
+}
+
+export interface TenantEnvironmentInfo {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  environment: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TenantConfiguration {
@@ -640,7 +730,10 @@ class ApiClient {
     schema: Record<string, any>;
     prompt_config: Record<string, any>;
   }): Promise<any> {
-    const response = await this.client.post('/api/tenant/llm/test-extraction', testData);
+    // Use a longer timeout for LLM operations (5 minutes)
+    const response = await this.client.post('/api/tenant/llm/test-extraction', testData, {
+      timeout: 300000 // 5 minutes for LLM operations
+    });
     return response.data;
   }
 
@@ -1402,6 +1495,53 @@ class ApiClient {
   async getDocumentTracking(documentId: string): Promise<DocumentExtractionTracking[]> {
     const response = await this.client.get(`/api/documents/${documentId}/tracking`);
     return response.data;
+  }
+
+  // ============================================================================
+  // INFRASTRUCTURE MANAGEMENT API METHODS
+  // ============================================================================
+
+  async getTenantInfo(): Promise<TenantEnvironmentInfo> {
+    const response = await this.client.get('/api/tenant/info');
+    return response.data;
+  }
+
+  async getTenantInfoBySlug(slug: string): Promise<TenantEnvironmentInfo> {
+    const response = await this.client.get(`/api/tenant/${slug}/info`);
+    return response.data;
+  }
+
+  async getInfrastructureStatus(tenantSlug: string, environment: string): Promise<InfrastructureStatus> {
+    const response = await this.client.get(`/api/tenant/${tenantSlug}/infrastructure/status/${environment}`);
+    return response.data;
+  }
+
+  async getInfrastructureConfig(tenantSlug: string, environment: string): Promise<InfrastructureConfig> {
+    const response = await this.client.get(`/api/tenant/${tenantSlug}/infrastructure/config/${environment}`);
+    return response.data;
+  }
+
+  async getAvailableEnvironments(): Promise<string[]> {
+    const response = await this.client.get('/api/tenant/configurations/environments');
+    return response.data;
+  }
+
+  async getEnvironmentSecrets(environment: string): Promise<EnvironmentSecrets> {
+    const response = await this.client.get(`/api/tenant/secrets/${environment}`);
+    return response.data;
+  }
+
+  async updateEnvironmentSecret(environment: string, secretType: string, value: string): Promise<void> {
+    await this.client.put(`/api/tenant/secrets/${environment}/${secretType}`, { value });
+  }
+
+  async getEnvironmentConfig(configType: string, environment: string): Promise<any> {
+    const response = await this.client.get(`/api/tenant/configurations/${configType}/${environment}`);
+    return response.data;
+  }
+
+  async updateEnvironmentConfig(configType: string, environment: string, configData: any): Promise<void> {
+    await this.client.put(`/api/tenant/configurations/${configType}/${environment}`, configData);
   }
 
 }

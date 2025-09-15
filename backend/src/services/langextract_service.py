@@ -462,9 +462,10 @@ def get_langextract_service() -> LangExtractService:
     """Get the global LangExtract service instance"""
     global _langextract_service
     if _langextract_service is None:
-        from ..config import settings
+        from ..config import get_platform_defaults
+        platform_defaults = get_platform_defaults()
         _langextract_service = LangExtractService(
-            ollama_url=settings.ollama_url,
-            model_name=settings.ollama_model
+            ollama_url=platform_defaults['ollama_endpoint_url'],
+            model_name=platform_defaults['default_ollama_model']
         )
     return _langextract_service

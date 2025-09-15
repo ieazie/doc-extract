@@ -21,16 +21,16 @@ class Settings(BaseSettings):
         env="DATABASE_URL"
     )
     
-    # S3/MinIO Configuration
-    aws_access_key_id: str = Field(default="minioadmin", env="AWS_ACCESS_KEY_ID")
-    aws_secret_access_key: str = Field(default="minioadmin", env="AWS_SECRET_ACCESS_KEY")
-    aws_endpoint_url: Optional[str] = Field(default="http://minio:9000", env="AWS_ENDPOINT_URL")
-    aws_region: str = Field(default="us-east-1", env="AWS_REGION")
-    s3_bucket_name: str = Field(default="documents", env="S3_BUCKET_NAME")
+    # External Service Endpoints (tenant-agnostic)
+    minio_endpoint_url: str = Field(default="http://minio:9000", env="MINIO_ENDPOINT_URL")
+    ollama_endpoint_url: str = Field(default="http://ollama:11434", env="OLLAMA_ENDPOINT_URL")
     
-    # Ollama Configuration
-    ollama_url: str = Field(default="http://ollama:11434", env="OLLAMA_URL")
-    ollama_model: str = Field(default="gemma2:2b", env="OLLAMA_MODEL")
+    # Global Defaults (can be overridden per tenant)
+    default_aws_region: str = Field(default="us-east-1", env="DEFAULT_AWS_REGION")
+    default_ollama_model: str = Field(default="gemma3:4b", env="DEFAULT_OLLAMA_MODEL")
+    default_openai_model: str = Field(default="gpt-4", env="DEFAULT_OPENAI_MODEL")
+    default_openai_max_tokens: int = Field(default=2000, env="DEFAULT_OPENAI_MAX_TOKENS")
+    default_openai_temperature: float = Field(default=0.3, env="DEFAULT_OPENAI_TEMPERATURE")
     
     # File Upload Settings
     max_file_size: int = Field(default=20971520, env="MAX_FILE_SIZE")  # 20MB
@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
     jwt_secret: str = Field(default="dev-jwt-secret-change-in-production", env="JWT_SECRET")
     access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    tenant_secret_encryption_key: str = Field(
+        default="dev-tenant-secret-encryption-key-change-in-production", 
+        env="TENANT_SECRET_ENCRYPTION_KEY"
+    )
     
     # CORS Settings
     cors_origins: list = Field(default=["http://localhost:3000", "http://frontend:3000"])
@@ -83,18 +87,17 @@ def get_database_url() -> str:
     return settings.database_url
 
 
-def get_s3_config() -> dict:
-    """Get S3 configuration dictionary"""
-    config = {
-        'aws_access_key_id': settings.aws_access_key_id,
-        'aws_secret_access_key': settings.aws_secret_access_key,
-        'region_name': settings.aws_region
+def get_platform_defaults() -> dict:
+    """Get platform-level default configurations"""
+    return {
+        'minio_endpoint_url': settings.minio_endpoint_url,
+        'ollama_endpoint_url': settings.ollama_endpoint_url,
+        'default_aws_region': settings.default_aws_region,
+        'default_ollama_model': settings.default_ollama_model,
+        'default_openai_model': settings.default_openai_model,
+        'default_openai_max_tokens': settings.default_openai_max_tokens,
+        'default_openai_temperature': settings.default_openai_temperature,
     }
-    
-    if settings.aws_endpoint_url:
-        config['endpoint_url'] = settings.aws_endpoint_url
-    
-    return config
 
 
 def is_production() -> bool:

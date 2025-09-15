@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional
 
-from ..core.document_processor import document_processor
+from ..core.document_processor import DocumentProcessor
 from ..models.database import (
     Document, ExtractionJob, DocumentExtractionTracking, Extraction, 
     SessionLocal
@@ -22,7 +22,7 @@ class BackgroundTaskService:
     """Service for managing background tasks related to document processing"""
     
     def __init__(self):
-        self.document_processor = document_processor
+        pass  # DocumentProcessor will be initialized with db session when needed
 
     async def process_document_extraction(
         self, 
@@ -54,8 +54,11 @@ class BackgroundTaskService:
             document.extraction_status = "processing"
             db.commit()
             
+            # Initialize document processor with database session
+            document_processor = DocumentProcessor(db=db)
+            
             # Perform text extraction
-            extraction_result = await self.document_processor.extract_text_async(
+            extraction_result = await document_processor.extract_text_async(
                 document_id, s3_key, mime_type, tenant_id
             )
             
