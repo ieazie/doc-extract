@@ -471,21 +471,37 @@ class BackgroundTaskService:
             db.close()
     
     def _calculate_next_run_time(self, schedule_config: dict, current_time: datetime = None) -> Optional[datetime]:
-        """Calculate next run time for recurring jobs"""
+        """Calculate next run time for recurring jobs using proper cron parsing"""
         if not schedule_config or 'cron' not in schedule_config:
             return None
         
-        if current_time is None:
-            current_time = datetime.now(timezone.utc)
-        
-        # Simple daily at 9 AM implementation
-        # In Phase 10.6, we'll implement proper cron parsing
-        next_run = current_time.replace(hour=9, minute=0, second=0, microsecond=0)
-        if next_run <= current_time:
-            from datetime import timedelta
-            next_run += timedelta(days=1)
-        
-        return next_run
+        try:
+            from ..services.scheduling_service import SchedulingService
+            
+            scheduling_service = SchedulingService(self.db)
+            
+            # Get timezone from schedule config or default to UTC
+            timezone_str = schedule_config.get('timezone', 'UTC')
+            
+            # Calculate next run time
+            return scheduling_service.calculate_next_run_time(
+                cron_expr=schedule_config['cron'],
+                timezone_str=timezone_str,
+                current_time=current_time
+            )
+            
+        except Exception as e:
+            logger.error(f"Error calculating next run time: {e}")
+            # Fallback to simple calculation
+            if current_time is None:
+                current_time = datetime.now(timezone.utc)
+            
+            next_run = current_time.replace(hour=9, minute=0, second=0, microsecond=0)
+            if next_run <= current_time:
+                from datetime import timedelta
+                next_run += timedelta(days=1)
+            
+            return next_run
 
 
 # Global background task service instance

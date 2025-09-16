@@ -43,23 +43,30 @@ def get_db():
         db.close()
 
 
-def calculate_next_run_time(schedule_config: dict, current_time: datetime = None) -> Optional[datetime]:
-    """Calculate next run time for recurring jobs"""
+def calculate_next_run_time(schedule_config: dict, current_time: datetime = None, db: Session = None) -> Optional[datetime]:
+    """Calculate next run time for recurring jobs using proper cron parsing"""
     if not schedule_config or 'cron' not in schedule_config:
         return None
     
-    # For now, return a simple next day calculation
-    # In Phase 10.6, we'll implement proper cron parsing
-    if current_time is None:
-        current_time = datetime.now(timezone.utc)
-    
-    # Simple daily at 9 AM implementation
-    next_run = current_time.replace(hour=9, minute=0, second=0, microsecond=0)
-    if next_run <= current_time:
-        from datetime import timedelta
-        next_run += timedelta(days=1)
-    
-    return next_run
+    try:
+        from ..services.scheduling_service import SchedulingService
+        
+        # Create scheduling service instance
+        scheduling_service = SchedulingService(db)
+        
+        # Get timezone from schedule config or default to UTC
+        timezone_str = schedule_config.get('timezone', 'UTC')
+        
+        # Calculate next run time
+        return scheduling_service.calculate_next_run_time(
+            cron_expr=schedule_config['cron'],
+            timezone_str=timezone_str,
+            current_time=current_time
+        )
+        
+    except Exception as e:
+        logger.error(f"Error calculating next run time: {e}")
+        return None
 
 
 # ============================================================================
@@ -206,20 +213,53 @@ async def list_extraction_jobs(
         # Get total count
         total = query.count()
         
-        # Apply pagination
+        # Apply pagination with eager loading of relationships
+        from sqlalchemy.orm import joinedload
         offset = (page - 1) * per_page
-        jobs = query.offset(offset).limit(per_page).all()
+        jobs = query.options(
+            joinedload(ExtractionJob.category),
+            joinedload(ExtractionJob.template)
+        ).offset(offset).limit(per_page).all()
         
         # Calculate pages
         pages = (total + per_page - 1) // per_page
         
-        # Load related data
+        # Convert to response format with relationships
         job_responses = []
         for job in jobs:
-            job_dict = job.__dict__.copy()
-            job_dict['category_name'] = job.category.name if job.category else None
-            job_dict['template_name'] = job.template.name if job.template else None
-            job_responses.append(ExtractionJobResponse(**job_dict))
+            job_data = {
+                'id': job.id,
+                'tenant_id': job.tenant_id,
+                'name': job.name,
+                'description': job.description,
+                'category_id': job.category_id,
+                'template_id': job.template_id,
+                'schedule_type': job.schedule_type,
+                'schedule_config': job.schedule_config,
+                'run_at': job.run_at,
+                'priority': job.priority,
+                'max_concurrency': job.max_concurrency,
+                'retry_policy': job.retry_policy,
+                'is_active': job.is_active,
+                'last_run_at': job.last_run_at,
+                'next_run_at': job.next_run_at,
+                'total_executions': job.total_executions,
+                'successful_executions': job.successful_executions,
+                'failed_executions': job.failed_executions,
+                'created_at': job.created_at,
+                'updated_at': job.updated_at,
+                'category': {
+                    'id': job.category.id,
+                    'name': job.category.name,
+                    'color': job.category.color
+                } if job.category else None,
+                'template': {
+                    'id': job.template.id,
+                    'name': job.template.name,
+                    'description': job.template.description
+                } if job.template else None
+            }
+            job_responses.append(ExtractionJobResponse(**job_data))
         
         return ExtractionJobListResponse(
             jobs=job_responses,
@@ -571,3 +611,292 @@ async def get_job_statistics(
     except Exception as e:
         logger.error(f"Failed to get job statistics for {job_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get job statistics: {str(e)}")
+
+
+# ============================================================================
+# SCHEDULING & VALIDATION ENDPOINTS (Phase 10.6)
+# ============================================================================
+
+@router.post("/validate-cron")
+async def validate_cron_expression(
+    cron_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:read"))
+):
+    """Validate a cron expression and get scheduling information"""
+    try:
+        from ..services.scheduling_service import SchedulingService
+        
+        cron_expr = cron_data.get('cron')
+        timezone = cron_data.get('timezone', 'UTC')
+        
+        if not cron_expr:
+            raise HTTPException(status_code=400, detail="Cron expression is required")
+        
+        scheduling_service = SchedulingService(db)
+        
+        # Validate cron expression
+        validation_result = scheduling_service.validate_cron_expression(cron_expr)
+        
+        if validation_result['valid']:
+            # Add timezone-aware next run times
+            timezone_result = scheduling_service.calculate_next_run_time(
+                cron_expr=cron_expr,
+                timezone_str=timezone
+            )
+            
+            if timezone_result:
+                try:
+                    import pytz
+                    validation_result['next_run_utc'] = timezone_result.astimezone(pytz.UTC).isoformat()
+                except ImportError:
+                    validation_result['next_run_utc'] = timezone_result.isoformat()
+                validation_result['next_run_timezone'] = timezone_result.isoformat()
+                validation_result['timezone_used'] = timezone
+        
+        return validation_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to validate cron expression: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to validate cron expression: {str(e)}")
+
+
+@router.get("/schedule-conflicts/{job_id}")
+async def check_schedule_conflicts(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:read"))
+):
+    """Check for schedule conflicts with an existing job"""
+    try:
+        from ..services.scheduling_service import SchedulingService
+        
+        # Get the job
+        job = db.query(ExtractionJob).filter(
+            ExtractionJob.id == job_id,
+            ExtractionJob.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        if job.schedule_type != 'recurring':
+            return {"conflicts": [], "message": "Only recurring jobs can have conflicts"}
+        
+        scheduling_service = SchedulingService(db)
+        
+        # Prepare job schedule data
+        job_schedule = {
+            'schedule_type': job.schedule_type,
+            'schedule_config': job.schedule_config
+        }
+        
+        # Check for conflicts
+        conflicts = scheduling_service.detect_schedule_conflicts(
+            tenant_id=str(current_user.tenant_id),
+            new_job_schedule=job_schedule,
+            exclude_job_id=str(job_id)
+        )
+        
+        return {
+            "job_id": str(job_id),
+            "job_name": job.name,
+            "conflicts": conflicts,
+            "conflict_count": len(conflicts)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to check schedule conflicts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to check schedule conflicts: {str(e)}")
+
+
+@router.post("/schedule-conflicts")
+async def check_new_job_conflicts(
+    job_schedule: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:read"))
+):
+    """Check for schedule conflicts with a new job schedule"""
+    try:
+        from ..services.scheduling_service import SchedulingService
+        
+        scheduling_service = SchedulingService(db)
+        
+        # Check for conflicts
+        conflicts = scheduling_service.detect_schedule_conflicts(
+            tenant_id=str(current_user.tenant_id),
+            new_job_schedule=job_schedule
+        )
+        
+        return {
+            "conflicts": conflicts,
+            "conflict_count": len(conflicts),
+            "has_conflicts": len(conflicts) > 0
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to check new job conflicts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to check new job conflicts: {str(e)}")
+
+
+@router.get("/schedule-recommendations")
+async def get_schedule_recommendations(
+    category_id: Optional[UUID] = Query(None, description="Filter by category"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:read"))
+):
+    """Get schedule recommendations to avoid conflicts"""
+    try:
+        from ..services.scheduling_service import SchedulingService
+        
+        scheduling_service = SchedulingService(db)
+        
+        # Get recommendations
+        recommendations = scheduling_service.get_schedule_recommendations(
+            tenant_id=str(current_user.tenant_id),
+            job_category=str(category_id) if category_id else None
+        )
+        
+        return recommendations
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get schedule recommendations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get schedule recommendations: {str(e)}")
+
+
+# ============================================================================
+# JOB MONITORING & ANALYTICS ENDPOINTS (Phase 10.6)
+# ============================================================================
+
+@router.get("/{job_id}/statistics")
+async def get_job_statistics(
+    job_id: UUID,
+    days: int = Query(30, ge=1, le=365, description="Number of days to look back"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:read"))
+):
+    """Get comprehensive statistics for a job"""
+    try:
+        from ..services.job_monitoring_service import JobMonitoringService
+        
+        # Verify job belongs to tenant
+        job = db.query(ExtractionJob).filter(
+            ExtractionJob.id == job_id,
+            ExtractionJob.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        monitoring_service = JobMonitoringService(db)
+        statistics = monitoring_service.get_job_statistics(str(job_id), days)
+        
+        if "error" in statistics:
+            raise HTTPException(status_code=500, detail=statistics["error"])
+        
+        return statistics
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get job statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get job statistics: {str(e)}")
+
+
+@router.get("/{job_id}/execution-history")
+async def get_job_execution_history(
+    job_id: UUID,
+    limit: int = Query(50, ge=1, le=200, description="Number of records to return"),
+    offset: int = Query(0, ge=0, description="Number of records to skip"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:read"))
+):
+    """Get detailed execution history for a job"""
+    try:
+        from ..services.job_monitoring_service import JobMonitoringService
+        
+        # Verify job belongs to tenant
+        job = db.query(ExtractionJob).filter(
+            ExtractionJob.id == job_id,
+            ExtractionJob.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        monitoring_service = JobMonitoringService(db)
+        history = monitoring_service.get_execution_history(
+            str(job_id), limit, offset, status
+        )
+        
+        if "error" in history:
+            raise HTTPException(status_code=500, detail=history["error"])
+        
+        return history
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get execution history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get execution history: {str(e)}")
+
+
+@router.get("/tenant/overview")
+async def get_tenant_job_overview(
+    days: int = Query(7, ge=1, le=30, description="Number of days to look back"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:read"))
+):
+    """Get overview of all jobs for the current tenant"""
+    try:
+        from ..services.job_monitoring_service import JobMonitoringService
+        
+        monitoring_service = JobMonitoringService(db)
+        overview = monitoring_service.get_tenant_job_overview(str(current_user.tenant_id), days)
+        
+        if "error" in overview:
+            raise HTTPException(status_code=500, detail=overview["error"])
+        
+        return overview
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get tenant job overview: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get tenant job overview: {str(e)}")
+
+
+@router.get("/alerts/performance")
+async def get_performance_alerts(
+    threshold_minutes: int = Query(10, ge=1, le=60, description="Alert threshold in minutes"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("jobs:read"))
+):
+    """Get performance alerts for jobs"""
+    try:
+        from ..services.job_monitoring_service import JobMonitoringService
+        
+        monitoring_service = JobMonitoringService(db)
+        alerts = monitoring_service.get_performance_alerts(str(current_user.tenant_id), threshold_minutes)
+        
+        return {
+            "tenant_id": str(current_user.tenant_id),
+            "threshold_minutes": threshold_minutes,
+            "alerts": alerts,
+            "alert_count": len(alerts)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get performance alerts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get performance alerts: {str(e)}")
