@@ -168,9 +168,14 @@ class DocumentProcessor:
             from uuid import uuid4
             document_id = uuid4()
             
+            # Get tenant environment from database
+            from ..models.database import Tenant
+            tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            tenant_environment = tenant.environment if tenant else "development"
+            
             # Create tenant-aware S3Service
             from ..services.s3_service import S3Service
-            s3_service = S3Service(db=self.db, tenant_id=tenant_id, environment="development")
+            s3_service = S3Service(db=self.db, tenant_id=tenant_id, environment=tenant_environment)
             
             # Upload to S3
             upload_result = await s3_service.upload_document(
@@ -236,9 +241,14 @@ class DocumentProcessor:
         try:
             logger.info(f"Starting async text extraction for document {document_id}")
             
+            # Get tenant environment from database
+            from ..models.database import Tenant
+            tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            tenant_environment = tenant.environment if tenant else "development"
+            
             # Create tenant-aware S3Service
             from ..services.s3_service import S3Service
-            s3_service = S3Service(db=self.db, tenant_id=tenant_id, environment="development")
+            s3_service = S3Service(db=self.db, tenant_id=tenant_id, environment=tenant_environment)
             
             # Get document content from S3
             file_content = await s3_service.get_document_content(s3_key)
@@ -597,9 +607,14 @@ class DocumentProcessor:
             img.save(preview_buffer, format='JPEG', quality=95, optimize=True)
             preview_data = preview_buffer.getvalue()
             
+            # Get tenant environment from database
+            from ..models.database import Tenant
+            tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            tenant_environment = tenant.environment if tenant else "development"
+            
             # Create tenant-aware S3Service for thumbnail upload
             from ..services.s3_service import S3Service
-            s3_service = S3Service(db=self.db, tenant_id=tenant_id, environment="development")
+            s3_service = S3Service(db=self.db, tenant_id=tenant_id, environment=tenant_environment)
             
             # Upload preview to S3
             preview_s3_key = await s3_service.upload_thumbnail(
@@ -679,9 +694,14 @@ class DocumentProcessor:
             img.save(thumbnail_buffer, format='JPEG', quality=85, optimize=True)
             thumbnail_data = thumbnail_buffer.getvalue()
             
+            # Get tenant environment from database
+            from ..models.database import Tenant
+            tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            tenant_environment = tenant.environment if tenant else "development"
+            
             # Create tenant-aware S3Service for thumbnail upload
             from ..services.s3_service import S3Service
-            s3_service = S3Service(db=self.db, tenant_id=tenant_id, environment="development")
+            s3_service = S3Service(db=self.db, tenant_id=tenant_id, environment=tenant_environment)
             
             # Upload thumbnail to S3
             thumbnail_s3_key = await s3_service.upload_thumbnail(

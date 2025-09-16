@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, asc, or_
 from pydantic import BaseModel
 
-from ..models.database import Document, DocumentType, DocumentCategory, DocumentTag, DocumentExtractionTracking, ExtractionJob, SessionLocal
+from ..models.database import Document, DocumentType, DocumentCategory, DocumentTag, DocumentExtractionTracking, ExtractionJob, SessionLocal, Tenant
 # document_processor import removed - now creating tenant-aware instances dynamically
 from ..services.background_tasks import background_task_service
 # s3_service import removed - now using tenant-aware S3Service
@@ -657,9 +657,13 @@ async def download_document(
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
+        # Get tenant environment from database
+        tenant = db.query(Tenant).filter(Tenant.id == document.tenant_id).first()
+        tenant_environment = tenant.environment if tenant else "development"
+        
         # Create tenant-aware S3Service
         from ..services.s3_service import S3Service
-        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment="development")
+        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment=tenant_environment)
         
         # Generate presigned download URL
         download_url = await s3_service.get_download_url(
@@ -701,9 +705,13 @@ async def get_document_thumbnail(
         if not document.thumbnail_s3_key:
             raise HTTPException(status_code=404, detail="Thumbnail not available")
         
+        # Get tenant environment from database
+        tenant = db.query(Tenant).filter(Tenant.id == document.tenant_id).first()
+        tenant_environment = tenant.environment if tenant else "development"
+        
         # Create tenant-aware S3Service
         from ..services.s3_service import S3Service
-        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment="development")
+        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment=tenant_environment)
         
         # Generate presigned URL for thumbnail
         thumbnail_url = await s3_service.get_download_url(
@@ -838,7 +846,7 @@ async def reprocess_document(
             document.id,
             document.s3_key,
             document.mime_type,
-            tenant_id
+            current_user.tenant_id
         )
         
         return {"status": "success", "message": "Document reprocessing started"}
@@ -870,9 +878,13 @@ async def delete_document(
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
+        # Get tenant environment from database
+        tenant = db.query(Tenant).filter(Tenant.id == document.tenant_id).first()
+        tenant_environment = tenant.environment if tenant else "development"
+        
         # Create tenant-aware S3Service
         from ..services.s3_service import S3Service
-        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment="development")
+        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment=tenant_environment)
         
         # Delete from S3 (document and thumbnail)
         delete_results = await s3_service.delete_document_and_thumbnail(
@@ -1044,9 +1056,13 @@ async def get_document_preview_image(
         if not document.thumbnail_s3_key:
             raise HTTPException(status_code=404, detail="Preview not available")
         
+        # Get tenant environment from database
+        tenant = db.query(Tenant).filter(Tenant.id == document.tenant_id).first()
+        tenant_environment = tenant.environment if tenant else "development"
+        
         # Create tenant-aware S3Service
         from ..services.s3_service import S3Service
-        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment="development")
+        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment=tenant_environment)
         
         # Get the image content from S3
         image_content = await s3_service.get_document_content(document.thumbnail_s3_key)
@@ -1091,9 +1107,13 @@ async def regenerate_document_preview(
         if not document.s3_key:
             raise HTTPException(status_code=400, detail="Document file not available")
         
+        # Get tenant environment from database
+        tenant = db.query(Tenant).filter(Tenant.id == document.tenant_id).first()
+        tenant_environment = tenant.environment if tenant else "development"
+        
         # Create tenant-aware S3Service
         from ..services.s3_service import S3Service
-        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment="development")
+        s3_service = S3Service(db=db, tenant_id=document.tenant_id, environment=tenant_environment)
         
         # Get document content from S3
         document_content = await s3_service.get_document_content(document.s3_key)

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     app_name: str = Field(default="Document Extraction Platform", env="APP_NAME")
     debug: bool = Field(default=False, env="DEBUG")
     version: str = Field(default="1.0.0", env="APP_VERSION")
+    default_environment: str = Field(default="development", env="DEFAULT_ENVIRONMENT")
     
     # Database
     database_url: str = Field(
