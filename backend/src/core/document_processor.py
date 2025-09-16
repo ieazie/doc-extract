@@ -164,14 +164,28 @@ class DocumentProcessor:
             # Validate file before processing
             self._validate_file(file)
             
+            # Validate database session
+            if self.db is None:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Database session not available for document processing"
+                )
+            
             # Generate unique document ID
             from uuid import uuid4
             document_id = uuid4()
             
-            # Get tenant environment from database
+            # Get tenant environment from database with proper validation
             from ..models.database import Tenant
             tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
-            tenant_environment = tenant.environment if tenant else "development"
+            
+            if tenant is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Tenant with ID {tenant_id} not found"
+                )
+            
+            tenant_environment = tenant.environment or "development"
             
             # Create tenant-aware S3Service
             from ..services.s3_service import S3Service
@@ -241,10 +255,30 @@ class DocumentProcessor:
         try:
             logger.info(f"Starting async text extraction for document {document_id}")
             
-            # Get tenant environment from database
+            # Validate database session
+            if self.db is None:
+                logger.error(f"Database session not available for text extraction of document {document_id}")
+                return {
+                    "extraction_status": "failed",
+                    "extraction_error": "Database session not available",
+                    "extraction_completed_at": datetime.utcnow(),
+                    "processing_time": time.time() - start_time
+                }
+            
+            # Get tenant environment from database with proper validation
             from ..models.database import Tenant
             tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
-            tenant_environment = tenant.environment if tenant else "development"
+            
+            if tenant is None:
+                logger.error(f"Tenant with ID {tenant_id} not found for document {document_id}")
+                return {
+                    "extraction_status": "failed",
+                    "extraction_error": f"Tenant with ID {tenant_id} not found",
+                    "extraction_completed_at": datetime.utcnow(),
+                    "processing_time": time.time() - start_time
+                }
+            
+            tenant_environment = tenant.environment or "development"
             
             # Create tenant-aware S3Service
             from ..services.s3_service import S3Service
@@ -577,6 +611,11 @@ class DocumentProcessor:
             Preview generation result
         """
         try:
+            # Validate database session
+            if self.db is None:
+                logger.error(f"Database session not available for thumbnail generation of document {document_id}")
+                return {"error": "Database session not available"}
+            
             doc = fitz.open(stream=pdf_content, filetype="pdf")
             
             if doc.page_count == 0:
@@ -607,10 +646,15 @@ class DocumentProcessor:
             img.save(preview_buffer, format='JPEG', quality=95, optimize=True)
             preview_data = preview_buffer.getvalue()
             
-            # Get tenant environment from database
+            # Get tenant environment from database with proper validation
             from ..models.database import Tenant
             tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
-            tenant_environment = tenant.environment if tenant else "development"
+            
+            if tenant is None:
+                logger.error(f"Tenant with ID {tenant_id} not found for thumbnail generation of document {document_id}")
+                return {"error": f"Tenant with ID {tenant_id} not found"}
+            
+            tenant_environment = tenant.environment or "development"
             
             # Create tenant-aware S3Service for thumbnail upload
             from ..services.s3_service import S3Service
@@ -653,6 +697,11 @@ class DocumentProcessor:
             Thumbnail generation result
         """
         try:
+            # Validate database session
+            if self.db is None:
+                logger.error(f"Database session not available for generic thumbnail generation of document {document_id}")
+                return {"error": "Database session not available"}
+            
             # Create a simple thumbnail with file type icon
             img = Image.new('RGB', (300, 400), color='#f8fafc')
             draw = ImageDraw.Draw(img)
@@ -694,10 +743,15 @@ class DocumentProcessor:
             img.save(thumbnail_buffer, format='JPEG', quality=85, optimize=True)
             thumbnail_data = thumbnail_buffer.getvalue()
             
-            # Get tenant environment from database
+            # Get tenant environment from database with proper validation
             from ..models.database import Tenant
             tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
-            tenant_environment = tenant.environment if tenant else "development"
+            
+            if tenant is None:
+                logger.error(f"Tenant with ID {tenant_id} not found for generic thumbnail generation of document {document_id}")
+                return {"error": f"Tenant with ID {tenant_id} not found"}
+            
+            tenant_environment = tenant.environment or "development"
             
             # Create tenant-aware S3Service for thumbnail upload
             from ..services.s3_service import S3Service
