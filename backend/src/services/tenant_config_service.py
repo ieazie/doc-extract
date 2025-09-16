@@ -28,12 +28,13 @@ class TenantConfigService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_config(self, tenant_id: UUID, config_type: str) -> Optional[TenantConfigurationResponse]:
-        """Get tenant configuration by type"""
+    def get_config(self, tenant_id: UUID, config_type: str, environment: str = "development") -> Optional[TenantConfigurationResponse]:
+        """Get tenant configuration by type and environment"""
         config = self.db.query(TenantConfiguration).filter(
             and_(
                 TenantConfiguration.tenant_id == tenant_id,
                 TenantConfiguration.config_type == config_type,
+                TenantConfiguration.environment == environment,
                 TenantConfiguration.is_active == True
             )
         ).first()
@@ -43,9 +44,9 @@ class TenantConfigService:
 
         return TenantConfigurationResponse.from_orm(config)
 
-    def get_llm_config(self, tenant_id: UUID) -> Optional[Union[LLMConfig, TenantLLMConfigs]]:
-        """Get LLM configuration for tenant"""
-        config = self.get_config(tenant_id, "llm")
+    def get_llm_config(self, tenant_id: UUID, environment: str = "development") -> Optional[Union[LLMConfig, TenantLLMConfigs]]:
+        """Get LLM configuration for tenant and environment"""
+        config = self.get_config(tenant_id, "llm", environment)
         if not config:
             return None
         
@@ -160,6 +161,71 @@ class TenantConfigService:
         ).all()
         
         return [TenantConfigurationResponse.from_orm(config) for config in configs]
+    
+    def get_environment_configs(self, tenant_id: UUID, environment: str) -> Dict[str, Any]:
+        """Get all configurations for a specific environment"""
+        configs = self.db.query(TenantConfiguration).filter(
+            and_(
+                TenantConfiguration.tenant_id == tenant_id,
+                TenantConfiguration.environment == environment,
+                TenantConfiguration.is_active == True
+            )
+        ).all()
+        
+        return {
+            config.config_type: config.config_data 
+            for config in configs
+        }
+    
+    def get_available_environments(self, tenant_id: UUID) -> List[str]:
+        """Get list of environments with configurations for a tenant"""
+        environments = self.db.query(TenantConfiguration.environment).filter(
+            TenantConfiguration.tenant_id == tenant_id,
+            TenantConfiguration.is_active == True
+        ).distinct().all()
+        
+        return [env[0] for env in environments]
+    
+    def create_or_update_config_by_environment(
+        self, 
+        tenant_id: UUID, 
+        config_type: str, 
+        environment: str,
+        config_data: Dict[str, Any],
+        is_active: bool = True
+    ) -> TenantConfigurationResponse:
+        """Create or update tenant configuration for specific environment"""
+        
+        # Check if configuration already exists
+        existing_config = self.db.query(TenantConfiguration).filter(
+            and_(
+                TenantConfiguration.tenant_id == tenant_id,
+                TenantConfiguration.config_type == config_type,
+                TenantConfiguration.environment == environment
+            )
+        ).first()
+
+        if existing_config:
+            # Update existing configuration
+            existing_config.config_data = config_data
+            existing_config.is_active = is_active
+            existing_config.updated_at = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(existing_config)
+            return TenantConfigurationResponse.from_orm(existing_config)
+        else:
+            # Create new configuration
+            new_config = TenantConfiguration(
+                tenant_id=tenant_id,
+                config_type=config_type,
+                environment=environment,
+                config_data=config_data,
+                is_active=is_active
+            )
+            self.db.add(new_config)
+            self.db.commit()
+            self.db.refresh(new_config)
+            return TenantConfigurationResponse.from_orm(new_config)
 
 
 class RateLimitService:

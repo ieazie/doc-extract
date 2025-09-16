@@ -22,7 +22,8 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { SuccessMessage } from '@/components/common/SuccessMessage';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
-import { apiClient, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant } from '@/services/api';
+import { apiClient, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant, TenantEnvironmentInfo } from '@/services/api';
+import InfrastructureManagement from '@/components/tenants/InfrastructureManagement';
 
 const PageContainer = styled.div`
   padding: 2rem;
@@ -213,7 +214,7 @@ const ContextualMessage = styled.div<{ $type: 'success' | 'error' }>`
 
 const TenantConfigPage: React.FC = () => {
   const { user, tenant, hasPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'llm'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'llm' | 'infrastructure'>('overview');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fieldExtractionMessage, setFieldExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -724,6 +725,24 @@ const TenantConfigPage: React.FC = () => {
     </>
   );
 
+  const renderInfrastructureTab = () => {
+    if (!tenant) return null;
+    
+    // Use the actual slug from the tenant if available, otherwise generate one
+    const tenantSlug = (tenant as any).slug || tenant.name.toLowerCase().replace(/\s+/g, '-');
+    
+    const tenantInfo: TenantEnvironmentInfo = {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenantSlug,
+      status: tenant.status,
+      environment: tenant.environment,
+      created_at: tenant.created_at,
+      updated_at: tenant.updated_at
+    };
+
+    return <InfrastructureManagement tenantInfo={tenantInfo} />;
+  };
 
   if (loading) {
     return (
@@ -759,11 +778,18 @@ const TenantConfigPage: React.FC = () => {
         >
           LLM Provider
         </TabButton>
+        <TabButton 
+          $isActive={activeTab === 'infrastructure'} 
+          onClick={() => setActiveTab('infrastructure')}
+        >
+          Infrastructure
+        </TabButton>
       </TabNavigation>
 
       <TabContent>
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'llm' && renderLLMTab()}
+        {activeTab === 'infrastructure' && tenant && renderInfrastructureTab()}
       </TabContent>
     </PageContainer>
   );

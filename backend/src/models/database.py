@@ -1,7 +1,7 @@
 """
 SQLAlchemy models for the Document Extraction Platform
 """
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric, Enum
+from sqlalchemy import create_engine, Column, String, Integer, BigInteger, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -49,6 +49,7 @@ class Tenant(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
+    slug = Column(String(100), nullable=False, unique=True)
     settings = Column(JSONB, default={})
     status = Column(Enum(TenantStatusEnum), default=TenantStatusEnum.ACTIVE)
     environment = Column(String(50), default="development")
@@ -423,6 +424,7 @@ class TenantConfiguration(Base):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     config_type = Column(String(50), nullable=False)
     config_data = Column(JSONB, nullable=False)
+    environment = Column(String(50), default="development")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -432,8 +434,8 @@ class TenantConfiguration(Base):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint("config_type IN ('llm', 'rate_limits')", name="valid_config_type"),
-        UniqueConstraint("tenant_id", "config_type", name="unique_active_config", deferrable=True),
+        CheckConstraint("config_type IN ('llm', 'rate_limits', 'storage', 'cache', 'message_queue', 'ai_providers')", name="valid_config_type"),
+        UniqueConstraint("tenant_id", "config_type", "environment", name="unique_active_config", deferrable=True),
     )
 
     def __repr__(self):
@@ -577,6 +579,63 @@ def create_tables():
 def drop_tables():
     """Drop all tables (use with caution)"""
     Base.metadata.drop_all(bind=engine)
+
+
+class TenantEnvironmentSecret(Base):
+    """Tenant Environment Secret Model"""
+    __tablename__ = "tenant_environment_secrets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    environment = Column(String(50), nullable=False)
+    secret_type = Column(String(50), nullable=False)
+    encrypted_value = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    tenant = relationship("Tenant")
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "secret_type IN ('storage_access_key', 'storage_secret_key', 'cache_password', 'api_key', 'webhook_secret', 'database_password', 'redis_password')",
+            name="valid_secret_type"
+        ),
+        UniqueConstraint("tenant_id", "environment", "secret_type", name="unique_tenant_environment_secret"),
+    )
+
+    def __repr__(self):
+        return f"<TenantEnvironmentSecret(id={self.id}, tenant_id={self.tenant_id}, environment='{self.environment}', secret_type='{self.secret_type}')>"
+
+
+class TenantEnvironmentUsage(Base):
+    """Tenant Environment Usage Model"""
+    __tablename__ = "tenant_environment_usage"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    environment = Column(String(50), nullable=False)
+    resource_type = Column(String(50), nullable=False)
+    usage_count = Column(BigInteger, default=0)
+    usage_bytes = Column(BigInteger, default=0)
+    billing_period_start = Column(DateTime(timezone=True), server_default=func.now())
+    last_updated = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    tenant = relationship("Tenant")
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "resource_type IN ('storage_bytes', 'api_requests', 'extraction_jobs', 'cache_operations', 'queue_messages')",
+            name="valid_resource_type"
+        ),
+        UniqueConstraint("tenant_id", "environment", "resource_type", "billing_period_start", name="unique_tenant_environment_resource_period"),
+    )
+
+    def __repr__(self):
+        return f"<TenantEnvironmentUsage(id={self.id}, tenant_id={self.tenant_id}, environment='{self.environment}', resource_type='{self.resource_type}')>"
 
 
 # Database dependency for FastAPI

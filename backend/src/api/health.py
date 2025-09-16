@@ -9,7 +9,7 @@ import boto3
 from datetime import datetime
 
 from ..models.database import get_db
-from ..config import settings, get_s3_config
+from ..config import settings, get_platform_defaults
 
 router = APIRouter(tags=["health"])
 
@@ -51,15 +51,19 @@ async def detailed_health_check(db: Session = Depends(get_db)):
     
     # Check Ollama
     try:
+        platform_defaults = get_platform_defaults()
+        ollama_endpoint = platform_defaults['ollama_endpoint_url']
+        default_model = platform_defaults['default_ollama_model']
+        
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{settings.ollama_url}/api/tags")
+            response = await client.get(f"{ollama_endpoint}/api/tags")
             if response.status_code == 200:
                 models = response.json().get("models", [])
-                model_available = any(model["name"] == settings.ollama_model for model in models)
+                model_available = any(model["name"] == default_model for model in models)
                 
                 health_status["services"]["ollama"] = {
                     "status": "healthy" if model_available else "degraded",
-                    "message": f"Ollama accessible, model {settings.ollama_model} {'available' if model_available else 'not available'}",
+                    "message": f"Ollama accessible, model {default_model} {'available' if model_available else 'not available'}",
                     "available_models": [model["name"] for model in models]
                 }
                 
@@ -95,25 +99,28 @@ async def detailed_health_check(db: Session = Depends(get_db)):
         }
         overall_healthy = False
     
-    # Check MinIO/S3
+    # Check MinIO/S3 (platform-level check)
     try:
-        s3_config = get_s3_config()
-        s3_client = boto3.client('s3', **s3_config)
+        platform_defaults = get_platform_defaults()
+        minio_endpoint = platform_defaults['minio_endpoint_url']
         
-        # Try to list buckets
-        response = s3_client.list_buckets()
-        buckets = [bucket['Name'] for bucket in response.get('Buckets', [])]
-        
-        bucket_exists = settings.s3_bucket_name in buckets
-        
-        health_status["services"]["s3"] = {
-            "status": "healthy" if bucket_exists else "degraded",
-            "message": f"S3 accessible, bucket {settings.s3_bucket_name} {'exists' if bucket_exists else 'does not exist'}",
-            "available_buckets": buckets
+        # Simple connectivity check to MinIO endpoint
+        s3_config = {
+            'aws_access_key_id': 'minioadmin',
+            'aws_secret_access_key': 'minioadmin',
+            'endpoint_url': minio_endpoint,
+            'region_name': platform_defaults['default_aws_region']
         }
         
-        if not bucket_exists:
-            overall_healthy = False
+        s3_client = boto3.client('s3', **s3_config)
+        response = s3_client.list_buckets()
+        
+        health_status["services"]["s3"] = {
+            "status": "healthy",
+            "message": f"MinIO accessible at {minio_endpoint}",
+            "available_buckets": [bucket['Name'] for bucket in response.get('Buckets', [])],
+            "note": "Platform-level connectivity check - tenant-specific buckets managed separately"
+        }
             
     except Exception as e:
         health_status["services"]["s3"] = {
@@ -158,9 +165,13 @@ async def database_health(db: Session = Depends(get_db)):
 async def ollama_health():
     """Check Ollama service"""
     try:
+        platform_defaults = get_platform_defaults()
+        ollama_endpoint = platform_defaults['ollama_endpoint_url']
+        default_model = platform_defaults['default_ollama_model']
+        
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Check if Ollama is running
-            response = await client.get(f"{settings.ollama_url}/api/tags")
+            response = await client.get(f"{ollama_endpoint}/api/tags")
             
             if response.status_code != 200:
                 raise HTTPException(
@@ -172,14 +183,13 @@ async def ollama_health():
             models = models_data.get("models", [])
             
             # Check if required model is available
-            required_model = settings.ollama_model
             available_models = [model["name"] for model in models]
-            model_available = required_model in available_models
+            model_available = default_model in available_models
             
             return {
                 "status": "healthy" if model_available else "degraded",
-                "ollama_url": settings.ollama_url,
-                "required_model": required_model,
+                "ollama_url": ollama_endpoint,
+                "required_model": default_model,
                 "model_available": model_available,
                 "available_models": available_models,
                 "total_models": len(models)
@@ -199,26 +209,30 @@ async def ollama_health():
 
 @router.get("/s3")
 async def s3_health():
-    """Check S3/MinIO service"""
+    """Check S3/MinIO service (platform-level)"""
     try:
-        s3_config = get_s3_config()
-        s3_client = boto3.client('s3', **s3_config)
+        platform_defaults = get_platform_defaults()
+        minio_endpoint = platform_defaults['minio_endpoint_url']
         
-        # List buckets to test connectivity
+        # Simple connectivity check to MinIO endpoint
+        s3_config = {
+            'aws_access_key_id': 'minioadmin',
+            'aws_secret_access_key': 'minioadmin',
+            'endpoint_url': minio_endpoint,
+            'region_name': platform_defaults['default_aws_region']
+        }
+        
+        s3_client = boto3.client('s3', **s3_config)
         response = s3_client.list_buckets()
         buckets = [bucket['Name'] for bucket in response.get('Buckets', [])]
         
-        # Check if required bucket exists
-        bucket_exists = settings.s3_bucket_name in buckets
-        
         return {
-            "status": "healthy" if bucket_exists else "degraded",
-            "endpoint_url": settings.aws_endpoint_url,
-            "region": settings.aws_region,
-            "required_bucket": settings.s3_bucket_name,
-            "bucket_exists": bucket_exists,
+            "status": "healthy",
+            "endpoint_url": minio_endpoint,
+            "region": platform_defaults['default_aws_region'],
             "available_buckets": buckets,
-            "total_buckets": len(buckets)
+            "total_buckets": len(buckets),
+            "note": "Platform-level connectivity check - tenant-specific buckets managed separately"
         }
         
     except Exception as e:

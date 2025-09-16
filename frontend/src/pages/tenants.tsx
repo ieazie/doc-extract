@@ -27,6 +27,7 @@ import TenantConfigModal from '@/components/tenants/TenantConfigModal';
 interface Tenant {
   id: string;
   name: string;
+  slug: string;
   settings: Record<string, any>;
   status: string;
   environment: string;

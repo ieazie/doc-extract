@@ -11,6 +11,9 @@ from ..models.database import get_db
 from ..models.database import User
 from .auth import require_permission
 from ..services.tenant_config_service import TenantConfigService, RateLimitService
+from ..services.tenant_secret_service import TenantSecretService
+from ..services.tenant_infrastructure_service import TenantInfrastructureService
+from ..services.tenant_utils import TenantUtils
 from ..services.llm_provider_service import LLMProviderService
 from ..schemas.tenant_configuration import (
     TenantConfigurationCreate,
@@ -340,13 +343,29 @@ async def test_llm_extraction(
     
     try:
         llm_service = LLMProviderService.from_config(config_to_use)
+        
+        # Use minimal test data for faster response
+        minimal_test_data = {
+            "document_text": test_data.get("document_text", "Sample invoice: Invoice #12345, Amount: $100.00, Date: 2024-01-15"),
+            "schema": test_data.get("schema", {"invoice_number": "string", "amount": "number", "date": "string"}),
+            "prompt_config": test_data.get("prompt_config", {
+                "system_prompt": "Extract the specified fields from the document.",
+                "instructions": "Return the extracted data in JSON format."
+            })
+        }
+        
         result = llm_service.extract_data(
-            document_text=test_data["document_text"],
-            schema=test_data["schema"],
-            prompt_config=test_data["prompt_config"]
+            document_text=minimal_test_data["document_text"],
+            schema=minimal_test_data["schema"],
+            prompt_config=minimal_test_data["prompt_config"]
         )
         
-        return result
+        return {
+            "status": "success",
+            "message": "LLM test completed successfully",
+            "result": result,
+            "test_data_used": minimal_test_data
+        }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -384,4 +403,281 @@ async def get_available_models(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get available models: {str(e)}"
+        )
+
+
+# ============================================================================
+# ENVIRONMENT-AWARE INFRASTRUCTURE ENDPOINTS
+# ============================================================================
+
+@router.get("/configurations/environments")
+async def get_tenant_environments(
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get available environments for tenant"""
+    config_service = TenantConfigService(db)
+    environments = config_service.get_available_environments(current_user.tenant_id)
+    return {"environments": environments}
+
+
+@router.get("/configurations/{config_type}/{environment}")
+async def get_tenant_config_by_environment(
+    config_type: str,
+    environment: str,
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get tenant configuration for specific environment"""
+    config_service = TenantConfigService(db)
+    config = config_service.get_config(current_user.tenant_id, config_type, environment)
+    
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No {config_type} configuration found for {environment} environment"
+        )
+    
+    return config
+
+
+@router.put("/configurations/{config_type}/{environment}")
+async def update_tenant_config_by_environment(
+    config_type: str,
+    environment: str,
+    config_data: Dict[str, Any],
+    current_user: User = Depends(require_permission("tenant_config:write")),
+    db: Session = Depends(get_db)
+):
+    """Update tenant configuration for specific environment"""
+    config_service = TenantConfigService(db)
+    
+    config = config_service.create_or_update_config_by_environment(
+        tenant_id=current_user.tenant_id,
+        config_type=config_type,
+        environment=environment,
+        config_data=config_data
+    )
+    
+    return config
+
+
+@router.get("/secrets/{environment}")
+async def get_tenant_environment_secrets(
+    environment: str,
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get secrets for tenant environment (values will be masked)"""
+    secret_service = TenantSecretService(db)
+    secrets = secret_service.get_environment_secrets(current_user.tenant_id, environment)
+    
+    return {"environment": environment, "secrets": secrets}
+
+
+@router.put("/secrets/{environment}/{secret_type}")
+async def update_tenant_environment_secret(
+    environment: str,
+    secret_type: str,
+    secret_data: Dict[str, str],
+    current_user: User = Depends(require_permission("tenant_config:write")),
+    db: Session = Depends(get_db)
+):
+    """Update secret for tenant environment"""
+    secret_service = TenantSecretService(db)
+    
+    if secret_type not in secret_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Secret value not provided"
+        )
+    
+    secret_service.store_secret(
+        tenant_id=current_user.tenant_id,
+        environment=environment,
+        secret_type=secret_type,
+        value=secret_data[secret_type]
+    )
+    
+    return {"message": "Secret updated successfully"}
+
+
+@router.get("/infrastructure/status/{environment}")
+async def get_tenant_infrastructure_status(
+    environment: str,
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get infrastructure status for tenant environment"""
+    infrastructure_service = TenantInfrastructureService(db)
+    
+    try:
+        status = infrastructure_service.get_environment_infrastructure_status(
+            current_user.tenant_id, environment
+        )
+        return status
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get infrastructure status: {str(e)}"
+        )
+
+
+@router.get("/infrastructure/config/{environment}")
+async def get_tenant_infrastructure_config(
+    environment: str,
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get all infrastructure configurations for tenant environment"""
+    config_service = TenantConfigService(db)
+    
+    try:
+        configs = config_service.get_environment_configs(current_user.tenant_id, environment)
+        return {
+            "environment": environment,
+            "configurations": configs
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get infrastructure config: {str(e)}"
+        )
+
+
+# ============================================================================
+# TENANT SLUG ENDPOINTS
+# ============================================================================
+
+@router.get("/info", response_model=Dict[str, Any])
+async def get_tenant_info(
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get current tenant information including slug"""
+    try:
+        infrastructure_service = TenantInfrastructureService(db)
+        tenant_info = infrastructure_service.get_tenant_by_slug(current_user.tenant.slug)
+        if not tenant_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tenant not found"
+            )
+        return tenant_info
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get tenant info: {str(e)}"
+        )
+
+
+@router.get("/{slug}/info", response_model=Dict[str, Any])
+async def get_tenant_info_by_slug(
+    slug: str,
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get tenant information by slug"""
+    try:
+        infrastructure_service = TenantInfrastructureService(db)
+        tenant_info = infrastructure_service.get_tenant_by_slug(slug)
+        if not tenant_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tenant not found"
+            )
+        return tenant_info
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get tenant info: {str(e)}"
+        )
+
+
+@router.get("/{slug}/infrastructure/status/{environment}", response_model=Dict[str, Any])
+async def get_tenant_infrastructure_status_by_slug(
+    slug: str,
+    environment: str,
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get infrastructure status for a tenant by slug"""
+    try:
+        tenant_utils = TenantUtils(db)
+        tenant = tenant_utils.get_tenant_by_slug(slug)
+        if not tenant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tenant not found"
+            )
+        
+        infrastructure_service = TenantInfrastructureService(db)
+        status = infrastructure_service.get_environment_infrastructure_status(tenant.id, environment)
+        return status
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get infrastructure status: {str(e)}"
+        )
+
+
+@router.get("/{slug}/infrastructure/config/{environment}", response_model=Dict[str, Any])
+async def get_tenant_infrastructure_config_by_slug(
+    slug: str,
+    environment: str,
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get infrastructure configuration for a tenant by slug with slug-based resource naming"""
+    try:
+        tenant_utils = TenantUtils(db)
+        tenant = tenant_utils.get_tenant_by_slug(slug)
+        if not tenant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tenant not found"
+            )
+        
+        infrastructure_service = TenantInfrastructureService(db)
+        
+        # Get processed configurations with slug-based naming
+        configs = {}
+        
+        # Get storage config with slug-based naming
+        try:
+            storage_config = infrastructure_service.get_storage_config(tenant.id, environment)
+            configs["storage"] = storage_config
+        except Exception as e:
+            configs["storage"] = {"error": f"Storage config not available: {str(e)}"}
+        
+        # Get cache config with slug-based naming
+        try:
+            cache_config = infrastructure_service.get_cache_config(tenant.id, environment)
+            configs["cache"] = cache_config
+        except Exception as e:
+            configs["cache"] = {"error": f"Cache config not available: {str(e)}"}
+        
+        # Get queue config with slug-based naming
+        try:
+            queue_config = infrastructure_service.get_queue_config(tenant.id, environment)
+            configs["message_queue"] = queue_config
+        except Exception as e:
+            configs["message_queue"] = {"error": f"Queue config not available: {str(e)}"}
+        
+        # Get LLM config
+        try:
+            llm_config = infrastructure_service.get_llm_config(tenant.id, environment)
+            configs["llm"] = llm_config
+        except Exception as e:
+            configs["llm"] = {"error": f"LLM config not available: {str(e)}"}
+        
+        return {
+            "environment": environment,
+            "tenant_slug": slug,
+            "configurations": configs
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get infrastructure config: {str(e)}"
         )
