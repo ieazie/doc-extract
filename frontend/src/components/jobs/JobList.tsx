@@ -313,10 +313,14 @@ export const JobList: React.FC<JobListProps> = ({
     }
   };
 
+  // Load jobs when filter values change
+  useEffect(() => {
+    loadJobs({ page: 1 });
+  }, [filterValues.search, filterValues.category_id, filterValues.template_id, filterValues.schedule_type, filterValues.is_active]);
+
   const handleFilterChange = (key: string, value: string) => {
     const newFilters = { ...filterValues, [key]: value };
     setFilterValues(newFilters);
-    loadJobs({ ...newFilters, page: 1 });
   };
 
   const handleClearFilters = () => {
@@ -328,7 +332,6 @@ export const JobList: React.FC<JobListProps> = ({
       is_active: ''
     };
     setFilterValues(clearedFilters);
-    loadJobs({ ...clearedFilters, page: 1 });
   };
 
   // Column definitions

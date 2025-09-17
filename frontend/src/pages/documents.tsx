@@ -286,25 +286,30 @@ const DocumentsPage: React.FC = () => {
     }
   }, [pagination.page, pagination.per_page, includeTracking, filters]);
 
-  // Load documents when component mounts or dependencies change
+  // Load documents when component mounts
   useEffect(() => {
     loadDocuments();
-  }, [loadDocuments]);
+  }, []);
 
   // Update search when debounced value changes
   useEffect(() => {
     if (debouncedSearch !== filters.search) {
       const newFilters = { ...filters, search: debouncedSearch };
       setFilters(newFilters);
-      loadDocuments({ ...newFilters, page: 1 });
     }
-  }, [debouncedSearch, filters.search, loadDocuments]);
+  }, [debouncedSearch, filters.search]);
+
+  // Load documents when filters change (excluding search which is handled separately)
+  useEffect(() => {
+    if (filters.search === debouncedSearch) {
+      loadDocuments({ page: 1 });
+    }
+  }, [filters.status, filters.extraction_status, filters.job_status, loadDocuments]);
 
   // Handle filter changes
   const handleFilterChange = (key: string, value: string) => {
     const newFilters = { ...filters, [key]: value };
     setFilters(newFilters);
-    loadDocuments({ ...newFilters, page: 1 });
   };
 
   // Handle sort changes
@@ -322,7 +327,6 @@ const DocumentsPage: React.FC = () => {
     };
     setFilters(clearedFilters);
     setSearchInput('');
-    loadDocuments({ ...clearedFilters, page: 1 });
   };
 
   // Handle document actions
