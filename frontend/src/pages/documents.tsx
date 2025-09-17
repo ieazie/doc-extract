@@ -23,7 +23,7 @@ import { apiClient } from '../services/api';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { SuccessMessage } from '../components/common/SuccessMessage';
-import { Table, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table/Table';
+import { Table, TableFilters, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table';
 import { StatusBadge, ActionButton, ActionGroup } from '../components/table/Table.styled';
 
 // Styled Components
@@ -237,6 +237,14 @@ const DocumentsPage: React.FC = () => {
     total_pages: 0
   });
 
+  // Filter state management
+  const [filters, setFilters] = useState({
+    search: '',
+    status: '',
+    extraction_status: '',
+    job_status: ''
+  });
+
   const debouncedSearch = useDebounce(searchInput, 600);
 
   // Load documents
@@ -245,18 +253,21 @@ const DocumentsPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
+      // Merge current filters with new params
+      const mergedParams = { ...filters, ...params };
+
       const response = await apiClient.getDocuments(
-        params.page || pagination.page,
-        params.per_page || pagination.per_page,
-        params.search,
-        params.category_id,
-        params.document_type_id,
-        params.tags,
-        params.status,
-        params.extraction_status,
-        params.job_status,
-        params.sort_by || 'created_at',
-        params.sort_order || 'desc',
+        mergedParams.page || pagination.page,
+        mergedParams.per_page || pagination.per_page,
+        mergedParams.search,
+        mergedParams.category_id,
+        mergedParams.document_type_id,
+        mergedParams.tags,
+        mergedParams.status,
+        mergedParams.extraction_status,
+        mergedParams.job_status,
+        mergedParams.sort_by || 'created_at',
+        mergedParams.sort_order || 'desc',
         includeTracking
       );
 
@@ -273,23 +284,32 @@ const DocumentsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.per_page, includeTracking]);
+  }, [pagination.page, pagination.per_page, includeTracking, filters]);
 
-  // Load documents when component mounts or dependencies change
+  // Load documents when component mounts
   useEffect(() => {
     loadDocuments();
-  }, [loadDocuments]);
+  }, []);
 
   // Update search when debounced value changes
   useEffect(() => {
-    if (debouncedSearch !== searchInput) {
-      loadDocuments({ search: debouncedSearch, page: 1 });
+    if (debouncedSearch !== filters.search) {
+      const newFilters = { ...filters, search: debouncedSearch };
+      setFilters(newFilters);
     }
-  }, [debouncedSearch, loadDocuments]);
+  }, [debouncedSearch, filters.search]);
+
+  // Load documents when filters change (excluding search which is handled separately)
+  useEffect(() => {
+    if (filters.search === debouncedSearch) {
+      loadDocuments({ page: 1 });
+    }
+  }, [filters.status, filters.extraction_status, filters.job_status, filters.search, debouncedSearch]);
 
   // Handle filter changes
   const handleFilterChange = (key: string, value: string) => {
-    loadDocuments({ [key]: value, page: 1 });
+    const newFilters = { ...filters, [key]: value };
+    setFilters(newFilters);
   };
 
   // Handle sort changes
@@ -299,8 +319,14 @@ const DocumentsPage: React.FC = () => {
 
   // Handle clear filters
   const handleClearFilters = () => {
+    const clearedFilters = {
+      search: '',
+      status: '',
+      extraction_status: '',
+      job_status: ''
+    };
+    setFilters(clearedFilters);
     setSearchInput('');
-    loadDocuments({ page: 1 });
   };
 
   // Handle document actions
@@ -542,16 +568,18 @@ const DocumentsPage: React.FC = () => {
         </HeaderActions>
       </PageHeader>
 
+      <TableFilters
+        filters={filterDefinitions}
+        filterValues={filters}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+        isSearching={loading}
+        searchMinLength={2}
+      />
+
       <Table
         data={documents}
         columns={columns}
-        filters={filterDefinitions}
-        filterValues={{
-          status: '',
-          extraction_status: '',
-          job_status: '',
-          search: searchInput
-        }}
         pagination={paginationConfig}
         loading={loading}
         error={error ? 'Failed to load documents' : undefined}
@@ -561,11 +589,7 @@ const DocumentsPage: React.FC = () => {
           description: 'Upload documents to get started with document processing.'
         }}
         actions={undefined}
-        onFilterChange={handleFilterChange}
         onSort={handleSort}
-        onClearFilters={handleClearFilters}
-        isSearching={loading}
-        searchMinLength={2}
       />
     </PageContainer>
   );
