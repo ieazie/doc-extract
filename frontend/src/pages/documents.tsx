@@ -304,7 +304,7 @@ const DocumentsPage: React.FC = () => {
     if (filters.search === debouncedSearch) {
       loadDocuments({ page: 1 });
     }
-  }, [filters.status, filters.extraction_status, filters.job_status, loadDocuments]);
+  }, [filters.status, filters.extraction_status, filters.job_status, filters.search, debouncedSearch]);
 
   // Handle filter changes
   const handleFilterChange = (key: string, value: string) => {
