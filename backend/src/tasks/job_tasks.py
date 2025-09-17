@@ -10,6 +10,7 @@ from uuid import UUID
 
 from celery import shared_task, group, chain
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from ..models.database import (
     ExtractionJob, DocumentExtractionTracking, Document, Extraction,
@@ -48,20 +49,43 @@ def queue_job_execution(self, job_id: str) -> Dict[str, Any]:
             return {"status": "skipped", "error": "Job is not active"}
         
         # Find documents to process
-        processed_documents = db.query(DocumentExtractionTracking.document_id).filter(
+        # Exclude documents already processed by this job
+        processed_by_this_job = db.query(DocumentExtractionTracking.document_id).filter(
             DocumentExtractionTracking.job_id == job.id,
             DocumentExtractionTracking.status.in_(['completed', 'processing'])
+        ).subquery()
+        
+        # Exclude documents that already have extractions with this template
+        docs_with_existing_extractions = db.query(Extraction.document_id).filter(
+            Extraction.template_id == job.template_id,
+            Extraction.status.in_(['completed', 'processing'])
         ).subquery()
         
         documents = db.query(Document).filter(
             Document.category_id == job.category_id,
             Document.tenant_id == job.tenant_id,
             Document.raw_content.isnot(None),  # Only documents with extracted text
-            ~Document.id.in_(processed_documents)
+            ~Document.id.in_(processed_by_this_job),  # Not processed by this job
+            ~Document.id.in_(docs_with_existing_extractions)  # Not already extracted with this template
         ).all()
         
+        # Log document selection details
+        total_docs_in_category = db.query(Document).filter(
+            Document.category_id == job.category_id,
+            Document.tenant_id == job.tenant_id,
+            Document.raw_content.isnot(None)
+        ).count()
+        
+        docs_already_extracted = db.query(Extraction.document_id).filter(
+            Extraction.template_id == job.template_id,
+            Extraction.status.in_(['completed', 'processing'])
+        ).count()
+        
+        logger.info(f"Job {job_id} document selection: {total_docs_in_category} total docs, "
+                   f"{docs_already_extracted} already extracted, {len(documents)} new docs to process")
+        
         if not documents:
-            logger.info(f"No new documents to process for job {job_id}")
+            logger.info(f"No new documents to process for job {job_id} - all documents already extracted")
             return {"status": "completed", "documents_processed": 0}
         
         # Create tracking records and queue extractions
@@ -113,6 +137,13 @@ def queue_job_execution(self, job_id: str) -> Dict[str, Any]:
         
         db.commit()
         
+        # Schedule a task to update job statistics after all extractions complete
+        # This will run after a reasonable delay to allow extractions to complete
+        update_job_statistics.apply_async(
+            args=[str(job.id)],
+            countdown=300  # 5 minutes delay
+        )
+        
         logger.info(f"Job execution completed for job {job_id}, processed {documents_processed} documents")
         
         return {
@@ -163,12 +194,14 @@ def schedule_recurring_jobs() -> Dict[str, Any]:
     """
     Celery Beat task to schedule recurring jobs
     This runs every minute to check for jobs that need to be scheduled
+    Enhanced with proper cron parsing and next run time calculation
     """
     db = SessionLocal()
     
     try:
         now = datetime.now(timezone.utc)
         jobs_scheduled = 0
+        jobs_updated = 0
         
         # Find jobs that need to be scheduled
         jobs = db.query(ExtractionJob).filter(
@@ -178,20 +211,56 @@ def schedule_recurring_jobs() -> Dict[str, Any]:
         ).all()
         
         for job in jobs:
-            # Queue the job execution
-            queue_job_execution.delay(str(job.id))
-            jobs_scheduled += 1
-            
-            logger.info(f"Scheduled recurring job {job.id} for execution")
+            try:
+                # Queue the job execution
+                queue_job_execution.delay(str(job.id))
+                jobs_scheduled += 1
+                
+                # Update last run time and calculate next run time
+                job.last_run_at = now
+                
+                # Calculate next run time using the scheduling service
+                if job.schedule_config and job.schedule_config.get('cron'):
+                    from ..services.scheduling_service import SchedulingService
+                    scheduling_service = SchedulingService(db)
+                    
+                    next_run = scheduling_service.calculate_next_run_time(
+                        cron_expr=job.schedule_config['cron'],
+                        timezone_str=job.schedule_config.get('timezone', 'UTC'),
+                        current_time=now
+                    )
+                    
+                    if next_run:
+                        job.next_run_at = next_run
+                        jobs_updated += 1
+                        logger.info(f"Updated next run time for job {job.id} to {next_run}")
+                    else:
+                        logger.warning(f"Could not calculate next run time for job {job.id}")
+                        # Fallback: set next run to 24 hours from now
+                        job.next_run_at = now + timedelta(hours=24)
+                else:
+                    logger.warning(f"Job {job.id} has no valid cron configuration")
+                    job.next_run_at = now + timedelta(hours=24)
+                
+                logger.info(f"Scheduled recurring job {job.id} for execution")
+                
+            except Exception as job_error:
+                logger.error(f"Error processing job {job.id}: {str(job_error)}")
+                continue
+        
+        # Commit all changes
+        db.commit()
         
         return {
             "status": "completed",
             "jobs_scheduled": jobs_scheduled,
+            "jobs_updated": jobs_updated,
             "checked_at": now.isoformat()
         }
         
     except Exception as e:
         logger.error(f"Failed to schedule recurring jobs: {str(e)}")
+        db.rollback()
         return {"status": "failed", "error": str(e)}
         
     finally:
@@ -218,11 +287,23 @@ def process_scheduled_jobs() -> Dict[str, Any]:
         ).all()
         
         for job in jobs:
-            # Queue the job execution
-            queue_job_execution.delay(str(job.id))
-            jobs_processed += 1
-            
-            logger.info(f"Processed scheduled job {job.id}")
+            try:
+                # Queue the job execution
+                queue_job_execution.delay(str(job.id))
+                jobs_processed += 1
+                
+                # Mark as executed
+                job.last_run_at = now
+                job.is_active = False  # One-time scheduled jobs become inactive after execution
+                
+                logger.info(f"Processed scheduled job {job.id}")
+                
+            except Exception as job_error:
+                logger.error(f"Error processing scheduled job {job.id}: {str(job_error)}")
+                continue
+        
+        # Commit all changes
+        db.commit()
         
         return {
             "status": "completed",
@@ -232,6 +313,7 @@ def process_scheduled_jobs() -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Failed to process scheduled jobs: {str(e)}")
+        db.rollback()
         return {"status": "failed", "error": str(e)}
         
     finally:
@@ -370,18 +452,95 @@ def process_document_extraction(
         db.close()
 
 
+@shared_task
+def update_job_statistics(job_id: str) -> Dict[str, Any]:
+    """
+    Update job statistics based on tracking record results
+    This task runs after job execution to aggregate results
+    """
+    db = SessionLocal()
+    
+    try:
+        job = db.query(ExtractionJob).filter(ExtractionJob.id == uuid.UUID(job_id)).first()
+        
+        if not job:
+            logger.error(f"Job {job_id} not found for statistics update")
+            return {"status": "failed", "error": "Job not found"}
+        
+        # Count tracking records by status for this job
+        status_counts = db.query(
+            DocumentExtractionTracking.status,
+            func.count(DocumentExtractionTracking.id).label('count')
+        ).filter(
+            DocumentExtractionTracking.job_id == job.id
+        ).group_by(DocumentExtractionTracking.status).all()
+        
+        # Update job statistics
+        successful_count = 0
+        failed_count = 0
+        
+        for status, count in status_counts:
+            if status == 'completed':
+                successful_count = count
+            elif status == 'failed':
+                failed_count = count
+        
+        # Update job with aggregated statistics
+        job.successful_executions = successful_count
+        job.failed_executions = failed_count
+        
+        db.commit()
+        
+        logger.info(f"Updated job {job_id} statistics: {successful_count} successful, {failed_count} failed")
+        
+        return {
+            "status": "completed",
+            "job_id": job_id,
+            "successful_executions": successful_count,
+            "failed_executions": failed_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to update job statistics for {job_id}: {str(e)}")
+        return {"status": "failed", "error": str(e)}
+        
+    finally:
+        db.close()
+
+
 def calculate_next_run_time(schedule_config: dict, current_time: datetime = None) -> Optional[datetime]:
-    """Calculate next run time for recurring jobs"""
+    """Calculate next run time for recurring jobs using proper cron parsing"""
     if not schedule_config or 'cron' not in schedule_config:
         return None
     
-    if current_time is None:
-        current_time = datetime.now(timezone.utc)
-    
-    # Simple daily at 9 AM implementation
-    # In Phase 10.6, we'll implement proper cron parsing
-    next_run = current_time.replace(hour=9, minute=0, second=0, microsecond=0)
-    if next_run <= current_time:
-        next_run += timedelta(days=1)
-    
-    return next_run
+    try:
+        from ..services.scheduling_service import SchedulingService
+        
+        # Create a temporary database session for the scheduling service
+        db = SessionLocal()
+        try:
+            scheduling_service = SchedulingService(db)
+            
+            # Get timezone from schedule config or default to UTC
+            timezone_str = schedule_config.get('timezone', 'UTC')
+            
+            # Calculate next run time
+            return scheduling_service.calculate_next_run_time(
+                cron_expr=schedule_config['cron'],
+                timezone_str=timezone_str,
+                current_time=current_time
+            )
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Error calculating next run time: {e}")
+        # Fallback to simple calculation
+        if current_time is None:
+            current_time = datetime.now(timezone.utc)
+        
+        next_run = current_time.replace(hour=9, minute=0, second=0, microsecond=0)
+        if next_run <= current_time:
+            next_run += timedelta(days=1)
+        
+        return next_run

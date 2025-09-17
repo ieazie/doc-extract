@@ -64,16 +64,27 @@ def generate_tenant_analytics(db: Session, tenant_id: str, date: datetime.date) 
     """Generate analytics for a specific tenant and date"""
     
     # Job statistics
+    from sqlalchemy import case
+    
     job_stats = db.query(
         func.count(ExtractionJob.id).label('total_jobs'),
-        func.count(func.case([(ExtractionJob.is_active == True, 1)])).label('active_jobs')
+        func.count(case(
+            (ExtractionJob.is_active == True, 1),
+            else_=None
+        )).label('active_jobs')
     ).filter(ExtractionJob.tenant_id == tenant_id).first()
     
     # Extraction statistics for the date
     extraction_stats = db.query(
         func.count(DocumentExtractionTracking.id).label('total_extractions'),
-        func.count(func.case([(DocumentExtractionTracking.status == 'completed', 1)])).label('completed'),
-        func.count(func.case([(DocumentExtractionTracking.status == 'failed', 1)])).label('failed'),
+        func.count(case(
+            (DocumentExtractionTracking.status == 'completed', 1),
+            else_=None
+        )).label('completed'),
+        func.count(case(
+            (DocumentExtractionTracking.status == 'failed', 1),
+            else_=None
+        )).label('failed'),
         func.avg(DocumentExtractionTracking.processing_time_ms).label('avg_processing_time')
     ).join(ExtractionJob).filter(
         ExtractionJob.tenant_id == tenant_id,

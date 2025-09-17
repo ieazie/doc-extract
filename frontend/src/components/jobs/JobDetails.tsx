@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import Table, { ColumnDefinition } from '@/components/table/Table';
 import { apiClient, ExtractionJob, JobStatistics, DocumentExtractionTracking } from '@/services/api';
 import styled from 'styled-components';
 
@@ -229,41 +230,7 @@ const HistoryTitle = styled.h3`
   margin: 0;
 `;
 
-const HistoryTable = styled.div`
-  overflow-x: auto;
-`;
-
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-`;
-
-const TableHeader = styled.thead`
-  background-color: ${props => props.theme.colors.surfaceHover}40;
-`;
-
-const TableHeaderCell = styled.th`
-  padding: 12px;
-  text-align: left;
-  font-size: 14px;
-  font-weight: 600;
-  color: ${props => props.theme.colors.text.primary};
-  border-bottom: 1px solid ${props => props.theme.colors.border};
-`;
-
-const TableRow = styled.tr`
-  border-bottom: 1px solid ${props => props.theme.colors.border};
-  
-  &:hover {
-    background-color: ${props => props.theme.colors.surfaceHover}20;
-  }
-`;
-
-const TableCell = styled.td`
-  padding: 12px;
-  font-size: 14px;
-  color: ${props => props.theme.colors.text.primary};
-`;
+// Removed custom table components - using shared Table component instead
 
 const StatusIcon = styled.span<{ status: string }>`
   display: inline-flex;
@@ -619,53 +586,61 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
           </Button>
         </HistoryHeader>
 
-        {history.length > 0 ? (
-          <HistoryTable>
-            <Table>
-              <TableHeader>
-                <tr>
-                  <TableHeaderCell>Document</TableHeaderCell>
-                  <TableHeaderCell>Status</TableHeaderCell>
-                  <TableHeaderCell>Triggered By</TableHeaderCell>
-                  <TableHeaderCell>Queued At</TableHeaderCell>
-                  <TableHeaderCell>Completed At</TableHeaderCell>
-                  <TableHeaderCell>Processing Time</TableHeaderCell>
-                  <TableHeaderCell>Retries</TableHeaderCell>
-                </tr>
-              </TableHeader>
-              <tbody>
-                {history.map((tracking) => (
-                  <TableRow key={tracking.id}>
-                    <TableCell>
-                      {tracking.document?.original_filename || 'Unknown Document'}
-                    </TableCell>
-                    <TableCell>
-                      <StatusIcon status={tracking.status}>
-                        {getStatusIcon(tracking.status)}
-                        {tracking.status.charAt(0).toUpperCase() + tracking.status.slice(1)}
-                      </StatusIcon>
-                    </TableCell>
-                    <TableCell>
-                      {tracking.triggered_by.charAt(0).toUpperCase() + tracking.triggered_by.slice(1)}
-                    </TableCell>
-                    <TableCell>{apiClient.formatDate(tracking.queued_at)}</TableCell>
-                    <TableCell>
-                      {tracking.completed_at ? apiClient.formatDate(tracking.completed_at) : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {tracking.processing_time_ms ? `${tracking.processing_time_ms}ms` : '-'}
-                    </TableCell>
-                    <TableCell>{tracking.retry_count}</TableCell>
-                  </TableRow>
-                ))}
-              </tbody>
-            </Table>
-          </HistoryTable>
-        ) : (
-          <EmptyState>
-            <p>No execution history available yet.</p>
-          </EmptyState>
-        )}
+        <Table
+          data={history}
+          columns={[
+            {
+              key: 'document',
+              label: 'Document',
+              render: (value, row: DocumentExtractionTracking) => 
+                row.document?.original_filename || 'Unknown Document'
+            },
+            {
+              key: 'status',
+              label: 'Status',
+              render: (value, row: DocumentExtractionTracking) => (
+                <StatusIcon status={row.status}>
+                  {getStatusIcon(row.status)}
+                  {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+                </StatusIcon>
+              )
+            },
+            {
+              key: 'triggered_by',
+              label: 'Triggered By',
+              render: (value, row: DocumentExtractionTracking) => 
+                row.triggered_by.charAt(0).toUpperCase() + row.triggered_by.slice(1)
+            },
+            {
+              key: 'queued_at',
+              label: 'Queued At',
+              render: (value, row: DocumentExtractionTracking) => 
+                apiClient.formatDate(row.queued_at)
+            },
+            {
+              key: 'completed_at',
+              label: 'Completed At',
+              render: (value, row: DocumentExtractionTracking) => 
+                row.completed_at ? apiClient.formatDate(row.completed_at) : '-'
+            },
+            {
+              key: 'processing_time_ms',
+              label: 'Processing Time',
+              render: (value, row: DocumentExtractionTracking) => 
+                row.processing_time_ms ? `${row.processing_time_ms}ms` : '-'
+            },
+            {
+              key: 'retry_count',
+              label: 'Retries',
+              render: (value, row: DocumentExtractionTracking) => row.retry_count
+            }
+          ]}
+          emptyState={{
+            icon: <Clock size={48} />,
+            title: 'No execution history',
+            description: 'No execution history available yet.'
+          }}
+        />
       </HistorySection>
     </JobDetailsContainer>
   );

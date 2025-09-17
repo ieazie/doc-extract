@@ -44,10 +44,31 @@ class JobScheduleConfig(BaseModel):
     @validator('cron')
     def validate_cron(cls, v):
         if v is not None:
-            # Basic cron validation - could be enhanced with croniter
-            parts = v.split()
-            if len(parts) != 5:
-                raise ValueError('Cron expression must have 5 parts')
+            try:
+                from croniter import croniter
+                # Validate with croniter
+                croniter(v)
+            except ImportError:
+                # Fallback to basic validation if croniter not available
+                parts = v.split()
+                if len(parts) != 5:
+                    raise ValueError('Cron expression must have 5 parts')
+            except Exception as e:
+                raise ValueError(f'Invalid cron expression: {str(e)}')
+        return v
+    
+    @validator('timezone')
+    def validate_timezone(cls, v):
+        if v is not None:
+            try:
+                import pytz
+                pytz.timezone(v)
+            except ImportError:
+                # Basic validation if pytz not available
+                if v not in ['UTC', 'GMT']:
+                    raise ValueError('Invalid timezone format')
+            except Exception:
+                raise ValueError(f'Invalid timezone: {v}')
         return v
 
 
@@ -122,8 +143,8 @@ class ExtractionJobResponse(ExtractionJobBase):
     updated_at: datetime
     
     # Related objects
-    category_name: Optional[str] = None
-    template_name: Optional[str] = None
+    category: Optional[Dict[str, Any]] = None
+    template: Optional[Dict[str, Any]] = None
     
     class Config:
         from_attributes = True

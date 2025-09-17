@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { Plus, Play, Pause, Edit, Trash2, Clock, BarChart3 } from 'lucide-react';
+import { Plus, Play, Pause, Edit, Trash2, Clock, BarChart3, Eye } from 'lucide-react';
 import Table, { ColumnDefinition, FilterDefinition, PaginationConfig } from '@/components/table/Table';
 import { Button } from '@/components/ui/Button';
 import { apiClient, ExtractionJob, Category } from '@/services/api';
@@ -46,38 +46,46 @@ const ActionButton = styled(Button)`
 const StatusBadge = styled.span<{ status: 'active' | 'inactive' | 'running' | 'failed' }>`
   display: inline-flex;
   align-items: center;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
   font-weight: 500;
   text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: 1px solid transparent;
+  line-height: 1;
   
   ${props => {
     switch (props.status) {
       case 'active':
         return `
-          background-color: ${props.theme.colors.successLight};
-          color: ${props.theme.colors.success};
+          background-color: #dcfce7;
+          color: #166534;
+          border-color: #bbf7d0;
         `;
       case 'inactive':
         return `
-          background-color: ${props.theme.colors.surfaceHover};
-          color: ${props.theme.colors.text.secondary};
+          background-color: #f3f4f6;
+          color: #6b7280;
+          border-color: #e5e7eb;
         `;
       case 'running':
         return `
-          background-color: ${props.theme.colors.warningLight};
-          color: ${props.theme.colors.warning};
+          background-color: #fef3c7;
+          color: #92400e;
+          border-color: #fde68a;
         `;
       case 'failed':
         return `
-          background-color: ${props.theme.colors.errorLight};
-          color: ${props.theme.colors.error};
+          background-color: #fee2e2;
+          color: #dc2626;
+          border-color: #fecaca;
         `;
       default:
         return `
-          background-color: ${props.theme.colors.surfaceHover};
-          color: ${props.theme.colors.text.secondary};
+          background-color: #f3f4f6;
+          color: #6b7280;
+          border-color: #e5e7eb;
         `;
     }
   }}
@@ -86,32 +94,40 @@ const StatusBadge = styled.span<{ status: 'active' | 'inactive' | 'running' | 'f
 const ScheduleBadge = styled.span<{ type: 'immediate' | 'scheduled' | 'recurring' }>`
   display: inline-flex;
   align-items: center;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: 1px solid transparent;
+  line-height: 1;
   
   ${props => {
     switch (props.type) {
       case 'immediate':
         return `
-          background-color: ${props.theme.colors.primaryLight};
-          color: ${props.theme.colors.primaryDark};
+          background-color: #dbeafe;
+          color: #1e40af;
+          border-color: #bfdbfe;
         `;
       case 'scheduled':
         return `
-          background-color: ${props.theme.colors.info}20;
-          color: ${props.theme.colors.info};
+          background-color: #e0e7ff;
+          color: #3730a3;
+          border-color: #c7d2fe;
         `;
       case 'recurring':
         return `
-          background-color: ${props.theme.colors.warningLight};
-          color: ${props.theme.colors.warning};
+          background-color: #fef3c7;
+          color: #92400e;
+          border-color: #fde68a;
         `;
       default:
         return `
-          background-color: ${props.theme.colors.surfaceHover};
-          color: ${props.theme.colors.text.secondary};
+          background-color: #f3f4f6;
+          color: #6b7280;
+          border-color: #e5e7eb;
         `;
     }
   }}
@@ -134,12 +150,14 @@ interface JobListProps {
   onJobCreate?: () => void;
   onJobEdit?: (job: ExtractionJob) => void;
   onJobExecute?: (job: ExtractionJob) => void;
+  onJobDetails?: (job: ExtractionJob) => void;
 }
 
 export const JobList: React.FC<JobListProps> = ({
   onJobCreate,
   onJobEdit,
-  onJobExecute
+  onJobExecute,
+  onJobDetails
 }) => {
   const router = useRouter();
   const { user, hasPermission } = useAuth();
@@ -250,13 +268,14 @@ export const JobList: React.FC<JobListProps> = ({
       key: 'name',
       label: 'Job Name',
       sortable: true,
+      width: '300px', // Increased width for better readability
       render: (value, job) => (
         <div>
-          <div style={{ fontWeight: 500, marginBottom: 4 }}>{value}</div>
+          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: '14px' }}>{value}</div>
           {job.description && (
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              {job.description.length > 50 
-                ? `${job.description.substring(0, 50)}...` 
+            <div style={{ fontSize: '12px', color: '#6b7280', lineHeight: '1.4' }}>
+              {job.description.length > 80 
+                ? `${job.description.substring(0, 80)}...` 
                 : job.description}
             </div>
           )}
@@ -266,19 +285,22 @@ export const JobList: React.FC<JobListProps> = ({
     {
       key: 'category',
       label: 'Category',
+      width: '100px',
       render: (value, job) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {job.category && (
             <>
               <div
                 style={{
-                  width: 12,
-                  height: 12,
+                  width: 8,
+                  height: 8,
                   borderRadius: '50%',
                   backgroundColor: job.category.color
                 }}
               />
-              <span>{job.category.name}</span>
+              <span style={{ fontSize: '11px', fontWeight: 500, color: '#374151' }}>
+                {job.category.name}
+              </span>
             </>
           )}
         </div>
@@ -287,8 +309,9 @@ export const JobList: React.FC<JobListProps> = ({
     {
       key: 'template',
       label: 'Template',
+      width: '160px',
       render: (value, job) => (
-        <div style={{ fontWeight: 500 }}>
+        <div style={{ fontWeight: 500, color: '#374151', fontSize: '12px' }}>
           {job.template?.name || 'Unknown Template'}
         </div>
       )
@@ -296,6 +319,7 @@ export const JobList: React.FC<JobListProps> = ({
     {
       key: 'schedule_type',
       label: 'Schedule',
+      width: '90px',
       render: (value) => (
         <ScheduleBadge type={value}>
           {value.charAt(0).toUpperCase() + value.slice(1)}
@@ -305,6 +329,7 @@ export const JobList: React.FC<JobListProps> = ({
     {
       key: 'status',
       label: 'Status',
+      width: '80px',
       render: (value, job) => {
         const status = job.is_active ? 'active' : 'inactive';
         return <StatusBadge status={status}>{status}</StatusBadge>;
@@ -313,43 +338,149 @@ export const JobList: React.FC<JobListProps> = ({
     {
       key: 'stats',
       label: 'Statistics',
-      render: (value, job) => (
-        <JobStats>
-          <StatItem>
-            <BarChart3 size={12} />
-            {job.total_executions} runs
-          </StatItem>
-          <StatItem>
-            <Clock size={12} />
-            {job.successful_executions} success
-          </StatItem>
-        </JobStats>
-      )
+      width: '140px',
+      render: (value, job) => {
+        const total = job.total_executions;
+        const successful = job.successful_executions;
+        const failed = job.failed_executions;
+        const successRate = total > 0 ? Math.round((successful / total) * 100) : 0;
+        
+        return (
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: 2,
+            alignItems: 'flex-start'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 4, 
+              fontSize: '11px',
+              lineHeight: '1.2'
+            }}>
+              <BarChart3 size={10} color="#6b7280" />
+              <span style={{ color: '#374151', fontWeight: 500 }}>{total}</span>
+              <span style={{ color: '#6b7280' }}>runs</span>
+            </div>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 4, 
+              fontSize: '11px',
+              lineHeight: '1.2'
+            }}>
+              <Clock size={10} color="#059669" />
+              <span style={{ color: '#059669', fontWeight: 500 }}>{successful}</span>
+              <span style={{ color: '#6b7280' }}>success</span>
+              {total > 0 && (
+                <span style={{ 
+                  color: successRate >= 80 ? '#059669' : successRate >= 60 ? '#f59e0b' : '#dc2626',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  marginLeft: '2px'
+                }}>
+                  ({successRate}%)
+                </span>
+              )}
+            </div>
+            {failed > 0 && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 4, 
+                fontSize: '11px',
+                lineHeight: '1.2'
+              }}>
+                <Clock size={10} color="#dc2626" />
+                <span style={{ color: '#dc2626', fontWeight: 500 }}>{failed}</span>
+                <span style={{ color: '#6b7280' }}>failed</span>
+              </div>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: 'last_run_at',
       label: 'Last Run',
       sortable: true,
-      render: (value) => value ? apiClient.formatDate(value) : 'Never'
+      width: '120px',
+      render: (value, job) => {
+        if (!value) {
+          return <span style={{ color: '#9ca3af', fontSize: '11px' }}>Never</span>;
+        }
+        
+        const lastRun = new Date(value);
+        const now = new Date();
+        const diffMs = now.getTime() - lastRun.getTime();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffHours / 24);
+        
+        let timeAgo = '';
+        if (diffDays > 0) {
+          timeAgo = `${diffDays}d ago`;
+        } else if (diffHours > 0) {
+          timeAgo = `${diffHours}h ago`;
+        } else {
+          timeAgo = 'Just now';
+        }
+        
+        return (
+          <div style={{ fontSize: '11px', lineHeight: '1.2' }}>
+            <div style={{ fontWeight: 500, color: '#374151' }}>
+              {lastRun.toLocaleDateString()}
+            </div>
+            <div style={{ color: '#6b7280', fontSize: '10px' }}>
+              {timeAgo}
+            </div>
+          </div>
+        );
+      }
     },
     {
       key: 'actions',
       label: 'Actions',
-      width: '200px',
+      width: '180px',
       render: (value, job) => (
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
           <Button
             size="small"
             variant="outline"
             onClick={() => handleExecuteJob(job)}
             disabled={!job.is_active}
+            title={job.is_active ? "Execute job now" : "Job is inactive"}
+            style={{ 
+              padding: '6px',
+              borderColor: job.is_active ? '#3b82f6' : '#d1d5db',
+              color: job.is_active ? '#3b82f6' : '#9ca3af'
+            }}
           >
             <Play size={14} />
           </Button>
           <Button
             size="small"
             variant="outline"
+            onClick={() => onJobDetails && onJobDetails(job)}
+            title="View job details"
+            style={{ 
+              padding: '6px',
+              borderColor: '#2563eb',
+              color: '#2563eb'
+            }}
+          >
+            <Eye size={14} />
+          </Button>
+          <Button
+            size="small"
+            variant="outline"
             onClick={() => handleToggleJob(job)}
+            title={job.is_active ? "Pause job" : "Activate job"}
+            style={{ 
+              padding: '6px',
+              borderColor: job.is_active ? '#f59e0b' : '#10b981',
+              color: job.is_active ? '#f59e0b' : '#10b981'
+            }}
           >
             {job.is_active ? <Pause size={14} /> : <Play size={14} />}
           </Button>
@@ -357,6 +488,12 @@ export const JobList: React.FC<JobListProps> = ({
             size="small"
             variant="outline"
             onClick={() => onJobEdit && onJobEdit(job)}
+            title="Edit job"
+            style={{ 
+              padding: '6px',
+              borderColor: '#6b7280',
+              color: '#6b7280'
+            }}
           >
             <Edit size={14} />
           </Button>
@@ -364,7 +501,12 @@ export const JobList: React.FC<JobListProps> = ({
             size="small"
             variant="outline"
             onClick={() => handleDeleteJob(job)}
-            style={{ color: '#ef4444' }}
+            title="Delete job"
+            style={{ 
+              padding: '6px',
+              borderColor: '#ef4444',
+              color: '#ef4444'
+            }}
           >
             <Trash2 size={14} />
           </Button>

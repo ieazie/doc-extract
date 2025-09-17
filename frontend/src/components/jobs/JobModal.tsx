@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Clock, Calendar, Repeat, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
+import { CronBuilder } from './CronBuilder';
 import { apiClient, ExtractionJob, ExtractionJobCreate, ExtractionJobUpdate, Category } from '@/services/api';
 import styled from 'styled-components';
 
@@ -163,7 +164,7 @@ const ScheduleTypeOption = styled.div<{ selected: boolean }>`
   }
 `;
 
-const ScheduleTypeIcon = styled.div<{ type: 'immediate' | 'scheduled' | 'recurring' }>`
+const ScheduleTypeIcon = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -171,31 +172,9 @@ const ScheduleTypeIcon = styled.div<{ type: 'immediate' | 'scheduled' | 'recurri
   height: 32px;
   border-radius: 50%;
   margin-bottom: 8px;
-  
-  ${props => {
-    switch (props.type) {
-      case 'immediate':
-        return `
-          background-color: ${props.theme.colors.successLight};
-          color: ${props.theme.colors.success};
-        `;
-      case 'scheduled':
-        return `
-          background-color: ${props.theme.colors.info}20;
-          color: ${props.theme.colors.info};
-        `;
-      case 'recurring':
-        return `
-          background-color: ${props.theme.colors.warningLight};
-          color: ${props.theme.colors.warning};
-        `;
-      default:
-        return `
-          background-color: ${props.theme.colors.surfaceHover};
-          color: ${props.theme.colors.text.secondary};
-        `;
-    }
-  }}
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
 `;
 
 const ScheduleTypeLabel = styled.div`
@@ -551,7 +530,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                   selected={formData.schedule_type === 'immediate'}
                   onClick={() => handleScheduleTypeChange('immediate')}
                 >
-                  <ScheduleTypeIcon type="immediate">
+                  <ScheduleTypeIcon>
                     <Clock size={16} />
                   </ScheduleTypeIcon>
                   <ScheduleTypeLabel>Immediate</ScheduleTypeLabel>
@@ -564,7 +543,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                   selected={formData.schedule_type === 'scheduled'}
                   onClick={() => handleScheduleTypeChange('scheduled')}
                 >
-                  <ScheduleTypeIcon type="scheduled">
+                  <ScheduleTypeIcon>
                     <Calendar size={16} />
                   </ScheduleTypeIcon>
                   <ScheduleTypeLabel>Scheduled</ScheduleTypeLabel>
@@ -577,7 +556,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                   selected={formData.schedule_type === 'recurring'}
                   onClick={() => handleScheduleTypeChange('recurring')}
                 >
-                  <ScheduleTypeIcon type="recurring">
+                  <ScheduleTypeIcon>
                     <Repeat size={16} />
                   </ScheduleTypeIcon>
                   <ScheduleTypeLabel>Recurring</ScheduleTypeLabel>
@@ -600,15 +579,13 @@ export const JobModal: React.FC<JobModalProps> = ({
 
               {formData.schedule_type === 'recurring' && (
                 <FormGroup>
-                  <FormLabel>Cron Expression</FormLabel>
-                  <FormInput
-                    type="text"
-                    value={formData.schedule_config?.cron || ''}
-                    onChange={(e) => handleInputChange('schedule_config', {
+                  <CronBuilder
+                    value={formData.schedule_config?.cron || '0 9 * * *'}
+                    onChange={(cronExpression) => handleInputChange('schedule_config', {
                       ...formData.schedule_config,
-                      cron: e.target.value
+                      cron: cronExpression,
+                      timezone: formData.schedule_config?.timezone || 'UTC'
                     })}
-                    placeholder="0 9 * * * (Daily at 9 AM)"
                   />
                 </FormGroup>
               )}
