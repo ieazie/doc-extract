@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { Plus, Play, Pause, Edit, Trash2, Clock, BarChart3 } from 'lucide-react';
+import { Plus, Play, Pause, Edit, Trash2, Clock, BarChart3, Eye } from 'lucide-react';
 import Table, { ColumnDefinition, FilterDefinition, PaginationConfig } from '@/components/table/Table';
 import { Button } from '@/components/ui/Button';
 import { apiClient, ExtractionJob, Category } from '@/services/api';
@@ -150,12 +150,14 @@ interface JobListProps {
   onJobCreate?: () => void;
   onJobEdit?: (job: ExtractionJob) => void;
   onJobExecute?: (job: ExtractionJob) => void;
+  onJobDetails?: (job: ExtractionJob) => void;
 }
 
 export const JobList: React.FC<JobListProps> = ({
   onJobCreate,
   onJobEdit,
-  onJobExecute
+  onJobExecute,
+  onJobDetails
 }) => {
   const router = useRouter();
   const { user, hasPermission } = useAuth();
@@ -455,6 +457,19 @@ export const JobList: React.FC<JobListProps> = ({
             }}
           >
             <Play size={14} />
+          </Button>
+          <Button
+            size="small"
+            variant="outline"
+            onClick={() => onJobDetails && onJobDetails(job)}
+            title="View job details"
+            style={{ 
+              padding: '6px',
+              borderColor: '#2563eb',
+              color: '#2563eb'
+            }}
+          >
+            <Eye size={14} />
           </Button>
           <Button
             size="small"

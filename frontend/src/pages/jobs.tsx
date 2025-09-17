@@ -85,6 +85,7 @@ const JobsPage: React.FC = () => {
           onJobCreate={handleJobCreate}
           onJobEdit={handleJobEdit}
           onJobExecute={handleJobExecute}
+          onJobDetails={handleJobDetails}
         />
       )}
 

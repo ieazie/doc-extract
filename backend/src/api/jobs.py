@@ -582,10 +582,18 @@ async def get_job_statistics(
             raise HTTPException(status_code=404, detail="Job not found")
         
         # Calculate statistics from tracking records
+        from sqlalchemy import case
+        
         stats_query = db.query(
             func.count(DocumentExtractionTracking.id).label('total'),
-            func.count(func.case([(DocumentExtractionTracking.status == 'completed', 1)])).label('completed'),
-            func.count(func.case([(DocumentExtractionTracking.status == 'failed', 1)])).label('failed'),
+            func.count(case(
+                (DocumentExtractionTracking.status == 'completed', 1),
+                else_=None
+            )).label('completed'),
+            func.count(case(
+                (DocumentExtractionTracking.status == 'failed', 1),
+                else_=None
+            )).label('failed'),
             func.avg(DocumentExtractionTracking.processing_time_ms).label('avg_time'),
             func.max(DocumentExtractionTracking.completed_at).label('last_execution')
         ).filter(DocumentExtractionTracking.job_id == job_id)
