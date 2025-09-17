@@ -112,7 +112,7 @@ async def create_extraction_job(
         # Calculate next run time for recurring jobs
         next_run_at = None
         if job_data.schedule_type == ScheduleType.RECURRING:
-            next_run_at = calculate_next_run_time(job_data.schedule_config)
+            next_run_at = calculate_next_run_time(job_data.schedule_config, db=db)
         elif job_data.schedule_type == ScheduleType.SCHEDULED:
             next_run_at = job_data.run_at
         
@@ -349,7 +349,7 @@ async def update_extraction_job(
         # Recalculate next run time if schedule changed
         if 'schedule_type' in update_data or 'schedule_config' in update_data:
             if job.schedule_type == ScheduleType.RECURRING:
-                job.next_run_at = calculate_next_run_time(job.schedule_config)
+                job.next_run_at = calculate_next_run_time(job.schedule_config, db=db)
             elif job.schedule_type == ScheduleType.SCHEDULED:
                 job.next_run_at = job.run_at
             else:

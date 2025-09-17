@@ -475,10 +475,12 @@ class BackgroundTaskService:
         if not schedule_config or 'cron' not in schedule_config:
             return None
         
+        db = SessionLocal()
+        
         try:
             from ..services.scheduling_service import SchedulingService
             
-            scheduling_service = SchedulingService(self.db)
+            scheduling_service = SchedulingService(db)
             
             # Get timezone from schedule config or default to UTC
             timezone_str = schedule_config.get('timezone', 'UTC')
@@ -502,6 +504,9 @@ class BackgroundTaskService:
                 next_run += timedelta(days=1)
             
             return next_run
+            
+        finally:
+            db.close()
 
 
 # Global background task service instance

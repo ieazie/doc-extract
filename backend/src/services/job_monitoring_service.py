@@ -163,8 +163,6 @@ class JobMonitoringService:
             ).first()
             
             # Calculate success rate
-            total_executions = tracking_stats.total_executions or 0
-            successful_executions = tracking_stats.successful_executions or 0
             success_rate = (successful_executions / total_executions * 100) if total_executions > 0 else 0
             
             # Calculate uptime (jobs that completed within expected time)
@@ -210,7 +208,7 @@ class JobMonitoringService:
                     "median_time_ms": int(performance_stats.median_time or 0),
                     "p95_time_ms": int(performance_stats.p95_time or 0),
                     "p99_time_ms": int(performance_stats.p99_time or 0),
-                    "avg_time_ms": int(tracking_stats.avg_processing_time or 0)
+                    "avg_time_ms": int(avg_processing_time or 0)
                 }
             }
             
