@@ -73,7 +73,7 @@ export const TableFilters: React.FC<TableFiltersProps> = ({
               />
             ) : (
               <SearchInputWrapper>
-                <SearchIcon>
+                <SearchIcon $isSearching={isSearching}>
                   <Search size={16} />
                 </SearchIcon>
                 <SearchInput

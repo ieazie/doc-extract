@@ -205,7 +205,7 @@ export const JobList: React.FC<JobListProps> = ({
       // Convert string values to proper types for API - only send defined values
       const apiParams: any = {
         page: mergedParams.page || pagination.page,
-        per_page: mergedParams.per_page || pagination.per_page,
+        perPage: mergedParams.per_page || pagination.per_page,
       };
       
       // Only add parameters if they have valid values
@@ -236,7 +236,7 @@ export const JobList: React.FC<JobListProps> = ({
       
       const response = await apiClient.getJobs(
         apiParams.page,
-        apiParams.per_page,
+        apiParams.perPage,
         apiParams.search,
         apiParams.categoryId,
         apiParams.templateId,
