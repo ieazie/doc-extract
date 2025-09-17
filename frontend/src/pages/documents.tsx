@@ -23,7 +23,7 @@ import { apiClient } from '../services/api';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { SuccessMessage } from '../components/common/SuccessMessage';
-import { Table, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table/Table';
+import { Table, TableFilters, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table';
 import { StatusBadge, ActionButton, ActionGroup } from '../components/table/Table.styled';
 
 // Styled Components
@@ -542,9 +542,7 @@ const DocumentsPage: React.FC = () => {
         </HeaderActions>
       </PageHeader>
 
-      <Table
-        data={documents}
-        columns={columns}
+      <TableFilters
         filters={filterDefinitions}
         filterValues={{
           status: '',
@@ -552,6 +550,15 @@ const DocumentsPage: React.FC = () => {
           job_status: '',
           search: searchInput
         }}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+        isSearching={loading}
+        searchMinLength={2}
+      />
+
+      <Table
+        data={documents}
+        columns={columns}
         pagination={paginationConfig}
         loading={loading}
         error={error ? 'Failed to load documents' : undefined}
@@ -561,11 +568,7 @@ const DocumentsPage: React.FC = () => {
           description: 'Upload documents to get started with document processing.'
         }}
         actions={undefined}
-        onFilterChange={handleFilterChange}
         onSort={handleSort}
-        onClearFilters={handleClearFilters}
-        isSearching={loading}
-        searchMinLength={2}
       />
     </PageContainer>
   );

@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Plus, Play, Pause, Edit, Trash2, Clock, BarChart3, Eye } from 'lucide-react';
-import Table, { ColumnDefinition, FilterDefinition, PaginationConfig } from '@/components/table/Table';
+import { Table, TableFilters, ColumnDefinition, FilterDefinition, PaginationConfig } from '@/components/table';
 import { Button } from '@/components/ui/Button';
 import { apiClient, ExtractionJob, Category } from '@/services/api';
 import styled from 'styled-components';
@@ -605,13 +605,22 @@ export const JobList: React.FC<JobListProps> = ({
         </ActionButton>
       </PageHeader>
 
+      <TableFilters
+        filters={filters}
+        filterValues={{
+          status: '',
+          schedule_type: '',
+          category: '',
+          search: ''
+        }}
+        onFilterChange={(key, value) => loadJobs({ [key]: value })}
+      />
+
       <Table
         data={jobs}
         columns={columns}
-        filters={filters}
         pagination={paginationConfig}
         loading={loading}
-        onFilterChange={(key, value) => loadJobs({ [key]: value })}
         onSort={(key, direction) => loadJobs({ sort_by: key, sort_order: direction })}
         emptyState={{
           title: 'No Jobs Found',

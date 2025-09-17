@@ -4,7 +4,7 @@ import styled from 'styled-components';
 import { Plus, FileText, Eye } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { apiClient } from '../services/api';
-import { Table, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table/Table';
+import { Table, TableFilters, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table';
 import SchemaModal from '../components/templates/SchemaModal';
 import ContextMenu from '../components/common/ContextMenu';
 import { TemplateBase } from '../types/templates';
@@ -342,15 +342,20 @@ const TemplatesPage: React.FC = () => {
         </CreateButton>
       </PageHeader>
       
-      <Table
-        data={templates}
-        columns={columns}
+      <TableFilters
         filters={filterDefinitions}
         filterValues={{
           documentType: filters.documentType,
           status: filters.status,
           search: searchInput
         }}
+        onFilterChange={handleFilterChange}
+        isSearching={isLoading}
+      />
+
+      <Table
+        data={templates}
+        columns={columns}
         pagination={paginationConfig}
         loading={isLoading}
         error={error ? 'Failed to load templates' : undefined}
@@ -360,9 +365,6 @@ const TemplatesPage: React.FC = () => {
           description: 'Create your first template to get started with document extraction.'
         }}
         actions={(row) => <ContextMenu actions={getContextMenuActions(row)} />}
-        onFilterChange={handleFilterChange}
-        isSearching={isLoading}
-        searchMinLength={0}
       />
       
       {selectedTemplate && (

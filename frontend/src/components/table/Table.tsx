@@ -1,15 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, X } from 'lucide-react';
-import Dropdown from '@/components/ui/Dropdown';
 import { 
-  FilterBar, 
-  FilterGroup, 
-  FilterLabel, 
-  SearchInputWrapper,
-  SearchInput,
-  DateInput,
-  SearchIcon,
-  ClearButton,
   TableContainer,
   TableHeader,
   SortableHeaderCell,
@@ -39,13 +29,6 @@ export interface ColumnDefinition<T = any> {
   align?: 'left' | 'center' | 'right';
 }
 
-export interface FilterDefinition {
-  key: string;
-  label: string;
-  type: 'select' | 'search' | 'date';
-  options?: Array<{ value: string; label: string }>;
-  placeholder?: string;
-}
 
 export interface PaginationConfig {
   page: number;
@@ -60,8 +43,6 @@ export interface PaginationConfig {
 export interface TableProps<T = any> {
   data: T[];
   columns: ColumnDefinition<T>[];
-  filters?: FilterDefinition[];
-  filterValues?: Record<string, string>;
   pagination?: PaginationConfig;
   loading?: boolean;
   error?: string;
@@ -71,12 +52,8 @@ export interface TableProps<T = any> {
     description: string;
   };
   actions?: (row: T, index: number) => React.ReactNode;
-  onFilterChange?: (key: string, value: string) => void;
   onSort?: (key: string, direction: 'asc' | 'desc') => void;
-  onClearFilters?: () => void;
   className?: string;
-  isSearching?: boolean;
-  searchMinLength?: number;
 }
 
 // Default empty state
@@ -85,22 +62,6 @@ const defaultEmptyState = {
   description: 'There are no records to display.'
 };
 
-// Client-side filtering function
-const filterData = <T,>(data: T[], filters: Record<string, string>, columns: ColumnDefinition<T>[]): T[] => {
-  return data.filter(row => {
-    return Object.entries(filters).every(([key, value]) => {
-      if (!value) return true;
-      
-      const column = columns.find(col => col.key === key);
-      if (!column) return true;
-      
-      const cellValue = (row as any)[key];
-      if (cellValue === null || cellValue === undefined) return false;
-      
-      return String(cellValue).toLowerCase().includes(value.toLowerCase());
-    });
-  });
-};
 
 // Client-side pagination function
 const paginateData = <T,>(data: T[], page: number, perPage: number): T[] => {
@@ -112,21 +73,14 @@ const paginateData = <T,>(data: T[], page: number, perPage: number): T[] => {
 export const Table = <T extends Record<string, any>>({
   data,
   columns,
-  filters = [],
-  filterValues = {},
   pagination,
   loading = false,
   error,
   emptyState = defaultEmptyState,
   actions,
-  onFilterChange,
   onSort,
-  onClearFilters,
-  className,
-  isSearching = false,
-  searchMinLength = 2
+  className
 }: TableProps<T>) => {
-  const [localFilters, setLocalFilters] = useState<Record<string, string>>({});
   const [localPagination, setLocalPagination] = useState({
     page: 1,
     perPage: 10
@@ -139,20 +93,6 @@ export const Table = <T extends Record<string, any>>({
   // Determine if we're using client-side or server-side pagination
   const isClientPagination = !pagination || pagination.mode === 'client';
   const isServerPagination = pagination && pagination.mode === 'server';
-
-  // Handle filter changes
-  const handleFilterChange = (key: string, value: string) => {
-    if (onFilterChange) {
-      onFilterChange(key, value);
-    } else {
-      setLocalFilters(prev => ({ ...prev, [key]: value }));
-    }
-    
-    // Reset to first page when filtering
-    if (isClientPagination) {
-      setLocalPagination(prev => ({ ...prev, page: 1 }));
-    }
-  };
 
   // Handle pagination changes
   const handlePageChange = (page: number) => {
@@ -214,25 +154,20 @@ export const Table = <T extends Record<string, any>>({
 
   // Process data based on pagination mode
   const processedData = useMemo(() => {
-    let filteredData = data;
-
-    // Apply client-side filtering if no onFilterChange is provided
-    if (!onFilterChange && filters.length > 0) {
-      filteredData = filterData(data, localFilters, columns);
-    }
+    let processedData = data;
 
     // Apply client-side sorting if no onSort is provided
     if (!onSort && sortConfig) {
-      filteredData = sortData(filteredData, sortConfig);
+      processedData = sortData(processedData, sortConfig);
     }
 
     // Apply client-side pagination
     if (isClientPagination) {
-      return paginateData(filteredData, localPagination.page, localPagination.perPage);
+      return paginateData(processedData, localPagination.page, localPagination.perPage);
     }
 
-    return filteredData;
-  }, [data, localFilters, localPagination, filters, columns, onFilterChange, onSort, sortConfig, isClientPagination]);
+    return processedData;
+  }, [data, localPagination, onSort, sortConfig, isClientPagination]);
 
   // Calculate pagination info
   const paginationInfo = useMemo(() => {
@@ -246,7 +181,7 @@ export const Table = <T extends Record<string, any>>({
         perPage: pagination.perPage
       };
     } else {
-      const totalItems = onFilterChange ? data.length : filterData(data, localFilters, columns).length;
+      const totalItems = data.length;
       const totalPages = Math.ceil(totalItems / localPagination.perPage);
       return {
         currentPage: localPagination.page,
@@ -257,7 +192,7 @@ export const Table = <T extends Record<string, any>>({
         perPage: localPagination.perPage
       };
     }
-  }, [isServerPagination, pagination, localPagination, data, localFilters, columns, onFilterChange]);
+  }, [isServerPagination, pagination, localPagination, data]);
 
   // Render cell content
   const renderCell = (column: ColumnDefinition<T>, row: T, index: number) => {
@@ -288,43 +223,14 @@ export const Table = <T extends Record<string, any>>({
     );
   }
 
-  // Check if empty state is due to search/filtering
-  const hasActiveFilters = Object.values(filterValues).some(value => value && value.length > 0);
-  const isFilteredEmpty = !loading && !isSearching && processedData.length === 0 && hasActiveFilters;
 
-  // Empty state - only show if not loading, not searching, and no data
-  if (!loading && !isSearching && processedData.length === 0) {
+  // Empty state - only show if not loading and no data
+  if (!loading && processedData.length === 0) {
     return (
       <EmptyState>
         {emptyState.icon && <EmptyStateIcon>{emptyState.icon}</EmptyStateIcon>}
-        <EmptyStateTitle>
-          {isFilteredEmpty ? 'No results found' : emptyState.title}
-        </EmptyStateTitle>
-        <EmptyStateDescription>
-          {isFilteredEmpty 
-            ? 'Try adjusting your search terms or filters to see more results.' 
-            : emptyState.description
-          }
-        </EmptyStateDescription>
-        {isFilteredEmpty && onClearFilters && (
-          <div style={{ marginTop: '1rem' }}>
-            <button
-              onClick={onClearFilters}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.375rem',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500'
-              }}
-            >
-              Clear all filters
-            </button>
-          </div>
-        )}
+        <EmptyStateTitle>{emptyState.title}</EmptyStateTitle>
+        <EmptyStateDescription>{emptyState.description}</EmptyStateDescription>
       </EmptyState>
     );
   }
@@ -342,73 +248,6 @@ export const Table = <T extends Record<string, any>>({
 
   return (
     <div className={className}>
-      {/* Filters */}
-      {filters.length > 0 && (
-        <FilterBar>
-          {filters.map(filter => (
-            <FilterGroup key={filter.key}>
-              <FilterLabel>{filter.label}</FilterLabel>
-              {filter.type === 'select' ? (
-                <Dropdown
-                  value={onFilterChange ? (filterValues[filter.key] || '') : localFilters[filter.key] || ''}
-                  onChange={(value) => handleFilterChange(filter.key, value)}
-                  options={[
-                    { value: '', label: `All ${filter.label}` },
-                    ...(filter.options || [])
-                  ]}
-                  placeholder={`Select ${filter.label}`}
-                  size="compact"
-                />
-              ) : filter.type === 'date' ? (
-                <DateInput
-                  type="date"
-                  value={onFilterChange ? (filterValues[filter.key] || '') : localFilters[filter.key] || ''}
-                  onChange={(e) => handleFilterChange(filter.key, e.target.value)}
-                />
-              ) : (
-                <SearchInputWrapper>
-                  <SearchInput
-                    type="text"
-                    placeholder={filter.placeholder || `Search ${filter.label.toLowerCase()}...`}
-                    value={onFilterChange ? (filterValues[filter.key] || '') : localFilters[filter.key] || ''}
-                    onChange={(e) => handleFilterChange(filter.key, e.target.value)}
-                  />
-                  {(onFilterChange ? (filterValues[filter.key] || '') : localFilters[filter.key] || '') && (
-                    <ClearButton
-                      onClick={() => handleFilterChange(filter.key, '')}
-                      title="Clear search"
-                    >
-                      <X size={14} />
-                    </ClearButton>
-                  )}
-                  <SearchIcon $isSearching={isSearching}>
-                    <Search size={16} />
-                  </SearchIcon>
-                </SearchInputWrapper>
-              )}
-            </FilterGroup>
-          ))}
-          
-          {/* Per Page Selector */}
-          {(pagination || isClientPagination) && (
-            <FilterGroup>
-              <FilterLabel>Per Page</FilterLabel>
-              <Dropdown
-                value={isServerPagination ? pagination?.perPage?.toString() : localPagination.perPage.toString()}
-                onChange={(value) => handlePerPageChange(Number(value))}
-                options={[
-                  { value: "10", label: "10" },
-                  { value: "25", label: "25" },
-                  { value: "50", label: "50" },
-                  { value: "100", label: "100" }
-                ]}
-                placeholder="Select per page"
-                size="compact"
-              />
-            </FilterGroup>
-          )}
-        </FilterBar>
-      )}
 
       {/* Table */}
       <TableContainer>
@@ -443,34 +282,7 @@ export const Table = <T extends Record<string, any>>({
           {actions && <TableCell style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center' }}>Actions</TableCell>}
         </TableHeader>
 
-        {isSearching ? (
-          <TableRow $columns={totalColumns} $gridTemplate={getGridTemplateColumns()}>
-            <TableCell style={{ textAlign: 'center', gridColumn: `1 / ${totalColumns + 1}` }}>
-              <div style={{ padding: '2rem', color: '#6b7280' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                  <div style={{ 
-                    width: '16px', 
-                    height: '16px', 
-                    border: '2px solid #e5e7eb',
-                    borderTop: '2px solid #3b82f6',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite'
-                  }} />
-                  Searching...
-                </div>
-              </div>
-            </TableCell>
-          </TableRow>
-        ) : processedData.length === 0 && filters.some(f => f.type === 'search' && filterValues[f.key] && filterValues[f.key].length > 0 && filterValues[f.key].length < searchMinLength) ? (
-          <TableRow $columns={totalColumns} $gridTemplate={getGridTemplateColumns()}>
-            <TableCell style={{ textAlign: 'center', gridColumn: `1 / ${totalColumns + 1}` }}>
-              <div style={{ padding: '2rem', color: '#6b7280' }}>
-                <div>Type at least {searchMinLength} characters to search</div>
-              </div>
-            </TableCell>
-          </TableRow>
-        ) : (
-          processedData.map((row, index) => (
+        {processedData.map((row, index) => (
             <TableRow key={index} $columns={totalColumns} $gridTemplate={getGridTemplateColumns()}>
               {columns.map(column => (
                 <TableCell key={column.key} style={{ 
@@ -490,8 +302,7 @@ export const Table = <T extends Record<string, any>>({
                 </TableCell>
               )}
             </TableRow>
-          ))
-        )}
+          ))}
       </TableContainer>
 
       {/* Pagination */}

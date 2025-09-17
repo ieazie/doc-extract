@@ -1,5 +1,5 @@
 /**
- * Job Details Component - Shows detailed job information and execution history
+ * Job Details Component - Professional job information and execution history
  * Phase 10.4: Frontend Job Management
  */
 import React, { useState, useEffect } from 'react';
@@ -15,7 +15,11 @@ import {
   XCircle, 
   AlertCircle,
   Calendar,
-  Repeat
+  Repeat,
+  RefreshCw,
+  Activity,
+  Target,
+  Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -23,30 +27,47 @@ import Table, { ColumnDefinition } from '@/components/table/Table';
 import { apiClient, ExtractionJob, JobStatistics, DocumentExtractionTracking } from '@/services/api';
 import styled from 'styled-components';
 
-// Styled Components
+// Professional Styled Components
 const JobDetailsContainer = styled.div`
-  padding: 24px;
-  max-width: 1200px;
+  padding: 32px;
+  max-width: 1400px;
   margin: 0 auto;
+  background-color: #fafafa;
+  min-height: 100vh;
 `;
 
-const JobHeader = styled.div`
+const PageHeader = styled.div`
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+`;
+
+const HeaderTop = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 `;
 
 const BackButton = styled(Button)`
   display: flex;
   align-items: center;
   gap: 8px;
+  color: #6b7280;
+  border-color: #e5e7eb;
+  
+  &:hover {
+    border-color: #d1d5db;
+    background-color: #f9fafb;
+  }
 `;
 
 const JobTitle = styled.h1`
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 600;
-  color: ${props => props.theme.colors.text.primary};
+  color: #111827;
   margin: 0;
   flex: 1;
   margin-left: 16px;
@@ -57,9 +78,43 @@ const ActionButtons = styled.div`
   gap: 8px;
 `;
 
-const JobInfoGrid = styled.div`
+const JobStatus = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+`;
+
+const StatusBadge = styled.span<{ status: 'active' | 'inactive' }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  
+  ${props => props.status === 'active' ? `
+    background-color: #dcfce7;
+    color: #166534;
+  ` : `
+    background-color: #f3f4f6;
+    color: #6b7280;
+  `}
+`;
+
+const ScheduleInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 14px;
+`;
+
+const InfoPanelsGrid = styled.div`
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 24px;
   margin-bottom: 24px;
   
@@ -68,19 +123,90 @@ const JobInfoGrid = styled.div`
   }
 `;
 
+const FullWidthSection = styled.div`
+  width: 100%;
+`;
+
+const StatisticsCard = styled(Card)`
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+`;
+
+const StatsTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const StatsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const StatItem = styled.div`
+  text-align: center;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+`;
+
+const StatIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  margin: 0 auto 8px auto;
+`;
+
+const StatValue = styled.div`
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 4px;
+`;
+
+const StatLabel = styled.div`
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+`;
+
 const InfoCard = styled(Card)`
-  padding: 20px;
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 `;
 
 const InfoTitle = styled.h3`
   font-size: 16px;
   font-weight: 600;
-  color: ${props => props.theme.colors.text.primary};
+  color: #111827;
   margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 `;
 
 const InfoGrid = styled.div`
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 `;
 
@@ -88,57 +214,24 @@ const InfoRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f3f4f6;
+  
+  &:last-child {
+    border-bottom: none;
+  }
 `;
 
 const InfoLabel = styled.span`
   font-size: 14px;
-  color: ${props => props.theme.colors.text.secondary};
+  color: #6b7280;
+  font-weight: 500;
 `;
 
 const InfoValue = styled.span`
   font-size: 14px;
+  color: #111827;
   font-weight: 500;
-  color: ${props => props.theme.colors.text.primary};
-`;
-
-const StatusBadge = styled.span<{ status: 'active' | 'inactive' | 'running' | 'failed' }>`
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-  
-  ${props => {
-    switch (props.status) {
-      case 'active':
-        return `
-          background-color: ${props.theme.colors.successLight};
-          color: ${props.theme.colors.success};
-        `;
-      case 'inactive':
-        return `
-          background-color: ${props.theme.colors.surfaceHover};
-          color: ${props.theme.colors.text.secondary};
-        `;
-      case 'running':
-        return `
-          background-color: ${props.theme.colors.warningLight};
-          color: ${props.theme.colors.warning};
-        `;
-      case 'failed':
-        return `
-          background-color: ${props.theme.colors.errorLight};
-          color: ${props.theme.colors.error};
-        `;
-      default:
-        return `
-          background-color: ${props.theme.colors.surfaceHover};
-          color: ${props.theme.colors.text.secondary};
-        `;
-    }
-  }}
 `;
 
 const ScheduleBadge = styled.span<{ type: 'immediate' | 'scheduled' | 'recurring' }>`
@@ -146,129 +239,89 @@ const ScheduleBadge = styled.span<{ type: 'immediate' | 'scheduled' | 'recurring
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border-radius: 12px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
-  
-  ${props => {
-    switch (props.type) {
-      case 'immediate':
-        return `
-          background-color: ${props.theme.colors.primaryLight};
-          color: ${props.theme.colors.primaryDark};
-        `;
-      case 'scheduled':
-        return `
-          background-color: ${props.theme.colors.info}20;
-          color: ${props.theme.colors.info};
-        `;
-      case 'recurring':
-        return `
-          background-color: ${props.theme.colors.warningLight};
-          color: ${props.theme.colors.warning};
-        `;
-      default:
-        return `
-          background-color: ${props.theme.colors.surfaceHover};
-          color: ${props.theme.colors.text.secondary};
-        `;
-    }
-  }}
-`;
-
-const StatisticsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-`;
-
-const StatCard = styled(Card)`
-  padding: 20px;
-  text-align: center;
-`;
-
-const StatIcon = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background-color: ${props => props.theme.colors.primaryLight};
-  color: ${props => props.theme.colors.primary};
-  margin: 0 auto 12px auto;
-`;
-
-const StatValue = styled.div`
-  font-size: 24px;
-  font-weight: 600;
-  color: ${props => props.theme.colors.text.primary};
-  margin-bottom: 4px;
-`;
-
-const StatLabel = styled.div`
-  font-size: 14px;
-  color: ${props => props.theme.colors.text.secondary};
+  background-color: #f3f4f6;
+  color: #6b7280;
 `;
 
 const HistorySection = styled(Card)`
-  padding: 20px;
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 `;
 
 const HistoryHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 `;
 
 const HistoryTitle = styled.h3`
   font-size: 18px;
   font-weight: 600;
-  color: ${props => props.theme.colors.text.primary};
+  color: #111827;
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 `;
 
-// Removed custom table components - using shared Table component instead
+const RefreshButton = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+  border-color: #e5e7eb;
+  
+  &:hover {
+    border-color: #d1d5db;
+    background-color: #f9fafb;
+  }
+`;
 
 const StatusIcon = styled.span<{ status: string }>`
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
   
   ${props => {
     switch (props.status) {
       case 'completed':
-        return `color: ${props.theme.colors.success};`;
+        return `color: #059669;`;
       case 'failed':
-        return `color: ${props.theme.colors.error};`;
+        return `color: #dc2626;`;
       case 'processing':
-        return `color: ${props.theme.colors.warning};`;
+        return `color: #d97706;`;
       case 'pending':
-        return `color: ${props.theme.colors.info};`;
+        return `color: #2563eb;`;
       default:
-        return `color: ${props.theme.colors.text.secondary};`;
+        return `color: #6b7280;`;
     }
   }}
 `;
 
 const EmptyState = styled.div`
   text-align: center;
-  padding: 40px;
-  color: ${props => props.theme.colors.text.secondary};
+  padding: 60px 20px;
+  color: #6b7280;
 `;
 
 const LoadingState = styled.div`
   text-align: center;
-  padding: 40px;
-  color: ${props => props.theme.colors.text.secondary};
+  padding: 60px 20px;
+  color: #6b7280;
 `;
 
 const ErrorState = styled.div`
   text-align: center;
-  padding: 40px;
-  color: ${props => props.theme.colors.error};
+  padding: 60px 20px;
+  color: #dc2626;
 `;
 
 interface JobDetailsProps {
@@ -399,95 +452,116 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
 
   return (
     <JobDetailsContainer>
-      <JobHeader>
-        <BackButton variant="outline" onClick={onBack}>
-          <ArrowLeft size={16} />
-          Back to Jobs
-        </BackButton>
-        <JobTitle>{job.name}</JobTitle>
-        <ActionButtons>
-          <Button
-            size="small"
-            variant="outline"
-            onClick={handleExecuteJob}
-            disabled={!job.is_active}
-          >
-            <Play size={14} />
-            Execute
-          </Button>
-          <Button
-            size="small"
-            variant="outline"
-            onClick={handleToggleJob}
-          >
-            {job.is_active ? <Pause size={14} /> : <Play size={14} />}
-            {job.is_active ? 'Pause' : 'Activate'}
-          </Button>
-          <Button
-            size="small"
-            variant="outline"
-            onClick={() => onEdit(job)}
-          >
-            <Edit size={14} />
-            Edit
-          </Button>
-          <Button
-            size="small"
-            variant="outline"
-            onClick={() => onDelete(job)}
-            style={{ color: '#ef4444' }}
-          >
-            <Trash2 size={14} />
-            Delete
-          </Button>
-        </ActionButtons>
-      </JobHeader>
+      {/* Professional Header */}
+      <PageHeader>
+        <HeaderTop>
+          <BackButton variant="outline" onClick={onBack}>
+            <ArrowLeft size={16} />
+            Back to Jobs
+          </BackButton>
+          <JobTitle>{job.name}</JobTitle>
+          <ActionButtons>
+            <Button
+              size="small"
+              variant="outline"
+              onClick={handleExecuteJob}
+              disabled={!job.is_active}
+            >
+              <Play size={14} />
+              Execute
+            </Button>
+            <Button
+              size="small"
+              variant="outline"
+              onClick={handleToggleJob}
+            >
+              {job.is_active ? <Pause size={14} /> : <Play size={14} />}
+              {job.is_active ? 'Pause' : 'Activate'}
+            </Button>
+            <Button
+              size="small"
+              variant="outline"
+              onClick={() => onEdit(job)}
+            >
+              <Edit size={14} />
+              Edit
+            </Button>
+            <Button
+              size="small"
+              variant="outline"
+              onClick={() => onDelete(job)}
+              style={{ color: '#dc2626', borderColor: '#fecaca' }}
+            >
+              <Trash2 size={14} />
+              Delete
+            </Button>
+          </ActionButtons>
+        </HeaderTop>
+        
+        <JobStatus>
+          <StatusBadge status={job.is_active ? 'active' : 'inactive'}>
+            <Activity size={12} />
+            {job.is_active ? 'Active' : 'Inactive'}
+          </StatusBadge>
+          <ScheduleInfo>
+            {getScheduleIcon(job.schedule_type)}
+            {job.schedule_type.charAt(0).toUpperCase() + job.schedule_type.slice(1)} Job
+            {job.schedule_type === 'recurring' && job.schedule_config?.cron && (
+              <> • {job.schedule_config.cron}</>
+            )}
+          </ScheduleInfo>
+        </JobStatus>
+      </PageHeader>
 
-      {/* Statistics */}
-      {statistics && (
-        <StatisticsGrid>
-          <StatCard>
-            <StatIcon>
-              <BarChart3 size={24} />
-            </StatIcon>
-            <StatValue>{statistics.total_executions}</StatValue>
-            <StatLabel>Total Executions</StatLabel>
-          </StatCard>
-          <StatCard>
-            <StatIcon>
-              <CheckCircle size={24} />
-            </StatIcon>
-            <StatValue>{statistics.successful_executions}</StatValue>
-            <StatLabel>Successful</StatLabel>
-          </StatCard>
-          <StatCard>
-            <StatIcon>
-              <XCircle size={24} />
-            </StatIcon>
-            <StatValue>{statistics.failed_executions}</StatValue>
-            <StatLabel>Failed</StatLabel>
-          </StatCard>
-          <StatCard>
-            <StatIcon>
-              <Clock size={24} />
-            </StatIcon>
-            <StatValue>{Math.round(statistics.success_rate)}%</StatValue>
-            <StatLabel>Success Rate</StatLabel>
-          </StatCard>
-        </StatisticsGrid>
-      )}
+      {/* Information Panels */}
+      <InfoPanelsGrid>
+        {/* Statistics */}
+        {statistics && (
+          <StatisticsCard>
+            <StatsTitle>
+              <BarChart3 size={18} />
+              Performance Metrics
+            </StatsTitle>
+            <StatsGrid>
+              <StatItem>
+                <StatIcon>
+                  <Target size={18} />
+                </StatIcon>
+                <StatValue>{statistics.total_executions}</StatValue>
+                <StatLabel>Total Executions</StatLabel>
+              </StatItem>
+              <StatItem>
+                <StatIcon>
+                  <CheckCircle size={18} />
+                </StatIcon>
+                <StatValue>{statistics.successful_executions}</StatValue>
+                <StatLabel>Successful</StatLabel>
+              </StatItem>
+              <StatItem>
+                <StatIcon>
+                  <XCircle size={18} />
+                </StatIcon>
+                <StatValue>{statistics.failed_executions}</StatValue>
+                <StatLabel>Failed</StatLabel>
+              </StatItem>
+              <StatItem>
+                <StatIcon>
+                  <Activity size={18} />
+                </StatIcon>
+                <StatValue>{Math.round(statistics.success_rate)}%</StatValue>
+                <StatLabel>Success Rate</StatLabel>
+              </StatItem>
+            </StatsGrid>
+          </StatisticsCard>
+        )}
 
-      {/* Job Information */}
-      <JobInfoGrid>
+        {/* Job Configuration */}
         <InfoCard>
-          <InfoTitle>Job Configuration</InfoTitle>
+          <InfoTitle>
+            <Settings size={16} />
+            Job Configuration
+          </InfoTitle>
           <InfoGrid>
-            <InfoRow>
-              <InfoLabel>Status</InfoLabel>
-              <StatusBadge status={job.is_active ? 'active' : 'inactive'}>
-                {job.is_active ? 'Active' : 'Inactive'}
-              </StatusBadge>
-            </InfoRow>
             <InfoRow>
               <InfoLabel>Schedule Type</InfoLabel>
               <ScheduleBadge type={job.schedule_type}>
@@ -528,8 +602,12 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
           </InfoGrid>
         </InfoCard>
 
+        {/* Schedule Information */}
         <InfoCard>
-          <InfoTitle>Schedule Information</InfoTitle>
+          <InfoTitle>
+            <Calendar size={16} />
+            Schedule Information
+          </InfoTitle>
           <InfoGrid>
             <InfoRow>
               <InfoLabel>Last Run</InfoLabel>
@@ -560,88 +638,99 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
             {job.schedule_config?.cron && (
               <InfoRow>
                 <InfoLabel>Cron Expression</InfoLabel>
-                <InfoValue style={{ fontFamily: 'monospace' }}>
+                <InfoValue style={{ fontFamily: 'monospace', fontSize: '12px' }}>
                   {job.schedule_config.cron}
                 </InfoValue>
               </InfoRow>
             )}
           </InfoGrid>
         </InfoCard>
-      </JobInfoGrid>
 
-      {/* Description */}
-      {job.description && (
-        <InfoCard>
-          <InfoTitle>Description</InfoTitle>
-          <p style={{ color: '#666', margin: 0 }}>{job.description}</p>
-        </InfoCard>
-      )}
+        {/* Description */}
+        {job.description && (
+          <InfoCard>
+            <InfoTitle>
+              <Edit size={16} />
+              Description
+            </InfoTitle>
+            <p style={{ color: '#6b7280', margin: 0, fontSize: '14px', lineHeight: '1.5' }}>
+              {job.description}
+            </p>
+          </InfoCard>
+        )}
+      </InfoPanelsGrid>
 
-      {/* Execution History */}
-      <HistorySection>
-        <HistoryHeader>
-          <HistoryTitle>Recent Executions</HistoryTitle>
-          <Button variant="outline" size="small" onClick={loadJobDetails}>
-            Refresh
-          </Button>
-        </HistoryHeader>
+      {/* Full Width Execution History */}
+      <FullWidthSection>
+        <HistorySection>
+          <HistoryHeader>
+            <HistoryTitle>
+              <Clock size={18} />
+              Recent Executions
+            </HistoryTitle>
+            <RefreshButton variant="outline" size="small" onClick={loadJobDetails}>
+              <RefreshCw size={14} />
+              Refresh
+            </RefreshButton>
+          </HistoryHeader>
 
-        <Table
-          data={history}
-          columns={[
-            {
-              key: 'document',
-              label: 'Document',
-              render: (value, row: DocumentExtractionTracking) => 
-                row.document?.original_filename || 'Unknown Document'
-            },
-            {
-              key: 'status',
-              label: 'Status',
-              render: (value, row: DocumentExtractionTracking) => (
-                <StatusIcon status={row.status}>
-                  {getStatusIcon(row.status)}
-                  {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
-                </StatusIcon>
-              )
-            },
-            {
-              key: 'triggered_by',
-              label: 'Triggered By',
-              render: (value, row: DocumentExtractionTracking) => 
-                row.triggered_by.charAt(0).toUpperCase() + row.triggered_by.slice(1)
-            },
-            {
-              key: 'queued_at',
-              label: 'Queued At',
-              render: (value, row: DocumentExtractionTracking) => 
-                apiClient.formatDate(row.queued_at)
-            },
-            {
-              key: 'completed_at',
-              label: 'Completed At',
-              render: (value, row: DocumentExtractionTracking) => 
-                row.completed_at ? apiClient.formatDate(row.completed_at) : '-'
-            },
-            {
-              key: 'processing_time_ms',
-              label: 'Processing Time',
-              render: (value, row: DocumentExtractionTracking) => 
-                row.processing_time_ms ? `${row.processing_time_ms}ms` : '-'
-            },
-            {
-              key: 'retry_count',
-              label: 'Retries',
-              render: (value, row: DocumentExtractionTracking) => row.retry_count
-            }
-          ]}
-          emptyState={{
-            icon: <Clock size={48} />,
-            title: 'No execution history',
-            description: 'No execution history available yet.'
-          }}
-        />
-      </HistorySection>
+          <Table
+            data={history}
+            columns={[
+              {
+                key: 'document',
+                label: 'Document',
+                render: (value, row: DocumentExtractionTracking) => 
+                  row.document?.original_filename || 'Unknown Document'
+              },
+              {
+                key: 'status',
+                label: 'Status',
+                render: (value, row: DocumentExtractionTracking) => (
+                  <StatusIcon status={row.status}>
+                    {getStatusIcon(row.status)}
+                    {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+                  </StatusIcon>
+                )
+              },
+              {
+                key: 'triggered_by',
+                label: 'Triggered By',
+                render: (value, row: DocumentExtractionTracking) => 
+                  row.triggered_by.charAt(0).toUpperCase() + row.triggered_by.slice(1)
+              },
+              {
+                key: 'queued_at',
+                label: 'Queued At',
+                render: (value, row: DocumentExtractionTracking) => 
+                  apiClient.formatDate(row.queued_at)
+              },
+              {
+                key: 'completed_at',
+                label: 'Completed At',
+                render: (value, row: DocumentExtractionTracking) => 
+                  row.completed_at ? apiClient.formatDate(row.completed_at) : '-'
+              },
+              {
+                key: 'processing_time_ms',
+                label: 'Processing Time',
+                render: (value, row: DocumentExtractionTracking) => 
+                  row.processing_time_ms ? `${row.processing_time_ms}ms` : '-'
+              },
+              {
+                key: 'retry_count',
+                label: 'Retries',
+                render: (value, row: DocumentExtractionTracking) => row.retry_count
+              }
+            ]}
+            emptyState={{
+              icon: <Clock size={48} />,
+              title: 'No execution history',
+              description: 'No execution history available yet.'
+            }}
+          />
+        </HistorySection>
+      </FullWidthSection>
     </JobDetailsContainer>
   );
 };

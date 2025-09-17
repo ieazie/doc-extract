@@ -22,7 +22,7 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { SuccessMessage } from '../components/common/SuccessMessage';
 import { ExtractionResultsModal } from '../components/extractions/ExtractionResultsModal';
-import { Table, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table/Table';
+import { Table, TableFilters, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table';
 import { StatusBadge, ActionButton, ActionGroup } from '../components/table/Table.styled';
 
 // Styled Components
@@ -505,9 +505,7 @@ const ExtractionsPage: React.FC = () => {
         </HeaderActions>
       </PageHeader>
 
-      <Table
-        data={extractions}
-        columns={columns}
+      <TableFilters
         filters={filterDefinitions}
         filterValues={{
           status: filters.status,
@@ -516,6 +514,15 @@ const ExtractionsPage: React.FC = () => {
           date_to: filters.date_to,
           search: searchInput
         }}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+        isSearching={isSearchingOrLoading}
+        searchMinLength={2}
+      />
+
+      <Table
+        data={extractions}
+        columns={columns}
         pagination={paginationConfig}
         loading={isLoading}
         error={error ? 'Failed to load extractions' : undefined}
@@ -527,11 +534,7 @@ const ExtractionsPage: React.FC = () => {
             : 'Upload documents and create templates to start extracting data.'
         }}
         actions={renderActions}
-        onFilterChange={handleFilterChange}
         onSort={handleSort}
-        onClearFilters={handleClearFilters}
-        isSearching={isSearchingOrLoading}
-        searchMinLength={2}
       />
       
 
