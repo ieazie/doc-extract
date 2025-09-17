@@ -11,6 +11,12 @@ import { apiClient, ExtractionJob, Category } from '@/services/api';
 import styled from 'styled-components';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Utility function to validate UUID
+const isValidUUID = (uuid: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+};
+
 // Styled Components
 const PageContainer = styled.div`
   padding: 2rem;
@@ -173,6 +179,15 @@ export const JobList: React.FC<JobListProps> = ({
     total_pages: 0
   });
 
+  // Filter state management
+  const [filterValues, setFilterValues] = useState({
+    search: '',
+    category_id: '',
+    template_id: '',
+    schedule_type: '',
+    is_active: ''
+  });
+
   // Load initial data
   useEffect(() => {
     loadJobs();
@@ -183,16 +198,52 @@ export const JobList: React.FC<JobListProps> = ({
   const loadJobs = async (params: any = {}) => {
     try {
       setLoading(true);
+      
+      // Merge current filters with new params
+      const mergedParams = { ...filterValues, ...params };
+      
+      // Convert string values to proper types for API - only send defined values
+      const apiParams: any = {
+        page: mergedParams.page || pagination.page,
+        per_page: mergedParams.per_page || pagination.per_page,
+      };
+      
+      // Only add parameters if they have valid values
+      if (mergedParams.search && mergedParams.search.trim() !== '') {
+        apiParams.search = mergedParams.search.trim();
+      }
+      if (mergedParams.category_id && mergedParams.category_id.trim() !== '' && isValidUUID(mergedParams.category_id.trim())) {
+        apiParams.categoryId = mergedParams.category_id.trim();
+      }
+      if (mergedParams.template_id && mergedParams.template_id.trim() !== '' && isValidUUID(mergedParams.template_id.trim())) {
+        apiParams.templateId = mergedParams.template_id.trim();
+      }
+      if (mergedParams.schedule_type && mergedParams.schedule_type.trim() !== '') {
+        const validScheduleTypes = ['immediate', 'scheduled', 'recurring'];
+        if (validScheduleTypes.includes(mergedParams.schedule_type)) {
+          apiParams.scheduleType = mergedParams.schedule_type;
+        }
+      }
+      if (mergedParams.is_active && mergedParams.is_active !== '') {
+        apiParams.isActive = mergedParams.is_active === 'true';
+      }
+      if (mergedParams.sort_by && mergedParams.sort_by.trim() !== '') {
+        apiParams.sortBy = mergedParams.sort_by.trim();
+      }
+      if (mergedParams.sort_order && ['asc', 'desc'].includes(mergedParams.sort_order)) {
+        apiParams.sortOrder = mergedParams.sort_order;
+      }
+      
       const response = await apiClient.getJobs(
-        params.page || pagination.page,
-        params.per_page || pagination.per_page,
-        params.search,
-        params.category_id,
-        params.template_id,
-        params.schedule_type,
-        params.is_active,
-        params.sort_by,
-        params.sort_order
+        apiParams.page,
+        apiParams.per_page,
+        apiParams.search,
+        apiParams.categoryId,
+        apiParams.templateId,
+        apiParams.scheduleType,
+        apiParams.isActive,
+        apiParams.sortBy,
+        apiParams.sortOrder
       );
       
       setJobs(response.jobs);
@@ -260,6 +311,24 @@ export const JobList: React.FC<JobListProps> = ({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update job');
     }
+  };
+
+  const handleFilterChange = (key: string, value: string) => {
+    const newFilters = { ...filterValues, [key]: value };
+    setFilterValues(newFilters);
+    loadJobs({ ...newFilters, page: 1 });
+  };
+
+  const handleClearFilters = () => {
+    const clearedFilters = {
+      search: '',
+      category_id: '',
+      template_id: '',
+      schedule_type: '',
+      is_active: ''
+    };
+    setFilterValues(clearedFilters);
+    loadJobs({ ...clearedFilters, page: 1 });
   };
 
   // Column definitions
@@ -607,13 +676,9 @@ export const JobList: React.FC<JobListProps> = ({
 
       <TableFilters
         filters={filters}
-        filterValues={{
-          status: '',
-          schedule_type: '',
-          category: '',
-          search: ''
-        }}
-        onFilterChange={(key, value) => loadJobs({ [key]: value })}
+        filterValues={filterValues}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
       />
 
       <Table
