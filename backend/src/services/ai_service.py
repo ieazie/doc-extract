@@ -21,7 +21,7 @@ class AIService:
         self.db = db
         self.config_service = TenantConfigService(db)
     
-    async def generate_fields_from_prompt(self, prompt: str, document_type: str = "other", tenant_id: str = None) -> List[Dict[str, Any]]:
+    async def generate_fields_from_prompt(self, prompt: str, document_type: str = "other", template_language: str = "en", tenant_id: str = None) -> List[Dict[str, Any]]:
         """
         Generate schema fields based on extraction prompt only
         
@@ -34,13 +34,13 @@ class AIService:
             List of generated schema fields
         """
         return await self._generate_with_tenant_config(
-            self._get_system_prompt_for_prompt_only(),
-            self._get_user_prompt_for_prompt_only(prompt, document_type),
+            self._get_system_prompt_for_prompt_only(template_language),
+            self._get_user_prompt_for_prompt_only(prompt, document_type, template_language),
             "prompt",
             tenant_id
         )
     
-    async def generate_fields_from_document(self, prompt: str, document_content: str, document_type: str = "other", tenant_id: str = None) -> List[Dict[str, Any]]:
+    async def generate_fields_from_document(self, prompt: str, document_content: str, document_type: str = "other", template_language: str = "en", tenant_id: str = None) -> List[Dict[str, Any]]:
         """
         Generate schema fields based on extraction prompt and document content
         
@@ -54,8 +54,8 @@ class AIService:
             List of generated schema fields
         """
         return await self._generate_with_tenant_config(
-            self._get_system_prompt_for_document(),
-            self._get_user_prompt_for_document(prompt, document_content, document_type),
+            self._get_system_prompt_for_document(template_language),
+            self._get_user_prompt_for_document(prompt, document_content, document_type, template_language),
             "document",
             tenant_id
         )
@@ -184,9 +184,11 @@ class AIService:
             raise Exception(f"Field generation failed: {str(e)}")
     
     
-    def _get_system_prompt_for_prompt_only(self) -> str:
+    def _get_system_prompt_for_prompt_only(self, language: str = "en") -> str:
         """System prompt for prompt-only field generation"""
-        return """You are an expert at analyzing extraction prompts and generating appropriate schema fields for document processing.
+        # Language-specific prompts
+        prompts = {
+            "en": """You are an expert at analyzing extraction prompts and generating appropriate schema fields for document processing.
 
 Your task is to analyze the given extraction prompt and generate a list of schema fields that would be needed to extract the requested information.
 
@@ -203,11 +205,70 @@ Guidelines:
 4. Make field names descriptive and consistent
 5. Mark fields as required if they seem essential for the extraction
 
-Return your response as a valid JSON array of field objects."""
+Return your response as a valid JSON array of field objects.""",
+            
+            "de": """Sie sind ein Experte für die Analyse von Extraktionsaufforderungen und die Generierung geeigneter Schemafelder für die Dokumentenverarbeitung.
 
-    def _get_system_prompt_for_document(self) -> str:
+Ihre Aufgabe ist es, die gegebene Extraktionsaufforderung zu analysieren und eine Liste von Schemafeldern zu generieren, die benötigt werden, um die angeforderten Informationen zu extrahieren.
+
+WICHTIG: Alle Feldnamen und Beschreibungen müssen auf DEUTSCH sein.
+
+Für jedes Feld geben Sie an:
+- name: Ein klarer, beschreibender Feldname auf DEUTSCH (snake_case Format, aber deutsche Begriffe verwenden)
+- type: Der Datentyp (string, number, date, boolean, array, object)
+- description: Eine klare Beschreibung auf DEUTSCH von dem, was dieses Feld darstellt
+- required: Ob dieses Feld erforderlich ist (true/false)
+
+Richtlinien:
+1. Seien Sie umfassend, aber nicht übertrieben - schließen Sie alle in der Aufforderung erwähnten Felder ein
+2. Verwenden Sie geeignete Datentypen (date für Daten, number für Beträge, etc.)
+3. Berücksichtigen Sie verschachtelte Strukturen für komplexe Daten (Arrays für Zeilenpositionen, Objekte für Adressen)
+4. Machen Sie Feldnamen auf DEUTSCH beschreibend und konsistent (z.B. "rechnungsnummer", "lieferantenname", "fälligkeitsdatum")
+5. Markieren Sie Felder als erforderlich, wenn sie für die Extraktion wesentlich erscheinen
+
+Beispiele für deutsche Feldnamen:
+- rechnungsnummer (statt invoice_number)
+- lieferantenname (statt vendor_name)
+- fälligkeitsdatum (statt due_date)
+- rechnungspositionen (statt line_items)
+
+Geben Sie Ihre Antwort als gültiges JSON-Array von Feldobjekten zurück.""",
+            
+            "es": """Eres un experto en analizar solicitudes de extracción y generar campos de esquema apropiados para el procesamiento de documentos.
+
+Tu tarea es analizar la solicitud de extracción dada y generar una lista de campos de esquema que serían necesarios para extraer la información solicitada.
+
+IMPORTANTE: Todos los nombres de campos y descripciones deben estar en ESPAÑOL.
+
+Para cada campo, proporciona:
+- name: Un nombre de campo claro y descriptivo en ESPAÑOL (snake_case, pero usando términos en español)
+- type: El tipo de datos (string, number, date, boolean, array, object)
+- description: Una descripción clara en ESPAÑOL de lo que representa este campo
+- required: Si este campo es requerido (true/false)
+
+Pautas:
+1. Sé comprensivo pero no excesivo - incluye todos los campos mencionados en la solicitud
+2. Usa tipos de datos apropiados (date para fechas, number para montos, etc.)
+3. Considera estructuras anidadas para datos complejos (arrays para elementos de línea, objetos para direcciones)
+4. Haz que los nombres de los campos en ESPAÑOL sean descriptivos y consistentes (ej. "numero_factura", "nombre_proveedor", "fecha_vencimiento")
+5. Marca los campos como requeridos si parecen esenciales para la extracción
+
+Ejemplos de nombres de campos en español:
+- numero_factura (en lugar de invoice_number)
+- nombre_proveedor (en lugar de vendor_name)
+- fecha_vencimiento (en lugar de due_date)
+- lineas_factura (en lugar de line_items)
+
+Devuelve tu respuesta como un array JSON válido de objetos de campo."""
+        }
+        
+        return prompts.get(language, prompts["en"])
+
+    def _get_system_prompt_for_document(self, language: str = "en") -> str:
         """System prompt for document + prompt field generation"""
-        return """You are an expert at analyzing documents and extraction prompts to generate optimal schema fields.
+        # Language-specific prompts
+        prompts = {
+            "en": """You are an expert at analyzing documents and extraction prompts to generate optimal schema fields.
 
 Your task is to analyze both the extraction prompt and the actual document content to generate a comprehensive list of schema fields.
 
@@ -226,26 +287,105 @@ Guidelines:
 6. Mark fields as required if they appear to be essential
 7. Include fields that are present in the document even if not explicitly mentioned in the prompt
 
-Return your response as a valid JSON array of field objects."""
+Return your response as a valid JSON array of field objects.""",
+            
+            "de": """Sie sind ein Experte für die Analyse von Dokumenten und Extraktionsaufforderungen zur Generierung optimaler Schemafelder.
 
-    def _get_user_prompt_for_prompt_only(self, prompt: str, document_type: str) -> str:
+Ihre Aufgabe ist es, sowohl die Extraktionsaufforderung als auch den tatsächlichen Dokumentinhalt zu analysieren, um eine umfassende Liste von Schemafeldern zu generieren.
+
+WICHTIG: Alle Feldnamen und Beschreibungen müssen auf DEUTSCH sein.
+
+Für jedes Feld geben Sie an:
+- name: Ein klarer, beschreibender Feldname auf DEUTSCH (snake_case Format, aber deutsche Begriffe verwenden)
+- type: Der Datentyp (string, number, date, boolean, array, object)
+- description: Eine klare Beschreibung auf DEUTSCH von dem, was dieses Feld darstellt
+- required: Ob dieses Feld erforderlich ist (true/false)
+
+Richtlinien:
+1. Analysieren Sie die Dokumentstruktur und den Inhalt, um alle relevanten Felder zu identifizieren
+2. Passen Sie Felder an die Anforderungen der Extraktionsaufforderung an
+3. Verwenden Sie geeignete Datentypen basierend auf dem tatsächlichen Dokumentinhalt
+4. Berücksichtigen Sie verschachtelte Strukturen für komplexe Daten (Arrays für Zeilenpositionen, Objekte für Adressen)
+5. Machen Sie Feldnamen auf DEUTSCH beschreibend und konsistent (z.B. "rechnungsnummer", "lieferantenname", "fälligkeitsdatum")
+6. Markieren Sie Felder als erforderlich, wenn sie wesentlich erscheinen
+7. Schließen Sie Felder ein, die im Dokument vorhanden sind, auch wenn sie nicht explizit in der Aufforderung erwähnt werden
+
+Beispiele für deutsche Feldnamen:
+- rechnungsnummer (statt invoice_number)
+- lieferantenname (statt vendor_name)
+- fälligkeitsdatum (statt due_date)
+- rechnungspositionen (statt line_items)
+- lieferantenadresse (statt vendor_address)
+
+Geben Sie Ihre Antwort als gültiges JSON-Array von Feldobjekten zurück.""",
+            
+            "es": """Eres un experto en analizar documentos y solicitudes de extracción para generar campos de esquema óptimos.
+
+Tu tarea es analizar tanto la solicitud de extracción como el contenido real del documento para generar una lista completa de campos de esquema.
+
+Para cada campo, proporciona:
+- name: Un nombre de campo claro y descriptivo (snake_case)
+- type: El tipo de datos (string, number, date, boolean, array, object)
+- description: Una descripción clara de lo que representa este campo
+- required: Si este campo es requerido (true/false)
+
+Pautas:
+1. Analiza la estructura del documento y el contenido para identificar todos los campos relevantes
+2. Haz coincidir los campos con los requisitos de la solicitud de extracción
+3. Usa tipos de datos apropiados basados en el contenido real del documento
+4. Considera estructuras anidadas para datos complejos (arrays para elementos de línea, objetos para direcciones)
+5. Haz que los nombres de los campos sean descriptivos y consistentes
+6. Marca los campos como requeridos si parecen esenciales
+7. Incluye campos que están presentes en el documento incluso si no se mencionan explícitamente en la solicitud
+
+Devuelve tu respuesta como un array JSON válido de objetos de campo."""
+        }
+        
+        return prompts.get(language, prompts["en"])
+
+    def _get_user_prompt_for_prompt_only(self, prompt: str, document_type: str, language: str = "en") -> str:
         """User prompt for prompt-only field generation"""
-        return f"""Document Type: {document_type}
+        # Language-specific prompts
+        prompts = {
+            "en": f"""Document Type: {document_type}
 
 Extraction Prompt: "{prompt}"
 
 Please generate appropriate schema fields for this extraction prompt. Consider what fields would be needed to capture all the information mentioned in the prompt.
 
-Return the fields as a JSON array."""
+Return the fields as a JSON array.""",
+            
+            "de": f"""Dokumenttyp: {document_type}
 
-    def _get_user_prompt_for_document(self, prompt: str, document_content: str, document_type: str) -> str:
+Extraktionsaufforderung: "{prompt}"
+
+WICHTIG: Generieren Sie alle Feldnamen auf DEUTSCH (z.B. "rechnungsnummer", "lieferantenname", "fälligkeitsdatum").
+
+Bitte generieren Sie geeignete Schemafelder für diese Extraktionsaufforderung. Berücksichtigen Sie, welche Felder benötigt werden, um alle in der Aufforderung erwähnten Informationen zu erfassen.
+
+Geben Sie die Felder als JSON-Array zurück.""",
+            
+            "es": f"""Tipo de Documento: {document_type}
+
+Solicitud de Extracción: "{prompt}"
+
+Por favor, genera campos de esquema apropiados para esta solicitud de extracción. Considera qué campos serían necesarios para capturar toda la información mencionada en la solicitud.
+
+Devuelve los campos como un array JSON."""
+        }
+        
+        return prompts.get(language, prompts["en"])
+
+    def _get_user_prompt_for_document(self, prompt: str, document_content: str, document_type: str, language: str = "en") -> str:
         """User prompt for document + prompt field generation"""
         # Truncate document content if too long
         max_content_length = 4000  # Leave room for prompt and response
         if len(document_content) > max_content_length:
             document_content = document_content[:max_content_length] + "... [truncated]"
         
-        return f"""Document Type: {document_type}
+        # Language-specific prompts
+        prompts = {
+            "en": f"""Document Type: {document_type}
 
 Extraction Prompt: "{prompt}"
 
@@ -254,7 +394,34 @@ Document Content:
 
 Please analyze both the extraction prompt and the document content to generate comprehensive schema fields. Consider what fields are needed based on the prompt requirements and what fields are actually present in the document.
 
-Return the fields as a JSON array."""
+Return the fields as a JSON array.""",
+            
+            "de": f"""Dokumenttyp: {document_type}
+
+Extraktionsaufforderung: "{prompt}"
+
+Dokumentinhalt:
+{document_content}
+
+WICHTIG: Generieren Sie alle Feldnamen auf DEUTSCH (z.B. "rechnungsnummer", "lieferantenname", "fälligkeitsdatum").
+
+Bitte analysieren Sie sowohl die Extraktionsaufforderung als auch den Dokumentinhalt, um umfassende Schemafelder zu generieren. Berücksichtigen Sie, welche Felder basierend auf den Anforderungen der Aufforderung benötigt werden und welche Felder tatsächlich im Dokument vorhanden sind.
+
+Geben Sie die Felder als JSON-Array zurück.""",
+            
+            "es": f"""Tipo de Documento: {document_type}
+
+Solicitud de Extracción: "{prompt}"
+
+Contenido del Documento:
+{document_content}
+
+Por favor, analiza tanto la solicitud de extracción como el contenido del documento para generar campos de esquema completos. Considera qué campos son necesarios basados en los requisitos de la solicitud y qué campos están realmente presentes en el documento.
+
+Devuelve los campos como un array JSON."""
+        }
+        
+        return prompts.get(language, prompts["en"])
 
     def _validate_fields_list(self, fields: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Validate and clean a list of field objects"""

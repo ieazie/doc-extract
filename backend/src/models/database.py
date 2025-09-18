@@ -201,6 +201,11 @@ class Document(Base):
     word_count = Column(Integer)
     extraction_completed_at = Column(DateTime(timezone=True))
     
+    # Language detection
+    detected_language = Column(String(10))
+    language_confidence = Column(Numeric(3, 2))
+    language_source = Column(String(20), default="auto")
+    
     # Status tracking
     status = Column(String(50), default="uploaded")
     is_test_document = Column(Boolean, default=False)
@@ -297,6 +302,11 @@ class Template(Base):
     prompt_config = Column(JSONB, nullable=False, default={})  # Prompt settings
     few_shot_examples = Column(JSONB, default=[])  # Examples array
     extraction_settings = Column(JSONB, default={})  # Processing settings
+    
+    # Language configuration
+    language = Column(String(10), default="en")
+    auto_detect_language = Column(Boolean, default=True)
+    require_language_match = Column(Boolean, default=False)
     
     # Status and metadata
     is_active = Column(Boolean, default=True)
@@ -636,6 +646,64 @@ class TenantEnvironmentUsage(Base):
 
     def __repr__(self):
         return f"<TenantEnvironmentUsage(id={self.id}, tenant_id={self.tenant_id}, environment='{self.environment}', resource_type='{self.resource_type}')>"
+
+
+# ============================================================================
+# LANGUAGE SUPPORT MODELS
+# ============================================================================
+
+class TenantLanguageConfig(Base):
+    """Tenant language configuration model"""
+    __tablename__ = "tenant_language_configs"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    supported_languages = Column(JSONB, nullable=False, default=["en"])
+    default_language = Column(String(10), nullable=False, default="en")
+    auto_detect_language = Column(Boolean, default=True)
+    require_language_match = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    
+    # Table constraints
+    __table_args__ = (
+        UniqueConstraint('tenant_id', name='unique_tenant_language_config'),
+        CheckConstraint("default_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_default_language'),
+        CheckConstraint("jsonb_array_length(supported_languages) > 0", name='supported_languages_not_empty'),
+    )
+    
+    def __repr__(self):
+        return f"<TenantLanguageConfig(id={self.id}, tenant_id={self.tenant_id}, default_language='{self.default_language}')>"
+
+
+class ExtractionLanguageValidation(Base):
+    """Extraction language validation tracking"""
+    __tablename__ = "extraction_language_validation"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    extraction_id = Column(UUID(as_uuid=True), ForeignKey("extractions.id", ondelete="CASCADE"), nullable=False)
+    template_language = Column(String(10), nullable=False)
+    document_language = Column(String(10))
+    language_match = Column(Boolean)
+    validation_status = Column(String(20), default="pending")
+    validation_message = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    extraction = relationship("Extraction")
+    
+    # Table constraints
+    __table_args__ = (
+        CheckConstraint("template_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_template_language_code'),
+        CheckConstraint("document_language IS NULL OR document_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_document_language_code'),
+        CheckConstraint("validation_status IN ('pending', 'passed', 'failed', 'ignored')", name='valid_validation_status'),
+    )
+    
+    def __repr__(self):
+        return f"<ExtractionLanguageValidation(id={self.id}, extraction_id={self.extraction_id}, template_language='{self.template_language}', document_language='{self.document_language}')>"
 
 
 # Database dependency for FastAPI

@@ -26,6 +26,10 @@ export interface Document {
   word_count?: number;
   has_thumbnail: boolean;
   is_test_document: boolean;
+  // Language detection fields
+  detected_language?: string;
+  language_confidence?: number;
+  language_source?: string;
   created_at: string;
   updated_at: string;
   extraction_completed_at?: string;
@@ -428,6 +432,46 @@ export interface EnvironmentSecrets {
   llm_document_api_key?: string;
   webhook_secret?: string;
   database_password?: string;
+}
+
+// ============================================================================
+// LANGUAGE MANAGEMENT TYPES
+// ============================================================================
+
+export interface SupportedLanguage {
+  code: string;
+  name: string;
+  native_name: string;
+}
+
+export interface TenantLanguageConfig {
+  id: string;
+  tenant_id: string;
+  supported_languages: string[];
+  default_language: string;
+  auto_detect_language: boolean;
+  require_language_match: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantLanguageConfigUpdate {
+  supported_languages: string[];
+  default_language: string;
+  auto_detect_language: boolean;
+  require_language_match: boolean;
+}
+
+export interface LanguageDetectionResult {
+  language: string;
+  confidence: number;
+  source: string;
+}
+
+export interface LanguageValidationResponse {
+  tenant_id: string;
+  language: string;
+  is_supported: boolean;
 }
 
 export interface TenantEnvironmentInfo {
@@ -1115,13 +1159,23 @@ class ApiClient {
   }
 
   // AI Field Generation Endpoints
-  async generateFieldsFromPrompt(request: GenerateFieldsRequest): Promise<GenerateFieldsResponse> {
-    const response = await this.client.post('/api/templates/generate-fields-from-prompt', request);
+  async generateFieldsFromPrompt(request: GenerateFieldsRequest, templateLanguage: string = 'en'): Promise<GenerateFieldsResponse> {
+    const response = await this.client.post(`/api/templates/generate-fields-from-prompt?template_language=${templateLanguage}`, request);
     return response.data;
   }
 
-  async generateFieldsFromDocument(request: GenerateFieldsRequest): Promise<GenerateFieldsResponse> {
-    const response = await this.client.post('/api/templates/generate-fields-from-document', request);
+  async generateFieldsFromDocument(
+    request: GenerateFieldsRequest, 
+    templateLanguage: string = 'en',
+    autoDetectLanguage: boolean = true,
+    requireLanguageMatch: boolean = false
+  ): Promise<GenerateFieldsResponse> {
+    const params = new URLSearchParams({
+      template_language: templateLanguage,
+      auto_detect_language: autoDetectLanguage.toString(),
+      require_language_match: requireLanguageMatch.toString()
+    });
+    const response = await this.client.post(`/api/templates/generate-fields-from-document?${params}`, request);
     return response.data;
   }
 
@@ -1542,6 +1596,45 @@ class ApiClient {
 
   async updateEnvironmentConfig(configType: string, environment: string, configData: any): Promise<void> {
     await this.client.put(`/api/tenant/configurations/${configType}/${environment}`, configData);
+  }
+
+  // ============================================================================
+  // LANGUAGE MANAGEMENT API METHODS
+  // ============================================================================
+
+  async getSupportedLanguages(): Promise<SupportedLanguage[]> {
+    const response = await this.client.get('/api/language/supported');
+    return response.data;
+  }
+
+  async getTenantLanguageConfig(tenantId: string): Promise<TenantLanguageConfig> {
+    const response = await this.client.get(`/api/language/tenant/${tenantId}/config`);
+    return response.data;
+  }
+
+  async updateTenantLanguageConfig(tenantId: string, config: TenantLanguageConfigUpdate): Promise<TenantLanguageConfig> {
+    const response = await this.client.put(`/api/language/tenant/${tenantId}/config`, config);
+    return response.data;
+  }
+
+  async detectDocumentLanguage(text: string): Promise<LanguageDetectionResult> {
+    const response = await this.client.post(`/api/language/detect?text=${encodeURIComponent(text)}`);
+    return response.data;
+  }
+
+  async getTenantSupportedLanguages(tenantId: string): Promise<string[]> {
+    const response = await this.client.get(`/api/language/tenant/${tenantId}/supported`);
+    return response.data;
+  }
+
+  async getTenantDefaultLanguage(tenantId: string): Promise<string> {
+    const response = await this.client.get(`/api/language/tenant/${tenantId}/default`);
+    return response.data;
+  }
+
+  async validateLanguageSupport(tenantId: string, language: string): Promise<LanguageValidationResponse> {
+    const response = await this.client.post(`/api/language/validate?tenant_id=${tenantId}&language=${encodeURIComponent(language)}`);
+    return response.data;
   }
 
 }

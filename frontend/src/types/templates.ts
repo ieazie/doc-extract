@@ -14,6 +14,10 @@ export interface TemplateBase {
   schema: Record<string, SchemaField>;
   is_active: boolean;
   status?: 'draft' | 'published' | 'archived';
+  // Language configuration
+  language?: string;
+  auto_detect_language?: boolean;
+  require_language_match?: boolean;
   version: number;
   created_at: string;
   updated_at: string;
@@ -49,4 +53,8 @@ export interface TemplateFormData {
     confidence_threshold: number;
   };
   few_shot_examples: Array<Record<string, any>>;
+  // Language configuration
+  language?: string;
+  auto_detect_language?: boolean;
+  require_language_match?: boolean;
 }

@@ -4,7 +4,8 @@
  */
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { apiClient, GeneratedField } from '../../services/api';
+import { apiClient, GeneratedField, SupportedLanguage } from '../../services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Plus, 
   Trash2, 
@@ -33,18 +34,45 @@ interface Template {
     fields: SchemaField[];
   };
   status: 'draft' | 'published' | 'archived';
+  // Language configuration
+  language?: string;
+  auto_detect_language?: boolean;
+  require_language_match?: boolean;
   extraction_settings?: {
     confidence_threshold?: number;
   };
 }
 
-// Default prompt templates for each document type
+// Language-specific prompt templates for each document type
 const DEFAULT_PROMPTS = {
-  invoice: "Extract invoice number, invoice date, due date, vendor name, vendor address, line items (description, quantity, unit price, total), subtotal, tax amount, total amount, payment terms, and any additional notes.",
-  receipt: "Extract receipt number, transaction date, merchant name, merchant address, items purchased (description, quantity, price), subtotal, tax amount, total amount, payment method, and any loyalty information.",
-  contract: "Extract contract number, contract date, effective date, parties involved, contract value, payment terms, duration, key clauses, signatures, and any special conditions.",
-  insurance_policy: "Extract policy number, policy holder name, policy type, coverage amount, premium amount, effective date, expiration date, beneficiaries, and key terms and conditions.",
-  other: "Extract key information from this document based on its content and structure."
+  en: {
+    invoice: "Extract invoice number, invoice date, due date, vendor name, vendor address, line items (description, quantity, unit price, total), subtotal, tax amount, total amount, payment terms, and any additional notes.",
+    receipt: "Extract receipt number, transaction date, merchant name, merchant address, items purchased (description, quantity, price), subtotal, tax amount, total amount, payment method, and any loyalty information.",
+    contract: "Extract contract number, contract date, effective date, parties involved, contract value, payment terms, duration, key clauses, signatures, and any special conditions.",
+    insurance_policy: "Extract policy number, policy holder name, policy type, coverage amount, premium amount, effective date, expiration date, beneficiaries, and key terms and conditions.",
+    other: "Extract key information from this document based on its content and structure."
+  },
+  de: {
+    invoice: "Extrahieren Sie Rechnungsnummer, Rechnungsdatum, Fälligkeitsdatum, Lieferantennamen, Lieferantenadresse, Positionen (Beschreibung, Menge, Einzelpreis, Gesamtbetrag), Zwischensumme, Steuerbetrag, Gesamtbetrag, Zahlungsbedingungen und zusätzliche Notizen.",
+    receipt: "Extrahieren Sie Quittungsnummer, Transaktionsdatum, Händlername, Händleradresse, gekaufte Artikel (Beschreibung, Menge, Preis), Zwischensumme, Steuerbetrag, Gesamtbetrag, Zahlungsmethode und Treueinformationen.",
+    contract: "Extrahieren Sie Vertragsnummer, Vertragsdatum, Gültigkeitsdatum, beteiligte Parteien, Vertragswert, Zahlungsbedingungen, Laufzeit, wichtige Klauseln, Unterschriften und besondere Bedingungen.",
+    insurance_policy: "Extrahieren Sie Policennummer, Versicherungsnehmer, Versicherungstyp, Deckungssumme, Prämienbetrag, Gültigkeitsdatum, Ablaufdatum, Begünstigte und wichtige Bedingungen.",
+    other: "Extrahieren Sie wichtige Informationen aus diesem Dokument basierend auf seinem Inhalt und seiner Struktur."
+  },
+  es: {
+    invoice: "Extraer número de factura, fecha de factura, fecha de vencimiento, nombre del proveedor, dirección del proveedor, artículos (descripción, cantidad, precio unitario, total), subtotal, monto de impuestos, monto total, términos de pago y notas adicionales.",
+    receipt: "Extraer número de recibo, fecha de transacción, nombre del comerciante, dirección del comerciante, artículos comprados (descripción, cantidad, precio), subtotal, monto de impuestos, monto total, método de pago e información de fidelidad.",
+    contract: "Extraer número de contrato, fecha de contrato, fecha efectiva, partes involucradas, valor del contrato, términos de pago, duración, cláusulas clave, firmas y condiciones especiales.",
+    insurance_policy: "Extraer número de póliza, nombre del asegurado, tipo de póliza, monto de cobertura, monto de prima, fecha efectiva, fecha de vencimiento, beneficiarios y términos y condiciones clave.",
+    other: "Extraer información clave de este documento basándose en su contenido y estructura."
+  }
+};
+
+// Helper function to get prompt based on language and document type
+const getPromptForLanguageAndType = (language: string, documentType: string): string => {
+  const lang = language || 'en';
+  const prompts = DEFAULT_PROMPTS[lang as keyof typeof DEFAULT_PROMPTS] || DEFAULT_PROMPTS.en;
+  return prompts[documentType as keyof typeof prompts] || prompts.other;
 };
 
 interface SchemaField {
@@ -638,6 +666,78 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
   const [generationStep, setGenerationStep] = useState<string>('');
   const [generationProgress, setGenerationProgress] = useState<number>(0);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  
+  // Auth context for tenant information
+  const { tenant } = useAuth();
+  
+  // Language configuration state
+  const [supportedLanguages, setSupportedLanguages] = useState<SupportedLanguage[]>([]);
+  const [loadingLanguages, setLoadingLanguages] = useState(false);
+
+  // Load tenant-specific supported languages on component mount
+  useEffect(() => {
+    const loadSupportedLanguages = async () => {
+      if (!tenant?.id) return;
+      
+      try {
+        setLoadingLanguages(true);
+        
+        // Get tenant-specific supported language codes
+        const tenantLanguageCodes = await apiClient.getTenantSupportedLanguages(tenant.id);
+        
+        // Get all supported languages to get full language info (name, native_name)
+        const allLanguages = await apiClient.getSupportedLanguages();
+        
+        // Filter to only tenant-supported languages
+        const tenantLanguages = allLanguages.filter(lang => 
+          tenantLanguageCodes.includes(lang.code)
+        );
+        
+        setSupportedLanguages(tenantLanguages);
+        
+        // Set default language if not already set
+        if (!templateData.language && tenantLanguages.length > 0) {
+          // Try to get tenant's default language, fallback to English or first available
+          try {
+            const tenantDefaultLang = await apiClient.getTenantDefaultLanguage(tenant.id);
+            const defaultLang = tenantLanguages.find(lang => lang.code === tenantDefaultLang) || 
+                              tenantLanguages.find(lang => lang.code === 'en') || 
+                              tenantLanguages[0];
+            
+            onTemplateChange({
+              ...templateData,
+              language: defaultLang.code,
+              auto_detect_language: true,
+              require_language_match: false
+            });
+          } catch (error) {
+            console.warn('Failed to get tenant default language:', error);
+            // Fallback to English or first available
+            const defaultLang = tenantLanguages.find(lang => lang.code === 'en') || tenantLanguages[0];
+            onTemplateChange({
+              ...templateData,
+              language: defaultLang.code,
+              auto_detect_language: true,
+              require_language_match: false
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load tenant supported languages:', error);
+        // Fallback to loading all languages if tenant-specific loading fails
+        try {
+          const allLanguages = await apiClient.getSupportedLanguages();
+          setSupportedLanguages(allLanguages);
+        } catch (fallbackError) {
+          console.error('Failed to load fallback languages:', fallbackError);
+        }
+      } finally {
+        setLoadingLanguages(false);
+      }
+    };
+
+    loadSupportedLanguages();
+  }, [tenant?.id]);
 
   // Generate field mapping suggestions based on the document type
   const getFieldSuggestions = (fieldName: string, fieldId: string) => {
@@ -879,7 +979,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       const response = await apiClient.generateFieldsFromPrompt({
         prompt: templateData.description,
         document_type: templateData.document_type || 'other'
-      });
+      }, templateData.language || 'en');
       
       setGenerationStep('Processing results...');
       setGenerationProgress(90);
@@ -1032,7 +1132,11 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         prompt: templateData.description,
         document_type: templateData.document_type || 'other',
         document_content: documentContent
-      });
+      }, 
+      templateData.language || 'en',
+      templateData.auto_detect_language ?? true,
+      templateData.require_language_match ?? false
+      );
       
       setGenerationStep('Processing results...');
       setGenerationProgress(90);
@@ -1235,7 +1339,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                 updateTemplate({ 
                   document_type: newDocumentType,
                   // Auto-generate prompt when document type changes (except for manual)
-                  description: newDocumentType === 'manual' ? '' : (DEFAULT_PROMPTS[newDocumentType as keyof typeof DEFAULT_PROMPTS] || DEFAULT_PROMPTS.other)
+                  description: newDocumentType === 'manual' ? '' : getPromptForLanguageAndType(templateData.language || 'en', newDocumentType)
                 });
               }}
             >
@@ -1246,6 +1350,68 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
               <option value="receipt">Receipt</option>
               <option value="other">Other</option>
             </Select>
+          </FormGroup>
+          
+          {/* Language Configuration */}
+          <FormGroup>
+            <Label>Template Language</Label>
+            <Select
+              value={templateData.language || 'en'}
+              onChange={(e) => {
+                const newLanguage = e.target.value;
+                updateTemplate({ 
+                  language: newLanguage,
+                  // Update prompt to match new language if document type is not manual
+                  description: templateData.document_type === 'manual' 
+                    ? templateData.description 
+                    : getPromptForLanguageAndType(newLanguage, templateData.document_type || 'other')
+                });
+              }}
+              disabled={loadingLanguages}
+            >
+              {supportedLanguages.map(language => (
+                <option key={language.code} value={language.code}>
+                  {language.native_name} ({language.code})
+                </option>
+              ))}
+            </Select>
+            <HelpText>
+              The language this template will use for extraction prompts and responses
+            </HelpText>
+          </FormGroup>
+          
+          <FormGroup>
+            <CheckboxContainer>
+              <Checkbox
+                type="checkbox"
+                id="auto-detect-language"
+                checked={templateData.auto_detect_language ?? true}
+                onChange={(e) => updateTemplate({ auto_detect_language: e.target.checked })}
+              />
+              <CheckboxLabel htmlFor="auto-detect-language">
+                Automatically detect document language
+              </CheckboxLabel>
+            </CheckboxContainer>
+            <HelpText>
+              When enabled, the system will detect the language of uploaded documents
+            </HelpText>
+          </FormGroup>
+          
+          <FormGroup>
+            <CheckboxContainer>
+              <Checkbox
+                type="checkbox"
+                id="require-language-match"
+                checked={templateData.require_language_match ?? false}
+                onChange={(e) => updateTemplate({ require_language_match: e.target.checked })}
+              />
+              <CheckboxLabel htmlFor="require-language-match">
+                Require language match for extraction
+              </CheckboxLabel>
+            </CheckboxContainer>
+            <HelpText>
+              When enabled, extraction will only proceed if the document language matches this template's language
+            </HelpText>
           </FormGroup>
           
           <FormGroup>

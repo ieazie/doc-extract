@@ -302,6 +302,9 @@ class DocumentProcessor:
             # Calculate text statistics
             text_stats = self._calculate_text_statistics(content_result["text"])
             
+            # Detect document language
+            language_result = await self._detect_document_language(content_result["text"])
+            
             processing_time = time.time() - start_time
             
             result = {
@@ -313,10 +316,14 @@ class DocumentProcessor:
                 "thumbnail_s3_key": thumbnail_result.get("s3_key"),
                 "extraction_completed_at": datetime.utcnow(),
                 "processing_time": processing_time,
+                "detected_language": language_result["language"],
+                "language_confidence": language_result["confidence"],
+                "language_source": language_result["source"],
                 "metadata": {
                     **content_result.get("metadata", {}),
                     **text_stats,
-                    "extraction_method": content_result.get("method", "unknown")
+                    "extraction_method": content_result.get("method", "unknown"),
+                    "language_detection": language_result
                 }
             }
             
@@ -969,6 +976,47 @@ class DocumentProcessor:
                 return best_category
         
         return None
+
+    async def _detect_document_language(self, text: str) -> Dict[str, Any]:
+        """
+        Detect the language of document text using enhanced heuristics
+        
+        Args:
+            text: Document text content
+            
+        Returns:
+            Language detection result with language code, confidence, and source
+        """
+        try:
+            if not text or len(text.strip()) < 10:
+                return {
+                    "language": "en",
+                    "confidence": 0.5,
+                    "source": "auto"
+                }
+            
+            # Import the language service
+            from ..services.language_service import DocumentLanguageDetector
+            
+            # Create detector instance
+            detector = DocumentLanguageDetector(self.db)
+            
+            # Detect language
+            result = detector.detect_language(text)
+            
+            return {
+                "language": result.language,
+                "confidence": float(result.confidence),
+                "source": result.source
+            }
+            
+        except Exception as e:
+            logger.error(f"Language detection failed: {str(e)}")
+            return {
+                "language": "en",
+                "confidence": 0.3,
+                "source": "auto"
+            }
 
 
 # Global document processor instance (will be initialized with db in API endpoints)

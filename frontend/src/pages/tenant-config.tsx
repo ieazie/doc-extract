@@ -24,6 +24,7 @@ import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import { apiClient, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant, TenantEnvironmentInfo } from '@/services/api';
 import InfrastructureManagement from '@/components/tenants/InfrastructureManagement';
+import LanguageConfiguration from '@/components/tenants/LanguageConfiguration';
 
 const PageContainer = styled.div`
   padding: 2rem;
@@ -214,7 +215,7 @@ const ContextualMessage = styled.div<{ $type: 'success' | 'error' }>`
 
 const TenantConfigPage: React.FC = () => {
   const { user, tenant, hasPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'llm' | 'infrastructure'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'llm' | 'infrastructure' | 'language'>('overview');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fieldExtractionMessage, setFieldExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -784,12 +785,19 @@ const TenantConfigPage: React.FC = () => {
         >
           Infrastructure
         </TabButton>
+        <TabButton 
+          $isActive={activeTab === 'language'} 
+          onClick={() => setActiveTab('language')}
+        >
+          Language
+        </TabButton>
       </TabNavigation>
 
       <TabContent>
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'llm' && renderLLMTab()}
         {activeTab === 'infrastructure' && tenant && renderInfrastructureTab()}
+        {activeTab === 'language' && tenant && <LanguageConfiguration tenantId={tenant.id} />}
       </TabContent>
     </PageContainer>
   );

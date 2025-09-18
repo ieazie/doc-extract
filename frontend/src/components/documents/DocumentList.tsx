@@ -354,6 +354,16 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                 <div>Size: {apiClient.formatFileSize(document.file_size)}</div>
                 <div>Uploaded: {apiClient.formatDate(document.created_at)}</div>
                 <div>Type: {document.document_type || 'Unknown'}</div>
+                {document.detected_language && (
+                  <div>
+                    Language: {document.detected_language}
+                    {document.language_confidence && (
+                      <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                        {' '}({(document.language_confidence * 100).toFixed(0)}% confidence)
+                      </span>
+                    )}
+                  </div>
+                )}
               </DocumentMeta>
 
               {document.page_count && (

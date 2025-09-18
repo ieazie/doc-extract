@@ -15,7 +15,7 @@ class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
     @abstractmethod
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract structured data from document text"""
         pass
 
@@ -40,11 +40,12 @@ class OllamaProvider(LLMProvider):
         self.max_tokens = config.max_tokens or 4000
         self.temperature = config.temperature or 0.1
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using Ollama"""
         
-        # Build the prompt
+        # Build the language-aware prompt
         system_prompt = prompt_config.get("system_prompt", "You are a helpful assistant that extracts structured data from documents.")
+        system_prompt = self._build_language_aware_prompt(system_prompt, language)
         few_shot_examples = prompt_config.get("few_shot_examples", [])
         
         # Create the extraction prompt
@@ -165,6 +166,34 @@ class OllamaProvider(LLMProvider):
         
         # If no JSON found, return empty object
         return {}
+    
+    def _build_language_aware_prompt(self, base_prompt: str, language: str) -> str:
+        """Build language-aware system prompt"""
+        language_instructions = {
+            "en": "Respond in English.",
+            "es": "Responde en español.",
+            "fr": "Répondez en français.",
+            "de": "Antworten Sie auf Deutsch.",
+            "it": "Rispondi in italiano.",
+            "pt": "Responda em português.",
+            "zh": "请用中文回答。",
+            "ja": "日本語で回答してください。",
+            "ko": "한국어로 답변해주세요。",
+            "ar": "أجب باللغة العربية.",
+            "ru": "Отвечайте на русском языке.",
+            "hi": "हिंदी में उत्तर दें।",
+            "en-US": "Respond in English (US).",
+            "es-ES": "Responde en español (España).",
+            "fr-FR": "Répondez en français (France).",
+            "de-DE": "Antworten Sie auf Deutsch (Deutschland).",
+            "it-IT": "Rispondi in italiano (Italia).",
+            "pt-PT": "Responda em português (Portugal).",
+            "zh-CN": "请用中文（简体）回答。",
+            "ja-JP": "日本語（日本）で回答してください。",
+        }
+        
+        language_instruction = language_instructions.get(language, "Respond in English.")
+        return f"{base_prompt}\n\n{language_instruction}"
 
 
 class OpenAIProvider(LLMProvider):
@@ -178,14 +207,15 @@ class OpenAIProvider(LLMProvider):
         self.max_tokens = config.max_tokens or 4000
         self.temperature = config.temperature or 0.1
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using OpenAI"""
         
         if not self.api_key:
             raise Exception("OpenAI API key not provided")
 
-        # Build the prompt
+        # Build the language-aware prompt
         system_prompt = prompt_config.get("system_prompt", "You are a helpful assistant that extracts structured data from documents.")
+        system_prompt = self._build_language_aware_prompt(system_prompt, language)
         few_shot_examples = prompt_config.get("few_shot_examples", [])
         
         messages = [{"role": "system", "content": system_prompt}]
@@ -280,6 +310,34 @@ Respond with only valid JSON that matches the schema."""
         except Exception as e:
             print(f"Error fetching OpenAI models: {e}")
             return []
+    
+    def _build_language_aware_prompt(self, base_prompt: str, language: str) -> str:
+        """Build language-aware system prompt"""
+        language_instructions = {
+            "en": "Respond in English.",
+            "es": "Responde en español.",
+            "fr": "Répondez en français.",
+            "de": "Antworten Sie auf Deutsch.",
+            "it": "Rispondi in italiano.",
+            "pt": "Responda em português.",
+            "zh": "请用中文回答。",
+            "ja": "日本語で回答してください。",
+            "ko": "한국어로 답변해주세요。",
+            "ar": "أجب باللغة العربية.",
+            "ru": "Отвечайте на русском языке.",
+            "hi": "हिंदी में उत्तर दें।",
+            "en-US": "Respond in English (US).",
+            "es-ES": "Responde en español (España).",
+            "fr-FR": "Répondez en français (France).",
+            "de-DE": "Antworten Sie auf Deutsch (Deutschland).",
+            "it-IT": "Rispondi in italiano (Italia).",
+            "pt-PT": "Responda em português (Portugal).",
+            "zh-CN": "请用中文（简体）回答。",
+            "ja-JP": "日本語（日本）で回答してください。",
+        }
+        
+        language_instruction = language_instructions.get(language, "Respond in English.")
+        return f"{base_prompt}\n\n{language_instruction}"
 
 
 class AnthropicProvider(LLMProvider):
@@ -293,14 +351,15 @@ class AnthropicProvider(LLMProvider):
         self.max_tokens = config.max_tokens or 4000
         self.temperature = config.temperature or 0.1
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using Anthropic Claude"""
         
         if not self.api_key:
             raise Exception("Anthropic API key not provided")
 
-        # Build the prompt
+        # Build the language-aware prompt
         system_prompt = prompt_config.get("system_prompt", "You are a helpful assistant that extracts structured data from documents.")
+        system_prompt = self._build_language_aware_prompt(system_prompt, language)
         few_shot_examples = prompt_config.get("few_shot_examples", [])
         
         prompt = self._build_extraction_prompt(
@@ -401,6 +460,34 @@ class AnthropicProvider(LLMProvider):
         prompt_parts.append("\nRespond with only valid JSON that matches the schema:")
         
         return "\n".join(prompt_parts)
+    
+    def _build_language_aware_prompt(self, base_prompt: str, language: str) -> str:
+        """Build language-aware system prompt"""
+        language_instructions = {
+            "en": "Respond in English.",
+            "es": "Responde en español.",
+            "fr": "Répondez en français.",
+            "de": "Antworten Sie auf Deutsch.",
+            "it": "Rispondi in italiano.",
+            "pt": "Responda em português.",
+            "zh": "请用中文回答。",
+            "ja": "日本語で回答してください。",
+            "ko": "한국어로 답변해주세요。",
+            "ar": "أجب باللغة العربية.",
+            "ru": "Отвечайте на русском языке.",
+            "hi": "हिंदी में उत्तर दें।",
+            "en-US": "Respond in English (US).",
+            "es-ES": "Responde en español (España).",
+            "fr-FR": "Répondez en français (France).",
+            "de-DE": "Antworten Sie auf Deutsch (Deutschland).",
+            "it-IT": "Rispondi in italiano (Italia).",
+            "pt-PT": "Responda em português (Portugal).",
+            "zh-CN": "请用中文（简体）回答。",
+            "ja-JP": "日本語（日本）で回答してください。",
+        }
+        
+        language_instruction = language_instructions.get(language, "Respond in English.")
+        return f"{base_prompt}\n\n{language_instruction}"
 
 
 class LLMProviderFactory:
@@ -432,9 +519,9 @@ class LLMProviderService:
         provider = LLMProviderFactory.create_provider(config)
         return cls(provider)
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using the configured provider"""
-        return self.provider.extract_data(document_text, schema, prompt_config)
+        return self.provider.extract_data(document_text, schema, prompt_config, language)
 
     def health_check(self) -> bool:
         """Check provider health"""
