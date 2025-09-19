@@ -210,7 +210,13 @@ export const LanguageConfiguration: React.FC<LanguageConfigurationProps> = ({ te
         <FormGroup>
           <Label>Select Languages</Label>
           <MultiSelectContainer>
-            <MultiSelectDropdown onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+            <MultiSelectDropdown
+              role="combobox"
+              aria-haspopup="listbox"
+              aria-expanded={isDropdownOpen}
+              aria-controls="language-dropdown"
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            >
               {config.supported_languages.length === 0 ? (
                 <span style={{ color: '#9ca3af' }}>Select languages...</span>
               ) : (
@@ -231,7 +237,7 @@ export const LanguageConfiguration: React.FC<LanguageConfigurationProps> = ({ te
               )}
             </MultiSelectDropdown>
             
-            <DropdownList $isOpen={isDropdownOpen}>
+            <DropdownList id="language-dropdown" role="listbox" $isOpen={isDropdownOpen}>
               {availableLanguages.map(language => (
                 <DropdownItem
                   key={language.code}
@@ -345,7 +351,7 @@ export const LanguageConfiguration: React.FC<LanguageConfigurationProps> = ({ te
             disabled={!testText.trim() || testing}
             size="small"
           >
-            {testing ? <RefreshCw size={16} className="animate-spin" /> : <Globe size={16} />}
+            {testing ? <LoadingSpinner size={16} /> : <Globe size={16} />}
             {testing ? 'Detecting...' : 'Test Detection'}
           </Button>
           
@@ -373,7 +379,7 @@ export const LanguageConfiguration: React.FC<LanguageConfigurationProps> = ({ te
           disabled={saving}
           variant="primary"
         >
-          {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+          {saving ? <LoadingSpinner size={16} /> : <Save size={16} />}
           {saving ? 'Saving...' : 'Save Configuration'}
         </Button>
         

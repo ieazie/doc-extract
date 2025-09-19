@@ -979,7 +979,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       const response = await apiClient.generateFieldsFromPrompt({
         prompt: templateData.description,
         document_type: templateData.document_type || 'other'
-      }, templateData.language || 'en');
+      }, templateData.language || 'en', { signal: controller.signal });
       
       setGenerationStep('Processing results...');
       setGenerationProgress(90);
@@ -1135,7 +1135,8 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       }, 
       templateData.language || 'en',
       templateData.auto_detect_language ?? true,
-      templateData.require_language_match ?? false
+      templateData.require_language_match ?? false,
+      { signal: controller.signal }
       );
       
       setGenerationStep('Processing results...');
@@ -1258,10 +1259,9 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
             value={field.type}
             onChange={(e) => updateField(field.id, { type: e.target.value as any })}
           >
-            <option value="string">String</option>
+            <option value="text">Text</option>
             <option value="number">Number</option>
             <option value="date">Date</option>
-            <option value="boolean">Boolean</option>
             <option value="array">Array</option>
             <option value="object">Object</option>
           </FieldSelect>
@@ -1421,7 +1421,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
               onChange={(e) => updateTemplate({ description: e.target.value })}
               placeholder="Provide instructions for the AI on what to extract from documents (e.g., 'Extract invoice number, date, total amount, and vendor information')"
               rows={4}
-              disabled={templateData.document_type === 'manual'}
+              disabled={templateData.document_type !== 'manual'}
             />
             <HelpText>
               {templateData.document_type === 'manual' 

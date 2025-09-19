@@ -1159,8 +1159,8 @@ class ApiClient {
   }
 
   // AI Field Generation Endpoints
-  async generateFieldsFromPrompt(request: GenerateFieldsRequest, templateLanguage: string = 'en'): Promise<GenerateFieldsResponse> {
-    const response = await this.client.post(`/api/templates/generate-fields-from-prompt?template_language=${templateLanguage}`, request);
+  async generateFieldsFromPrompt(request: GenerateFieldsRequest, templateLanguage: string = 'en', options?: { signal?: AbortSignal }): Promise<GenerateFieldsResponse> {
+    const response = await this.client.post(`/api/templates/generate-fields-from-prompt?template_language=${templateLanguage}`, request, options);
     return response.data;
   }
 
@@ -1168,14 +1168,15 @@ class ApiClient {
     request: GenerateFieldsRequest, 
     templateLanguage: string = 'en',
     autoDetectLanguage: boolean = true,
-    requireLanguageMatch: boolean = false
+    requireLanguageMatch: boolean = false,
+    options?: { signal?: AbortSignal }
   ): Promise<GenerateFieldsResponse> {
     const params = new URLSearchParams({
       template_language: templateLanguage,
       auto_detect_language: autoDetectLanguage.toString(),
       require_language_match: requireLanguageMatch.toString()
     });
-    const response = await this.client.post(`/api/templates/generate-fields-from-document?${params}`, request);
+    const response = await this.client.post(`/api/templates/generate-fields-from-document?${params}`, request, options);
     return response.data;
   }
 

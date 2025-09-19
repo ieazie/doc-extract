@@ -21,7 +21,7 @@ class AIService:
         self.db = db
         self.config_service = TenantConfigService(db)
     
-    async def generate_fields_from_prompt(self, prompt: str, document_type: str = "other", template_language: str = "en", tenant_id: str = None) -> List[Dict[str, Any]]:
+    async def generate_fields_from_prompt(self, prompt: str, document_type: str = "other", template_language: str = "en", tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Generate schema fields based on extraction prompt only
         
@@ -40,7 +40,7 @@ class AIService:
             tenant_id
         )
     
-    async def generate_fields_from_document(self, prompt: str, document_content: str, document_type: str = "other", template_language: str = "en", tenant_id: str = None) -> List[Dict[str, Any]]:
+    async def generate_fields_from_document(self, prompt: str, document_content: str, document_type: str = "other", template_language: str = "en", tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Generate schema fields based on extraction prompt and document content
         
@@ -60,7 +60,7 @@ class AIService:
             tenant_id
         )
     
-    async def _generate_with_tenant_config(self, system_prompt: str, user_prompt: str, mode: str, tenant_id: str = None) -> List[Dict[str, Any]]:
+    async def _generate_with_tenant_config(self, system_prompt: str, user_prompt: str, mode: str, tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Generate fields using tenant-specific LLM configuration"""
         max_retries = 3
         base_delay = 1  # seconds
@@ -90,6 +90,8 @@ class AIService:
                     return await self._generate_with_openai_tenant_config(config_to_use, system_prompt, user_prompt)
                 elif config_to_use.provider == 'ollama':
                     return await self._generate_with_ollama_tenant_config(config_to_use, system_prompt, user_prompt)
+                elif config_to_use.provider == 'anthropic':
+                    return await self._generate_with_anthropic_tenant_config(config_to_use, system_prompt, user_prompt)
                 else:
                     # Fallback to OpenAI for other providers
                     return await self._generate_with_fallback(system_prompt, user_prompt, mode)
@@ -160,6 +162,39 @@ class AIService:
                 return self._parse_fields_response(result.get("response", ""))
         except Exception as e:
             logger.error(f"Tenant-specific Ollama field generation failed: {str(e)}")
+            raise Exception(f"Field generation failed: {str(e)}")
+
+    async def _generate_with_anthropic_tenant_config(self, config: Any, system_prompt: str, user_prompt: str) -> List[Dict[str, Any]]:
+        """Generate fields using tenant-specific Anthropic configuration"""
+        try:
+            import httpx
+            
+            base_url = config.base_url or 'https://api.anthropic.com'
+            
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{base_url}/v1/messages",
+                    headers={
+                        "x-api-key": config.api_key,
+                        "Content-Type": "application/json",
+                        "anthropic-version": "2023-06-01"
+                    },
+                    json={
+                        "model": config.model_name,
+                        "max_tokens": config.max_tokens or 4000,
+                        "temperature": config.temperature or 0.1,
+                        "system": system_prompt,
+                        "messages": [{"role": "user", "content": user_prompt}]
+                    }
+                )
+                
+                if response.status_code != 200:
+                    raise Exception(f"Anthropic API error: {response.status_code} - {response.text}")
+                
+                result = response.json()
+                return self._parse_fields_response(result["content"][0]["text"])
+        except Exception as e:
+            logger.error(f"Tenant-specific Anthropic field generation failed: {str(e)}")
             raise Exception(f"Field generation failed: {str(e)}")
 
     async def _generate_with_fallback(self, system_prompt: str, user_prompt: str, mode: str) -> List[Dict[str, Any]]:

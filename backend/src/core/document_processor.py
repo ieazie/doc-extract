@@ -1010,8 +1010,8 @@ class DocumentProcessor:
                 "source": result.source
             }
             
-        except Exception as e:
-            logger.error(f"Language detection failed: {str(e)}")
+        except (ImportError, AttributeError, ValueError) as e:
+            logger.exception("Language detection failed")
             return {
                 "language": "en",
                 "confidence": 0.3,

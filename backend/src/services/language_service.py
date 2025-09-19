@@ -190,7 +190,8 @@ class LanguageService:
             logger.error(f"Failed to validate language support for tenant {tenant_id}, language {language}: {str(e)}")
             return False
     
-    def get_all_supported_languages(self) -> List[SupportedLanguage]:
+    @staticmethod
+    def get_all_supported_languages() -> List[SupportedLanguage]:
         """Get list of all supported languages in the system"""
         return [
             SupportedLanguage(code="en", name="English", native_name="English"),

@@ -2,6 +2,13 @@
 -- This migration adds comprehensive language support to the document extraction platform
 
 -- ============================================================================
+-- 0. ENABLE REQUIRED EXTENSIONS
+-- ============================================================================
+
+-- Enable pgcrypto extension for gen_random_uuid() function
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ============================================================================
 -- 1. TENANT LANGUAGE CONFIGURATION
 -- ============================================================================
 

@@ -244,6 +244,13 @@ async def create_template(
                 if not doc_type:
                     raise HTTPException(status_code=400, detail="Invalid document type ID")
         
+        # Validate language support
+        if template_data.language:
+            from ..services.language_service import LanguageService
+            lang_service = LanguageService(db)
+            if not lang_service.validate_language_support(str(tenant_id), template_data.language):
+                raise HTTPException(status_code=400, detail=f"Unsupported language for tenant: {template_data.language}")
+        
         # Create template
         template = Template(
             tenant_id=tenant_id,
@@ -507,6 +514,10 @@ async def update_template(
         if template_data.document_type_id is not None:
             template.document_type_id = uuid.UUID(template_data.document_type_id) if template_data.document_type_id else None
         if template_data.language is not None:
+            from ..services.language_service import LanguageService
+            lang_service = LanguageService(db)
+            if not lang_service.validate_language_support(str(tenant_id), template_data.language):
+                raise HTTPException(status_code=400, detail=f"Unsupported language for tenant: {template_data.language}")
             template.language = template_data.language
         if template_data.auto_detect_language is not None:
             template.auto_detect_language = template_data.auto_detect_language
@@ -772,11 +783,19 @@ async def test_template(
             extraction_service = ExtractionService(db)
             
             # Create extraction request with template language configuration
+            # Get document type name for the system prompt
+            doc_type_name = "document"
+            if template.document_type_id:
+                from ..models.database import DocumentType
+                doc_type = db.query(DocumentType).filter(DocumentType.id == template.document_type_id).first()
+                if doc_type:
+                    doc_type_name = doc_type.name
+            
             extraction_request = ExtractionRequest(
                 document_text=test_document,
                 schema=template.schema,
                 prompt_config={
-                    "system_prompt": template.prompt_config.get("system_prompt", f"Extract data from this {template.document_type} document according to the schema."),
+                    "system_prompt": template.prompt_config.get("system_prompt", f"Extract data from this {doc_type_name} document according to the schema."),
                     "instructions": template.prompt_config.get("instructions", ""),
                     "output_format": template.prompt_config.get("output_format", "json"),
                     "few_shot_examples": template.prompt_config.get("few_shot_examples", []),
@@ -788,9 +807,8 @@ async def test_template(
                 tenant_id=tenant_id
             )
             
-            # Perform extraction in background thread to avoid blocking event loop
-            import asyncio
-            result = await asyncio.to_thread(extraction_service.extract_data, extraction_request)
+            # Perform extraction
+            result = await extraction_service.extract_data(extraction_request)
             
             return {
                 "status": result.status,

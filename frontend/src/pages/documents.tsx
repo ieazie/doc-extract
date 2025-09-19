@@ -484,9 +484,9 @@ const DocumentsPage: React.FC = () => {
               fontWeight: '500',
               color: '#1f2937'
             }}>
-              {value.toUpperCase()}
+              {value}
             </span>
-            {confidence && (
+            {confidence !== undefined && confidence !== null && (
               <span style={{ 
                 fontSize: '0.625rem',
                 color: confidenceColor,

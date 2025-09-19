@@ -7,17 +7,20 @@ export interface SchemaField {
   description?: string;
 }
 
-export interface TemplateBase {
+export interface LanguageConfig {
+  // Language configuration
+  language?: string;
+  auto_detect_language?: boolean;
+  require_language_match?: boolean;
+}
+
+export interface TemplateBase extends LanguageConfig {
   id: string;
   name: string;
   document_type_name?: string;
   schema: Record<string, SchemaField>;
   is_active: boolean;
   status?: 'draft' | 'published' | 'archived';
-  // Language configuration
-  language?: string;
-  auto_detect_language?: boolean;
-  require_language_match?: boolean;
   version: number;
   created_at: string;
   updated_at: string;
@@ -38,7 +41,7 @@ export interface TemplateListResponse {
   total_pages: number;
 }
 
-export interface TemplateFormData {
+export interface TemplateFormData extends LanguageConfig {
   name: string;
   document_type_id?: string;
   schema: Record<string, SchemaField>;
@@ -53,8 +56,4 @@ export interface TemplateFormData {
     confidence_threshold: number;
   };
   few_shot_examples: Array<Record<string, any>>;
-  // Language configuration
-  language?: string;
-  auto_detect_language?: boolean;
-  require_language_match?: boolean;
 }

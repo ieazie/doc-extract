@@ -3,6 +3,7 @@
  * Following frontend styling rules with theme values
  */
 import styled from 'styled-components';
+import { withAlpha, transparentize } from '@/utils/colorUtils';
 
 export const ConfigurationContainer = styled.div`
   display: flex;
@@ -63,7 +64,7 @@ export const MultiSelectDropdown = styled.div`
   &:focus-within {
     outline: none;
     border-color: ${props => props.theme.colors.borderFocus};
-    box-shadow: 0 0 0 3px ${props => props.theme.colors.primary + '1a'};
+    box-shadow: 0 0 0 3px ${props => withAlpha(0.1, props.theme.colors.primary)};
   }
 `;
 
@@ -71,7 +72,7 @@ export const SelectedLanguage = styled.span`
   display: inline-flex;
   align-items: center;
   gap: ${props => props.theme.spacing.xs};
-  background: ${props => props.theme.colors.primary + '0f'};
+  background: ${props => withAlpha(0.06, props.theme.colors.primary)};
   color: ${props => props.theme.colors.primary};
   padding: ${props => props.theme.spacing.xs} ${props => props.theme.spacing.sm};
   border-radius: ${props => props.theme.borderRadius.md};
@@ -112,12 +113,12 @@ export const DropdownList = styled.div<{ $isOpen: boolean }>`
 export const DropdownItem = styled.div<{ $isSelected: boolean }>`
   padding: ${props => props.theme.spacing.sm};
   cursor: pointer;
-  background: ${props => props.$isSelected ? props.theme.colors.primary + '0f' : props.theme.colors.surface};
+  background: ${props => props.$isSelected ? withAlpha(0.06, props.theme.colors.primary) : props.theme.colors.surface};
   color: ${props => props.$isSelected ? props.theme.colors.primary : props.theme.colors.text.primary};
   transition: background-color ${props => props.theme.animation.duration.fast} ${props => props.theme.animation.easing.easeInOut};
   
   &:hover {
-    background: ${props => props.$isSelected ? props.theme.colors.primary + '1a' : props.theme.colors.surfaceHover};
+    background: ${props => props.$isSelected ? withAlpha(0.1, props.theme.colors.primary) : props.theme.colors.surfaceHover};
   }
 `;
 
@@ -147,7 +148,7 @@ export const Select = styled.select`
   &:focus {
     outline: none;
     border-color: ${props => props.theme.colors.borderFocus};
-    box-shadow: 0 0 0 3px ${props => props.theme.colors.primary + '1a'};
+    box-shadow: 0 0 0 3px ${props => withAlpha(0.1, props.theme.colors.primary)};
   }
 `;
 
@@ -196,7 +197,7 @@ export const TestInput = styled.textarea`
   &:focus {
     outline: none;
     border-color: ${props => props.theme.colors.borderFocus};
-    box-shadow: 0 0 0 3px ${props => props.theme.colors.primary + '1a'};
+    box-shadow: 0 0 0 3px ${props => withAlpha(0.1, props.theme.colors.primary)};
   }
 `;
 
@@ -204,12 +205,12 @@ export const DetectionResult = styled.div<{ $confidence: number }>`
   padding: ${props => props.theme.spacing.md};
   border-radius: ${props => props.theme.borderRadius.md};
   background: ${props => 
-    props.$confidence > 0.7 ? props.theme.colors.success + '0f' : 
-    props.$confidence > 0.4 ? props.theme.colors.warning + '0f' : props.theme.colors.error + '0f'
+    props.$confidence > 0.7 ? withAlpha(0.06, props.theme.colors.success) : 
+    props.$confidence > 0.4 ? withAlpha(0.06, props.theme.colors.warning) : withAlpha(0.06, props.theme.colors.error)
   };
   border: 1px solid ${props => 
-    props.$confidence > 0.7 ? props.theme.colors.success + '40' : 
-    props.$confidence > 0.4 ? props.theme.colors.warning + '40' : props.theme.colors.error + '40'
+    props.$confidence > 0.7 ? withAlpha(0.25, props.theme.colors.success) : 
+    props.$confidence > 0.4 ? withAlpha(0.25, props.theme.colors.warning) : withAlpha(0.25, props.theme.colors.error)
   };
   margin-top: ${props => props.theme.spacing.sm};
 `;

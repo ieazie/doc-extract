@@ -1,7 +1,7 @@
 """
 SQLAlchemy models for the Document Extraction Platform
 """
-from sqlalchemy import create_engine, Column, String, Integer, BigInteger, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric, Enum
+from sqlalchemy import create_engine, Column, String, Integer, BigInteger, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric, Enum, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -220,6 +220,12 @@ class Document(Base):
     extractions = relationship("Extraction", back_populates="document", cascade="all, delete-orphan")
     extraction_tracking = relationship("DocumentExtractionTracking", back_populates="document", cascade="all, delete-orphan")
 
+    # Table constraints to match migration
+    __table_args__ = (
+        CheckConstraint("language_confidence IS NULL OR (language_confidence >= 0 AND language_confidence <= 1)", name="documents_valid_lang_confidence"),
+        CheckConstraint("language_source IN ('auto', 'manual', 'template')", name="documents_valid_lang_source"),
+    )
+
     def __repr__(self):
         return f"<Document(id={self.id}, filename='{self.original_filename}')>"
 
@@ -327,6 +333,7 @@ class Template(Base):
     __table_args__ = (
         UniqueConstraint('tenant_id', 'name', 'version', name='templates_tenant_id_name_version_key'),
         CheckConstraint('version > 0', name='templates_version_positive'),
+        CheckConstraint("language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_template_language'),
     )
 
     def __repr__(self):
@@ -658,7 +665,7 @@ class TenantLanguageConfig(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    supported_languages = Column(JSONB, nullable=False, default=["en"])
+    supported_languages = Column(JSONB, nullable=False, default=["en"], server_default='["en"]')
     default_language = Column(String(10), nullable=False, default="en")
     auto_detect_language = Column(Boolean, default=True)
     require_language_match = Column(Boolean, default=False)
@@ -673,6 +680,7 @@ class TenantLanguageConfig(Base):
         UniqueConstraint('tenant_id', name='unique_tenant_language_config'),
         CheckConstraint("default_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_default_language'),
         CheckConstraint("jsonb_array_length(supported_languages) > 0", name='supported_languages_not_empty'),
+        CheckConstraint("jsonb_array_length(supported_languages) = (SELECT count(*) FROM jsonb_array_elements(supported_languages) AS elem WHERE elem::text ~ '^\"[a-z]{2}(-[A-Z]{2})?\"$')", name='valid_supported_languages_format'),
     )
     
     def __repr__(self):
@@ -695,23 +703,17 @@ class ExtractionLanguageValidation(Base):
     # Relationships
     extraction = relationship("Extraction")
     
-    # Table constraints
+    # Table constraints and indexes
     __table_args__ = (
         CheckConstraint("template_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_template_language_code'),
         CheckConstraint("document_language IS NULL OR document_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_document_language_code'),
         CheckConstraint("validation_status IN ('pending', 'passed', 'failed', 'ignored')", name='valid_validation_status'),
+        Index('idx_extraction_language_validation_extraction_id', 'extraction_id'),
+        Index('idx_extraction_language_validation_status', 'validation_status'),
+        Index('idx_extraction_language_validation_language_match', 'language_match'),
     )
     
     def __repr__(self):
         return f"<ExtractionLanguageValidation(id={self.id}, extraction_id={self.extraction_id}, template_language='{self.template_language}', document_language='{self.document_language}')>"
 
-
-# Database dependency for FastAPI
-def get_db():
-    """Get database session for FastAPI dependency injection"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 

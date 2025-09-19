@@ -24,7 +24,7 @@ import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import { apiClient, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant, TenantEnvironmentInfo } from '@/services/api';
 import InfrastructureManagement from '@/components/tenants/InfrastructureManagement';
-import LanguageConfiguration from '@/components/tenants/LanguageConfiguration';
+import { LanguageConfiguration } from '@/components/tenants/LanguageConfiguration';
 
 const PageContainer = styled.div`
   padding: 2rem;

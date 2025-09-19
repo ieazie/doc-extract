@@ -6,6 +6,7 @@ from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from ..models.database import get_db
 from ..services.language_service import (
@@ -24,6 +25,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/language", tags=["language"])
 
 
+class DetectRequest(BaseModel):
+    """Request model for language detection"""
+    text: str
+
+
+class ValidateRequest(BaseModel):
+    """Request model for language validation"""
+    tenant_id: str
+    language: str
+
+
 def _ensure_tenant_access(current_user: User, tenant_id: UUID) -> None:
     """Ensure user has access to the specified tenant"""
     if not auth_service.can_access_tenant(current_user, tenant_id):
@@ -37,9 +49,7 @@ def _ensure_tenant_access(current_user: User, tenant_id: UUID) -> None:
 async def get_supported_languages():
     """Get list of all supported languages in the system"""
     try:
-        # Create a temporary service instance to get supported languages
-        language_service = LanguageService(None)
-        return language_service.get_all_supported_languages()
+        return LanguageService.get_all_supported_languages()
     except Exception as e:
         logger.error(f"Failed to get supported languages: {str(e)}")
         raise HTTPException(
@@ -112,12 +122,13 @@ async def update_tenant_language_config(
 
 @router.post("/detect", response_model=LanguageDetectionResult)
 async def detect_document_language(
-    text: str,
+    body: DetectRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Detect language of provided text"""
     try:
+        text = body.text
         if not text or len(text.strip()) < 10:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -131,8 +142,8 @@ async def detect_document_language(
         
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Language detection failed: {str(e)}")
+    except Exception:
+        logger.exception("Language detection failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Language detection failed"
@@ -189,13 +200,15 @@ async def get_tenant_default_language(
 
 @router.post("/validate")
 async def validate_language_support(
-    tenant_id: UUID,
-    language: str,
+    body: ValidateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Validate if a language is supported by a tenant"""
     try:
+        tenant_id = UUID(body.tenant_id)
+        language = body.language
+        
         # Enforce tenant access
         _ensure_tenant_access(current_user, tenant_id)
         
@@ -208,8 +221,8 @@ async def validate_language_support(
             "is_supported": is_supported
         }
         
-    except Exception as e:
-        logger.error(f"Failed to validate language support for tenant {tenant_id}, language {language}: {str(e)}")
+    except Exception:
+        logger.exception("Failed to validate language support")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to validate language support"

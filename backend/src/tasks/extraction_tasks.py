@@ -71,7 +71,8 @@ def process_extraction(
         )
         
         # Perform extraction
-        result = extraction_service.extract_data(extraction_request)
+        import asyncio
+        result = asyncio.run(extraction_service.extract_data(extraction_request))
         
         # Update extraction record
         if result.status == "success":

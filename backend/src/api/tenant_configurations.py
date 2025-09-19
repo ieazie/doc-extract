@@ -354,7 +354,7 @@ async def test_llm_extraction(
             })
         }
         
-        result = llm_service.extract_data(
+        result = await llm_service.extract_data(
             document_text=minimal_test_data["document_text"],
             schema=minimal_test_data["schema"],
             prompt_config=minimal_test_data["prompt_config"]

@@ -7,6 +7,7 @@ import json
 import asyncio
 import httpx
 from datetime import datetime
+from openai import AsyncOpenAI
 
 from ..schemas.tenant_configuration import LLMConfig
 
@@ -15,7 +16,7 @@ class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
     @abstractmethod
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract structured data from document text"""
         pass
 
@@ -68,7 +69,7 @@ class OllamaProvider(LLMProvider):
         self.max_tokens = config.max_tokens or 4000
         self.temperature = config.temperature or 0.1
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using Ollama"""
         
         # Build the language-aware prompt
@@ -85,8 +86,8 @@ class OllamaProvider(LLMProvider):
         )
 
         try:
-            with httpx.Client(timeout=300.0) as client:
-                response = client.post(
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.post(
                     f"{self.base_url}/api/generate",
                     json={
                         "model": self.model,
@@ -206,8 +207,12 @@ class OpenAIProvider(LLMProvider):
         self.model = config.model_name
         self.max_tokens = config.max_tokens or 4000
         self.temperature = config.temperature or 0.1
+        self.client = AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url or "https://api.openai.com/v1"
+        )
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using OpenAI"""
         
         if not self.api_key:
@@ -236,37 +241,29 @@ Respond with only valid JSON that matches the schema."""
         messages.append({"role": "user", "content": user_message})
 
         try:
-            with httpx.Client(timeout=300.0) as client:
-                response = client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "max_tokens": self.max_tokens,
-                        "temperature": self.temperature,
-                        "response_format": {"type": "json_object"}
-                    }
-                )
-                
-                if response.status_code != 200:
-                    raise Exception(f"OpenAI API error: {response.status_code} - {response.text}")
-                
-                result = response.json()
-                content = result["choices"][0]["message"]["content"]
-                
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                response_format={"type": "json_object"}
+            )
+            
+            content = response.choices[0].message.content
+            try:
                 extracted_data = json.loads(content)
-                return {
-                    "data": extracted_data,
-                    "confidence": 0.9,  # OpenAI generally provides high quality results
-                    "provider": "openai",
-                    "model": self.model,
-                    "extraction_time": datetime.utcnow().isoformat(),
-                    "usage": result.get("usage", {})
-                }
+            except json.JSONDecodeError:
+                # Fallback: attempt to extract a JSON object from the text
+                extracted_data = self._extract_json_from_text(content)
+            
+            return {
+                "data": extracted_data,
+                "confidence": 0.9,  # OpenAI generally provides high quality results
+                "provider": "openai",
+                "model": self.model,
+                "extraction_time": datetime.utcnow().isoformat(),
+                "usage": response.usage.model_dump() if response.usage else {}
+            }
                     
         except Exception as e:
             raise Exception(f"OpenAI extraction failed: {str(e)}")
@@ -323,7 +320,7 @@ class AnthropicProvider(LLMProvider):
         self.max_tokens = config.max_tokens or 4000
         self.temperature = config.temperature or 0.1
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using Anthropic Claude"""
         
         if not self.api_key:
@@ -342,8 +339,8 @@ class AnthropicProvider(LLMProvider):
         )
 
         try:
-            with httpx.Client(timeout=300.0) as client:
-                response = client.post(
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.post(
                     f"{self.base_url}/v1/messages",
                     headers={
                         "x-api-key": self.api_key,
@@ -365,7 +362,12 @@ class AnthropicProvider(LLMProvider):
                 result = response.json()
                 content = result["content"][0]["text"]
                 
-                extracted_data = json.loads(content)
+                try:
+                    extracted_data = json.loads(content)
+                except json.JSONDecodeError:
+                    # Fallback: attempt to extract a JSON object from the text
+                    extracted_data = self._extract_json_from_text(content)
+                
                 return {
                     "data": extracted_data,
                     "confidence": 0.9,  # Anthropic generally provides high quality results
@@ -463,9 +465,9 @@ class LLMProviderService:
         provider = LLMProviderFactory.create_provider(config)
         return cls(provider)
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using the configured provider"""
-        return self.provider.extract_data(document_text, schema, prompt_config, language)
+        return await self.provider.extract_data(document_text, schema, prompt_config, language)
 
     def health_check(self) -> bool:
         """Check provider health"""
