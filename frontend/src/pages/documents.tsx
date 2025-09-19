@@ -466,6 +466,39 @@ const DocumentsPage: React.FC = () => {
         </StatusBadge>
       )
     },
+    {
+      key: 'detected_language',
+      label: 'Language',
+      sortable: true,
+      width: '120px',
+      render: (value: string, row: any) => {
+        if (!value) return <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>-</span>;
+        
+        const confidence = row.language_confidence;
+        const confidenceColor = confidence > 0.7 ? '#059669' : confidence > 0.4 ? '#d97706' : '#dc2626';
+        
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+            <span style={{ 
+              fontSize: '0.75rem',
+              fontWeight: '500',
+              color: '#1f2937'
+            }}>
+              {value}
+            </span>
+            {confidence !== undefined && confidence !== null && (
+              <span style={{ 
+                fontSize: '0.625rem',
+                color: confidenceColor,
+                fontWeight: '500'
+              }}>
+                {(confidence * 100).toFixed(0)}%
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
     ...(includeTracking ? [
       {
         key: 'job_tracking',

@@ -16,6 +16,11 @@ from ..schemas.tenant_configuration import LLMConfig
 logger = logging.getLogger(__name__)
 
 
+class LanguageValidationError(Exception):
+    """Raised when language validation fails"""
+    pass
+
+
 class ExtractionRequest:
     """Request model for extraction"""
     def __init__(
@@ -60,7 +65,7 @@ class ExtractionService:
         self.config_service = TenantConfigService(db)
         self.rate_limit_service = RateLimitService(db)
     
-    def extract_data(self, request: ExtractionRequest) -> ExtractionResult:
+    async def extract_data(self, request: ExtractionRequest) -> ExtractionResult:
         """Extract structured data using tenant-specific LLM provider with rate limiting"""
         
         start_time = time.time()
@@ -68,6 +73,11 @@ class ExtractionService:
         try:
             # Check rate limits
             self._check_rate_limits(request.tenant_id)
+            
+            # Perform language validation
+            language_validation_result = self._validate_language(request)
+            if not language_validation_result["is_valid"]:
+                raise LanguageValidationError(language_validation_result['validation_message'])
             
             # Get tenant's LLM configuration
             llm_config = self.config_service.get_llm_config(request.tenant_id)
@@ -85,11 +95,13 @@ class ExtractionService:
             # Create LLM provider service
             llm_service = LLMProviderService.from_config(config_to_use)
             
-            # Perform extraction
-            result = llm_service.extract_data(
+            # Perform extraction with language support
+            template_language = request.prompt_config.get("language", "en")
+            result = await llm_service.extract_data(
                 document_text=request.document_text,
                 schema=request.schema,
-                prompt_config=request.prompt_config
+                prompt_config=request.prompt_config,
+                language=template_language
             )
             
             # Increment rate limit counters
@@ -106,8 +118,11 @@ class ExtractionService:
                 status="success"
             )
             
+        except LanguageValidationError:
+            # Re-raise language validation errors as they are already properly formatted
+            raise
         except Exception as e:
-            logger.error(f"Extraction failed for tenant {request.tenant_id}: {str(e)}")
+            logger.exception(f"Extraction failed for tenant {request.tenant_id}")
             processing_time_ms = int((time.time() - start_time) * 1000)
             
             return ExtractionResult(
@@ -187,7 +202,7 @@ class ExtractionService:
             }
             
         except Exception as e:
-            logger.error(f"Health check failed for tenant {tenant_id}: {str(e)}")
+            logger.exception(f"Health check failed for tenant {tenant_id}")
             return {
                 "status": "unhealthy",
                 "message": f"Health check failed: {str(e)}",
@@ -206,6 +221,53 @@ class ExtractionService:
             "rate_limits": summary.rate_limits.dict() if summary.rate_limits else None,
             "rate_usage": summary.rate_usage
         }
+    
+    def _validate_language(self, request: ExtractionRequest) -> Dict[str, Any]:
+        """Validate language compatibility between template and document"""
+        
+        # Get template language from prompt config (moved outside try block for better scope)
+        template_language = request.prompt_config.get("language", "en")
+        
+        try:
+            # Import language service
+            from ..services.language_service import DocumentLanguageDetector
+            
+            auto_detect = request.prompt_config.get("auto_detect_language", True)
+            require_match = request.prompt_config.get("require_language_match", False)
+            
+            # Create language detector
+            detector = DocumentLanguageDetector(self.db)
+            
+            # Detect document language if auto-detect is enabled
+            document_language = None
+            if auto_detect:
+                detection_result = detector.detect_language(request.document_text)
+                document_language = detection_result.language
+            
+            # Validate language match
+            validation_result = detector.validate_language_match(
+                template_language=template_language,
+                document_language=document_language,
+                require_match=require_match
+            )
+            
+            return {
+                "is_valid": validation_result.is_valid,
+                "template_language": template_language,
+                "document_language": document_language,
+                "language_match": validation_result.language_match,
+                "validation_message": validation_result.validation_message
+            }
+            
+        except (ImportError, AttributeError, ValueError) as e:
+            logger.exception("Language validation failed")
+            return {
+                "is_valid": False,
+                "template_language": template_language,
+                "document_language": None,
+                "language_match": False,
+                "validation_message": f"Language validation error: {str(e)}"
+            }
 
 
 # Factory function to create extraction service

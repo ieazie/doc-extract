@@ -1,7 +1,7 @@
 """
 SQLAlchemy models for the Document Extraction Platform
 """
-from sqlalchemy import create_engine, Column, String, Integer, BigInteger, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric, Enum
+from sqlalchemy import create_engine, Column, String, Integer, BigInteger, DateTime, Text, Boolean, DECIMAL, ForeignKey, UniqueConstraint, CheckConstraint, Numeric, Enum, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -201,6 +201,11 @@ class Document(Base):
     word_count = Column(Integer)
     extraction_completed_at = Column(DateTime(timezone=True))
     
+    # Language detection
+    detected_language = Column(String(10))
+    language_confidence = Column(Numeric(3, 2))
+    language_source = Column(String(20), default="auto")
+    
     # Status tracking
     status = Column(String(50), default="uploaded")
     is_test_document = Column(Boolean, default=False)
@@ -214,6 +219,12 @@ class Document(Base):
     tags = relationship("DocumentTag", back_populates="document", cascade="all, delete-orphan")
     extractions = relationship("Extraction", back_populates="document", cascade="all, delete-orphan")
     extraction_tracking = relationship("DocumentExtractionTracking", back_populates="document", cascade="all, delete-orphan")
+
+    # Table constraints to match migration
+    __table_args__ = (
+        CheckConstraint("language_confidence IS NULL OR (language_confidence >= 0 AND language_confidence <= 1)", name="documents_valid_lang_confidence"),
+        CheckConstraint("language_source IN ('auto', 'manual', 'template')", name="documents_valid_lang_source"),
+    )
 
     def __repr__(self):
         return f"<Document(id={self.id}, filename='{self.original_filename}')>"
@@ -298,6 +309,11 @@ class Template(Base):
     few_shot_examples = Column(JSONB, default=[])  # Examples array
     extraction_settings = Column(JSONB, default={})  # Processing settings
     
+    # Language configuration
+    language = Column(String(10), default="en")
+    auto_detect_language = Column(Boolean, default=True)
+    require_language_match = Column(Boolean, default=False)
+    
     # Status and metadata
     is_active = Column(Boolean, default=True)
     test_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"))
@@ -317,6 +333,7 @@ class Template(Base):
     __table_args__ = (
         UniqueConstraint('tenant_id', 'name', 'version', name='templates_tenant_id_name_version_key'),
         CheckConstraint('version > 0', name='templates_version_positive'),
+        CheckConstraint("language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_template_language'),
     )
 
     def __repr__(self):
@@ -434,7 +451,7 @@ class TenantConfiguration(Base):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint("config_type IN ('llm', 'rate_limits', 'storage', 'cache', 'message_queue', 'ai_providers')", name="valid_config_type"),
+        CheckConstraint("config_type IN ('llm', 'rate_limits', 'storage', 'cache', 'message_queue', 'ai_providers', 'language')", name="valid_config_type"),
         UniqueConstraint("tenant_id", "config_type", "environment", name="unique_active_config", deferrable=True),
     )
 
@@ -638,12 +655,66 @@ class TenantEnvironmentUsage(Base):
         return f"<TenantEnvironmentUsage(id={self.id}, tenant_id={self.tenant_id}, environment='{self.environment}', resource_type='{self.resource_type}')>"
 
 
-# Database dependency for FastAPI
-def get_db():
-    """Get database session for FastAPI dependency injection"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# ============================================================================
+# LANGUAGE SUPPORT MODELS
+# ============================================================================
+
+class TenantLanguageConfig(Base):
+    """Tenant language configuration model"""
+    __tablename__ = "tenant_language_configs"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    supported_languages = Column(JSONB, nullable=False, default=list, server_default='["en"]')
+    default_language = Column(String(10), nullable=False, default="en")
+    auto_detect_language = Column(Boolean, default=True)
+    require_language_match = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    
+    # Table constraints
+    __table_args__ = (
+        UniqueConstraint('tenant_id', name='unique_tenant_language_config'),
+        CheckConstraint("default_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_default_language'),
+        CheckConstraint("jsonb_array_length(supported_languages) > 0", name='supported_languages_not_empty'),
+        CheckConstraint("jsonb_array_length(supported_languages) = (SELECT count(*) FROM jsonb_array_elements(supported_languages) AS elem WHERE elem::text ~ '^\"[a-z]{2}(-[A-Z]{2})?\"$')", name='valid_supported_languages_format'),
+        CheckConstraint("supported_languages @> jsonb_build_array(default_language)", name="default_lang_in_supported"),
+    )
+    
+    def __repr__(self):
+        return f"<TenantLanguageConfig(id={self.id}, tenant_id={self.tenant_id}, default_language='{self.default_language}')>"
+
+
+class ExtractionLanguageValidation(Base):
+    """Extraction language validation tracking"""
+    __tablename__ = "extraction_language_validation"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    extraction_id = Column(UUID(as_uuid=True), ForeignKey("extractions.id", ondelete="CASCADE"), nullable=False)
+    template_language = Column(String(10), nullable=False)
+    document_language = Column(String(10))
+    language_match = Column(Boolean)
+    validation_status = Column(String(20), default="pending")
+    validation_message = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    extraction = relationship("Extraction")
+    
+    # Table constraints and indexes
+    __table_args__ = (
+        CheckConstraint("template_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_template_language_code'),
+        CheckConstraint("document_language IS NULL OR document_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_document_language_code'),
+        CheckConstraint("validation_status IN ('pending', 'passed', 'failed', 'ignored')", name='valid_validation_status'),
+        Index('idx_extraction_language_validation_extraction_id', 'extraction_id'),
+        Index('idx_extraction_language_validation_status', 'validation_status'),
+        Index('idx_extraction_language_validation_language_match', 'language_match'),
+    )
+    
+    def __repr__(self):
+        return f"<ExtractionLanguageValidation(id={self.id}, extraction_id={self.extraction_id}, template_language='{self.template_language}', document_language='{self.document_language}')>"
+
 

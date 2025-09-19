@@ -7,6 +7,7 @@ import json
 import asyncio
 import httpx
 from datetime import datetime
+from openai import AsyncOpenAI
 
 from ..schemas.tenant_configuration import LLMConfig
 
@@ -15,7 +16,7 @@ class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
     @abstractmethod
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract structured data from document text"""
         pass
 
@@ -29,6 +30,34 @@ class LLMProvider(ABC):
         """Get list of available models for this provider"""
         pass
 
+    # Shared helper for all providers
+    def _build_language_aware_prompt(self, base_prompt: str, language: str) -> str:
+        """Build language-aware system prompt"""
+        language_instructions = {
+            "en": "Respond in English.",
+            "es": "Responde en español.",
+            "fr": "Répondez en français.",
+            "de": "Antworten Sie auf Deutsch.",
+            "it": "Rispondi in italiano.",
+            "pt": "Responda em português.",
+            "zh": "请用中文回答。",
+            "ja": "日本語で回答してください。",
+            "ko": "한국어로 답변해주세요。",
+            "ar": "أجب باللغة العربية.",
+            "ru": "Отвечайте на русском языке.",
+            "hi": "हिंदी में उत्तर दें।",
+            "en-US": "Respond in English (US).",
+            "es-ES": "Responde en español (España).",
+            "fr-FR": "Répondez en français (France).",
+            "de-DE": "Antworten Sie auf Deutsch (Deutschland).",
+            "it-IT": "Rispondi in italiano (Italia).",
+            "pt-PT": "Responda em português (Portugal).",
+            "zh-CN": "请用中文(简体)回答。",
+            "ja-JP": "日本語(日本)で回答してください。",
+        }
+        instruction = language_instructions.get(language, "Respond in English.")
+        return f"{base_prompt}\n\n{instruction}"
+
 
 class OllamaProvider(LLMProvider):
     """Ollama LLM Provider"""
@@ -40,11 +69,12 @@ class OllamaProvider(LLMProvider):
         self.max_tokens = config.max_tokens or 4000
         self.temperature = config.temperature or 0.1
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using Ollama"""
         
-        # Build the prompt
+        # Build the language-aware prompt
         system_prompt = prompt_config.get("system_prompt", "You are a helpful assistant that extracts structured data from documents.")
+        system_prompt = self._build_language_aware_prompt(system_prompt, language)
         few_shot_examples = prompt_config.get("few_shot_examples", [])
         
         # Create the extraction prompt
@@ -56,8 +86,8 @@ class OllamaProvider(LLMProvider):
         )
 
         try:
-            with httpx.Client(timeout=300.0) as client:
-                response = client.post(
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.post(
                     f"{self.base_url}/api/generate",
                     json={
                         "model": self.model,
@@ -177,15 +207,20 @@ class OpenAIProvider(LLMProvider):
         self.model = config.model_name
         self.max_tokens = config.max_tokens or 4000
         self.temperature = config.temperature or 0.1
+        self.client = AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url or "https://api.openai.com/v1"
+        )
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using OpenAI"""
         
         if not self.api_key:
             raise Exception("OpenAI API key not provided")
 
-        # Build the prompt
+        # Build the language-aware prompt
         system_prompt = prompt_config.get("system_prompt", "You are a helpful assistant that extracts structured data from documents.")
+        system_prompt = self._build_language_aware_prompt(system_prompt, language)
         few_shot_examples = prompt_config.get("few_shot_examples", [])
         
         messages = [{"role": "system", "content": system_prompt}]
@@ -206,37 +241,29 @@ Respond with only valid JSON that matches the schema."""
         messages.append({"role": "user", "content": user_message})
 
         try:
-            with httpx.Client(timeout=300.0) as client:
-                response = client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "max_tokens": self.max_tokens,
-                        "temperature": self.temperature,
-                        "response_format": {"type": "json_object"}
-                    }
-                )
-                
-                if response.status_code != 200:
-                    raise Exception(f"OpenAI API error: {response.status_code} - {response.text}")
-                
-                result = response.json()
-                content = result["choices"][0]["message"]["content"]
-                
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                response_format={"type": "json_object"}
+            )
+            
+            content = response.choices[0].message.content
+            try:
                 extracted_data = json.loads(content)
-                return {
-                    "data": extracted_data,
-                    "confidence": 0.9,  # OpenAI generally provides high quality results
-                    "provider": "openai",
-                    "model": self.model,
-                    "extraction_time": datetime.utcnow().isoformat(),
-                    "usage": result.get("usage", {})
-                }
+            except json.JSONDecodeError:
+                # Fallback: attempt to extract a JSON object from the text
+                extracted_data = self._extract_json_from_text(content)
+            
+            return {
+                "data": extracted_data,
+                "confidence": 0.9,  # OpenAI generally provides high quality results
+                "provider": "openai",
+                "model": self.model,
+                "extraction_time": datetime.utcnow().isoformat(),
+                "usage": response.usage.model_dump() if response.usage else {}
+            }
                     
         except Exception as e:
             raise Exception(f"OpenAI extraction failed: {str(e)}")
@@ -293,14 +320,15 @@ class AnthropicProvider(LLMProvider):
         self.max_tokens = config.max_tokens or 4000
         self.temperature = config.temperature or 0.1
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using Anthropic Claude"""
         
         if not self.api_key:
             raise Exception("Anthropic API key not provided")
 
-        # Build the prompt
+        # Build the language-aware prompt
         system_prompt = prompt_config.get("system_prompt", "You are a helpful assistant that extracts structured data from documents.")
+        system_prompt = self._build_language_aware_prompt(system_prompt, language)
         few_shot_examples = prompt_config.get("few_shot_examples", [])
         
         prompt = self._build_extraction_prompt(
@@ -311,8 +339,8 @@ class AnthropicProvider(LLMProvider):
         )
 
         try:
-            with httpx.Client(timeout=300.0) as client:
-                response = client.post(
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.post(
                     f"{self.base_url}/v1/messages",
                     headers={
                         "x-api-key": self.api_key,
@@ -334,7 +362,12 @@ class AnthropicProvider(LLMProvider):
                 result = response.json()
                 content = result["content"][0]["text"]
                 
-                extracted_data = json.loads(content)
+                try:
+                    extracted_data = json.loads(content)
+                except json.JSONDecodeError:
+                    # Fallback: attempt to extract a JSON object from the text
+                    extracted_data = self._extract_json_from_text(content)
+                
                 return {
                     "data": extracted_data,
                     "confidence": 0.9,  # Anthropic generally provides high quality results
@@ -402,6 +435,23 @@ class AnthropicProvider(LLMProvider):
         
         return "\n".join(prompt_parts)
 
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract JSON from text response"""
+        import re
+        
+        # Look for JSON objects
+        json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+        matches = re.findall(json_pattern, text, re.DOTALL)
+        
+        for match in matches:
+            try:
+                return json.loads(match)
+            except json.JSONDecodeError:
+                continue
+        
+        # If no JSON found, return empty object
+        return {}
+
 
 class LLMProviderFactory:
     """Factory for creating LLM providers"""
@@ -432,9 +482,9 @@ class LLMProviderService:
         provider = LLMProviderFactory.create_provider(config)
         return cls(provider)
 
-    def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any]) -> Dict[str, Any]:
+    async def extract_data(self, document_text: str, schema: Dict[str, Any], prompt_config: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
         """Extract data using the configured provider"""
-        return self.provider.extract_data(document_text, schema, prompt_config)
+        return await self.provider.extract_data(document_text, schema, prompt_config, language)
 
     def health_check(self) -> bool:
         """Check provider health"""

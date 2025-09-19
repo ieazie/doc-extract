@@ -129,6 +129,11 @@ class BackgroundTaskService:
             document.extraction_completed_at = extraction_result.get("extraction_completed_at")
             document.extraction_error = extraction_result.get("extraction_error")
             
+            # Update language detection results
+            document.detected_language = extraction_result.get("detected_language")
+            document.language_confidence = extraction_result.get("language_confidence")
+            document.language_source = extraction_result.get("language_source")
+            
             db.commit()
             logger.debug(f"Updated document {document_id} with extraction results")
             

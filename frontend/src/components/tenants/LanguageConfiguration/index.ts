@@ -1,0 +1,1 @@
+export { LanguageConfiguration } from './LanguageConfiguration';

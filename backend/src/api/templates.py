@@ -56,6 +56,9 @@ class TemplateCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Template name")
     description: Optional[str] = Field(None, description="Template description")
     document_type_id: Optional[str] = Field(None, description="Associated document type ID")
+    language: str = Field(default="en", description="Template language code")
+    auto_detect_language: bool = Field(default=True, description="Auto-detect document language")
+    require_language_match: bool = Field(default=False, description="Require language match for extraction")
     schema: dict = Field(..., description="Field schema definition")
     prompt_config: PromptConfig
     extraction_settings: Optional[ExtractionSettings] = Field(default_factory=ExtractionSettings)
@@ -75,6 +78,9 @@ class TemplateUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     document_type_id: Optional[str] = None
+    language: Optional[str] = Field(None, description="Template language code")
+    auto_detect_language: Optional[bool] = Field(None, description="Auto-detect document language")
+    require_language_match: Optional[bool] = Field(None, description="Require language match for extraction")
     schema: Optional[dict] = None
     prompt_config: Optional[PromptConfig] = None
     extraction_settings: Optional[ExtractionSettings] = None
@@ -90,6 +96,9 @@ class TemplateResponse(BaseModel):
     description: Optional[str] = None
     document_type_id: Optional[str] = None
     document_type_name: Optional[str] = None
+    language: str
+    auto_detect_language: bool
+    require_language_match: bool
     schema: dict
     prompt_config: dict
     extraction_settings: dict
@@ -235,12 +244,22 @@ async def create_template(
                 if not doc_type:
                     raise HTTPException(status_code=400, detail="Invalid document type ID")
         
+        # Validate language support
+        if template_data.language:
+            from ..services.language_service import LanguageService
+            lang_service = LanguageService(db)
+            if not lang_service.validate_language_support(str(tenant_id), template_data.language):
+                raise HTTPException(status_code=400, detail=f"Unsupported language for tenant: {template_data.language}")
+        
         # Create template
         template = Template(
             tenant_id=tenant_id,
             document_type_id=uuid.UUID(document_type_id) if document_type_id else None,
             name=template_data.name,
             description=template_data.description,
+            language=template_data.language,
+            auto_detect_language=template_data.auto_detect_language,
+            require_language_match=template_data.require_language_match,
             schema=template_data.schema,
             prompt_config=template_data.prompt_config.dict(),
             extraction_settings=template_data.extraction_settings.dict() if template_data.extraction_settings else {},
@@ -266,6 +285,9 @@ async def create_template(
             description=template.description,
             document_type_id=str(template.document_type_id) if template.document_type_id else None,
             document_type_name=doc_type_name,
+            language=template.language or "en",
+            auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
+            require_language_match=template.require_language_match if template.require_language_match is not None else False,
             schema=template.schema,
             prompt_config=template.prompt_config,
             extraction_settings=template.extraction_settings,
@@ -364,6 +386,9 @@ async def list_templates(
                 description=template.description,
                 document_type_id=str(template.document_type_id) if template.document_type_id else None,
                 document_type_name=doc_type_name,
+                language=template.language or "en",
+                auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
+                require_language_match=template.require_language_match if template.require_language_match is not None else False,
                 schema=template.schema,
                 prompt_config=template.prompt_config,
                 extraction_settings=template.extraction_settings,
@@ -371,6 +396,7 @@ async def list_templates(
                 is_active=template.is_active,
                 status=template.status or "draft",
                 version=template.version,
+                test_document_id=str(template.test_document_id) if template.test_document_id else None,
                 created_at=template.created_at.isoformat(),
                 updated_at=template.updated_at.isoformat()
             )
@@ -422,6 +448,9 @@ async def get_template(
             description=template.description,
             document_type_id=str(template.document_type_id) if template.document_type_id else None,
             document_type_name=doc_type_name,
+            language=template.language or "en",
+            auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
+            require_language_match=template.require_language_match if template.require_language_match is not None else False,
             schema=template.schema,
             prompt_config=template.prompt_config,
             extraction_settings=template.extraction_settings,
@@ -484,6 +513,16 @@ async def update_template(
             template.description = template_data.description
         if template_data.document_type_id is not None:
             template.document_type_id = uuid.UUID(template_data.document_type_id) if template_data.document_type_id else None
+        if template_data.language is not None:
+            from ..services.language_service import LanguageService
+            lang_service = LanguageService(db)
+            if not lang_service.validate_language_support(str(tenant_id), template_data.language):
+                raise HTTPException(status_code=400, detail=f"Unsupported language for tenant: {template_data.language}")
+            template.language = template_data.language
+        if template_data.auto_detect_language is not None:
+            template.auto_detect_language = template_data.auto_detect_language
+        if template_data.require_language_match is not None:
+            template.require_language_match = template_data.require_language_match
         if template_data.schema is not None:
             template.schema = template_data.schema
         if template_data.prompt_config is not None:
@@ -513,6 +552,9 @@ async def update_template(
             description=template.description,
             document_type_id=str(template.document_type_id) if template.document_type_id else None,
             document_type_name=doc_type_name,
+            language=template.language or "en",
+            auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
+            require_language_match=template.require_language_match if template.require_language_match is not None else False,
             schema=template.schema,
             prompt_config=template.prompt_config,
             extraction_settings=template.extraction_settings,
@@ -740,13 +782,27 @@ async def test_template(
             # Create extraction service with tenant context
             extraction_service = ExtractionService(db)
             
-            # Create extraction request
+            # Create extraction request with template language configuration
+            # Get document type name for the system prompt
+            doc_type_name = "document"
+            if template.document_type_id:
+                from ..models.database import DocumentType
+                doc_type = db.query(DocumentType).filter(DocumentType.id == template.document_type_id).first()
+                if doc_type:
+                    doc_type_name = doc_type.name
+            
             extraction_request = ExtractionRequest(
                 document_text=test_document,
                 schema=template.schema,
                 prompt_config={
-                    "system_prompt": f"Extract data from this {template.document_type} document according to the schema.",
-                    "few_shot_examples": []
+                    "system_prompt": template.prompt_config.get("system_prompt", f"Extract data from this {doc_type_name} document according to the schema."),
+                    "instructions": template.prompt_config.get("instructions", ""),
+                    "output_format": template.prompt_config.get("output_format", "json"),
+                    "few_shot_examples": template.prompt_config.get("few_shot_examples", []),
+                    # Include template language configuration
+                    "language": template.language or "en",
+                    "auto_detect_language": template.auto_detect_language if template.auto_detect_language is not None else True,
+                    "require_language_match": template.require_language_match if template.require_language_match is not None else False
                 },
                 tenant_id=tenant_id
             )
@@ -825,6 +881,7 @@ class GenerateFieldsResponse(BaseModel):
 @router.post("/generate-fields-from-prompt", response_model=GenerateFieldsResponse)
 async def generate_fields_from_prompt(
     request: GenerateFieldsRequest,
+    template_language: Optional[str] = Query("en", description="Template language for field generation"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("templates:write"))
 ):
@@ -842,6 +899,7 @@ async def generate_fields_from_prompt(
         generated_fields = await ai_service.generate_fields_from_prompt(
             prompt=request.prompt.strip(),
             document_type=request.document_type,
+            template_language=template_language,
             tenant_id=current_user.tenant_id
         )
         
@@ -873,6 +931,9 @@ async def generate_fields_from_prompt(
 @router.post("/generate-fields-from-document", response_model=GenerateFieldsResponse)
 async def generate_fields_from_document(
     request: GenerateFieldsRequest,
+    template_language: Optional[str] = Query("en", description="Template language for field generation"),
+    auto_detect_language: Optional[bool] = Query(True, description="Whether to auto-detect document language"),
+    require_language_match: Optional[bool] = Query(False, description="Whether to require language match"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("templates:write"))
 ):
@@ -891,12 +952,39 @@ async def generate_fields_from_document(
                 detail="Document content must be at least 50 characters long"
             )
         
+        # Perform language validation if required
+        if require_language_match:
+            from ..services.language_service import DocumentLanguageDetector
+            
+            # Create language detector
+            detector = DocumentLanguageDetector(db)
+            
+            # Detect document language if auto-detect is enabled
+            document_language = None
+            if auto_detect_language:
+                detection_result = detector.detect_language(request.document_content.strip())
+                document_language = detection_result.language
+            
+            # Validate language match
+            validation_result = detector.validate_language_match(
+                template_language=template_language,
+                document_language=document_language,
+                require_match=require_language_match
+            )
+            
+            if not validation_result.is_valid:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Language validation failed: {validation_result.validation_message}"
+                )
+        
         # Generate fields using AI service with tenant-specific config
         ai_service = AIService(db)
         generated_fields = await ai_service.generate_fields_from_document(
             prompt=request.prompt.strip(),
             document_content=request.document_content.strip(),
             document_type=request.document_type,
+            template_language=template_language,
             tenant_id=current_user.tenant_id
         )
         

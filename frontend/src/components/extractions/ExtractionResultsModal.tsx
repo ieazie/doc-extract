@@ -17,7 +17,9 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  Globe,
+  AlertCircle
 } from 'lucide-react';
 
 import { apiClient } from '@/services/api';
@@ -243,6 +245,39 @@ const StatusBadge = styled.div<{ status: string }>`
   }}
 `;
 
+const LanguageValidationInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 1rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+`;
+
+const LanguageInfo = styled.div<{ $match: boolean; $warning: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: ${props => 
+    props.$warning ? '#d97706' : 
+    props.$match ? '#059669' : '#6b7280'
+  };
+`;
+
+const LanguageCode = styled.span`
+  font-weight: 600;
+  text-transform: uppercase;
+`;
+
+const LanguageConfidence = styled.span`
+  font-size: 0.625rem;
+  color: #6b7280;
+`;
+
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'pending':
@@ -465,6 +500,46 @@ interface ExtractionResultsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+// Language Validation Info Component
+const LanguageValidationInfoComponent: React.FC<{ template: any; document: any }> = ({ template, document }) => {
+  if (!template || !document) return null;
+
+  const templateLanguage = template.language || 'en';
+  const documentLanguage = document.detected_language;
+  const documentConfidence = document.language_confidence;
+  const requireMatch = template.require_language_match;
+  const autoDetect = template.auto_detect_language;
+
+  // Check for language match
+  const exactMatch = templateLanguage === documentLanguage;
+  const baseMatch = templateLanguage.split('-')[0] === documentLanguage?.split('-')[0];
+  const languageMatch = exactMatch || baseMatch;
+
+  // Determine if there's a warning
+  const hasWarning = requireMatch && documentLanguage && !languageMatch;
+
+  return (
+    <LanguageValidationInfo>
+      <Globe size={12} />
+      <LanguageInfo $match={languageMatch} $warning={hasWarning}>
+        <LanguageCode>{templateLanguage}</LanguageCode>
+        {documentLanguage && (
+          <>
+            <span>→</span>
+            <LanguageCode>{documentLanguage}</LanguageCode>
+            {documentConfidence && (
+              <LanguageConfidence>
+                ({(documentConfidence * 100).toFixed(0)}%)
+              </LanguageConfidence>
+            )}
+          </>
+        )}
+        {hasWarning && <AlertCircle size={12} />}
+      </LanguageInfo>
+    </LanguageValidationInfo>
+  );
+};
 
 const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   extractionId,
@@ -784,6 +859,9 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
               <StatusBadge status={extraction.status}>
                 {extraction.status}
               </StatusBadge>
+            )}
+            {template && documentContent && (
+              <LanguageValidationInfoComponent template={template} document={documentContent} />
             )}
           </HeaderLeft>
           
