@@ -79,7 +79,7 @@ export const SelectedLanguage = styled.span`
   font-weight: ${props => props.theme.typography.weights.medium};
 `;
 
-export const RemoveButton = styled.button`
+export const RemoveButton = styled.button.attrs({ type: 'button' })`
   background: none;
   border: none;
   color: ${props => props.theme.colors.text.muted};

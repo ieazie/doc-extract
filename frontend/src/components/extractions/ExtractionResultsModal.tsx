@@ -860,8 +860,8 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                 {extraction.status}
               </StatusBadge>
             )}
-            {template && document && (
-              <LanguageValidationInfoComponent template={template} document={document} />
+            {template && documentContent && (
+              <LanguageValidationInfoComponent template={template} document={documentContent} />
             )}
           </HeaderLeft>
           

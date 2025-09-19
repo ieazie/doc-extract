@@ -444,7 +444,7 @@ class TenantConfiguration(Base):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint("config_type IN ('llm', 'rate_limits', 'storage', 'cache', 'message_queue', 'ai_providers')", name="valid_config_type"),
+        CheckConstraint("config_type IN ('llm', 'rate_limits', 'storage', 'cache', 'message_queue', 'ai_providers', 'language')", name="valid_config_type"),
         UniqueConstraint("tenant_id", "config_type", "environment", name="unique_active_config", deferrable=True),
     )
 

@@ -29,6 +29,34 @@ class LLMProvider(ABC):
         """Get list of available models for this provider"""
         pass
 
+    # Shared helper for all providers
+    def _build_language_aware_prompt(self, base_prompt: str, language: str) -> str:
+        """Build language-aware system prompt"""
+        language_instructions = {
+            "en": "Respond in English.",
+            "es": "Responde en español.",
+            "fr": "Répondez en français.",
+            "de": "Antworten Sie auf Deutsch.",
+            "it": "Rispondi in italiano.",
+            "pt": "Responda em português.",
+            "zh": "请用中文回答。",
+            "ja": "日本語で回答してください。",
+            "ko": "한국어로 답변해주세요。",
+            "ar": "أجب باللغة العربية.",
+            "ru": "Отвечайте на русском языке.",
+            "hi": "हिंदी में उत्तर दें।",
+            "en-US": "Respond in English (US).",
+            "es-ES": "Responde en español (España).",
+            "fr-FR": "Répondez en français (France).",
+            "de-DE": "Antworten Sie auf Deutsch (Deutschland).",
+            "it-IT": "Rispondi in italiano (Italia).",
+            "pt-PT": "Responda em português (Portugal).",
+            "zh-CN": "请用中文(简体)回答。",
+            "ja-JP": "日本語(日本)で回答してください。",
+        }
+        instruction = language_instructions.get(language, "Respond in English.")
+        return f"{base_prompt}\n\n{instruction}"
+
 
 class OllamaProvider(LLMProvider):
     """Ollama LLM Provider"""
@@ -166,34 +194,6 @@ class OllamaProvider(LLMProvider):
         
         # If no JSON found, return empty object
         return {}
-    
-    def _build_language_aware_prompt(self, base_prompt: str, language: str) -> str:
-        """Build language-aware system prompt"""
-        language_instructions = {
-            "en": "Respond in English.",
-            "es": "Responde en español.",
-            "fr": "Répondez en français.",
-            "de": "Antworten Sie auf Deutsch.",
-            "it": "Rispondi in italiano.",
-            "pt": "Responda em português.",
-            "zh": "请用中文回答。",
-            "ja": "日本語で回答してください。",
-            "ko": "한국어로 답변해주세요。",
-            "ar": "أجب باللغة العربية.",
-            "ru": "Отвечайте на русском языке.",
-            "hi": "हिंदी में उत्तर दें।",
-            "en-US": "Respond in English (US).",
-            "es-ES": "Responde en español (España).",
-            "fr-FR": "Répondez en français (France).",
-            "de-DE": "Antworten Sie auf Deutsch (Deutschland).",
-            "it-IT": "Rispondi in italiano (Italia).",
-            "pt-PT": "Responda em português (Portugal).",
-            "zh-CN": "请用中文（简体）回答。",
-            "ja-JP": "日本語（日本）で回答してください。",
-        }
-        
-        language_instruction = language_instructions.get(language, "Respond in English.")
-        return f"{base_prompt}\n\n{language_instruction}"
 
 
 class OpenAIProvider(LLMProvider):
@@ -310,34 +310,6 @@ Respond with only valid JSON that matches the schema."""
         except Exception as e:
             print(f"Error fetching OpenAI models: {e}")
             return []
-    
-    def _build_language_aware_prompt(self, base_prompt: str, language: str) -> str:
-        """Build language-aware system prompt"""
-        language_instructions = {
-            "en": "Respond in English.",
-            "es": "Responde en español.",
-            "fr": "Répondez en français.",
-            "de": "Antworten Sie auf Deutsch.",
-            "it": "Rispondi in italiano.",
-            "pt": "Responda em português.",
-            "zh": "请用中文回答。",
-            "ja": "日本語で回答してください。",
-            "ko": "한국어로 답변해주세요。",
-            "ar": "أجب باللغة العربية.",
-            "ru": "Отвечайте на русском языке.",
-            "hi": "हिंदी में उत्तर दें।",
-            "en-US": "Respond in English (US).",
-            "es-ES": "Responde en español (España).",
-            "fr-FR": "Répondez en français (France).",
-            "de-DE": "Antworten Sie auf Deutsch (Deutschland).",
-            "it-IT": "Rispondi in italiano (Italia).",
-            "pt-PT": "Responda em português (Portugal).",
-            "zh-CN": "请用中文（简体）回答。",
-            "ja-JP": "日本語（日本）で回答してください。",
-        }
-        
-        language_instruction = language_instructions.get(language, "Respond in English.")
-        return f"{base_prompt}\n\n{language_instruction}"
 
 
 class AnthropicProvider(LLMProvider):
@@ -460,34 +432,6 @@ class AnthropicProvider(LLMProvider):
         prompt_parts.append("\nRespond with only valid JSON that matches the schema:")
         
         return "\n".join(prompt_parts)
-    
-    def _build_language_aware_prompt(self, base_prompt: str, language: str) -> str:
-        """Build language-aware system prompt"""
-        language_instructions = {
-            "en": "Respond in English.",
-            "es": "Responde en español.",
-            "fr": "Répondez en français.",
-            "de": "Antworten Sie auf Deutsch.",
-            "it": "Rispondi in italiano.",
-            "pt": "Responda em português.",
-            "zh": "请用中文回答。",
-            "ja": "日本語で回答してください。",
-            "ko": "한국어로 답변해주세요。",
-            "ar": "أجب باللغة العربية.",
-            "ru": "Отвечайте на русском языке.",
-            "hi": "हिंदी में उत्तर दें।",
-            "en-US": "Respond in English (US).",
-            "es-ES": "Responde en español (España).",
-            "fr-FR": "Répondez en français (France).",
-            "de-DE": "Antworten Sie auf Deutsch (Deutschland).",
-            "it-IT": "Rispondi in italiano (Italia).",
-            "pt-PT": "Responda em português (Portugal).",
-            "zh-CN": "请用中文（简体）回答。",
-            "ja-JP": "日本語（日本）で回答してください。",
-        }
-        
-        language_instruction = language_instructions.get(language, "Respond in English.")
-        return f"{base_prompt}\n\n{language_instruction}"
 
 
 class LLMProviderFactory:

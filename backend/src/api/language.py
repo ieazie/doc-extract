@@ -16,12 +16,21 @@ from ..services.language_service import (
     LanguageDetectionResult,
     SupportedLanguage
 )
-from ..services.auth_service import get_current_user
+from ..services.auth_service import get_current_user, auth_service
 from ..models.database import User
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/language", tags=["language"])
+
+
+def _ensure_tenant_access(current_user: User, tenant_id: UUID) -> None:
+    """Ensure user has access to the specified tenant"""
+    if not auth_service.can_access_tenant(current_user, tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: access to tenant denied"
+        )
 
 
 @router.get("/supported", response_model=List[SupportedLanguage])
@@ -47,8 +56,8 @@ async def get_tenant_language_config(
 ):
     """Get tenant's language configuration"""
     try:
-        # Verify user has access to tenant (implement tenant access check)
-        # For now, we'll allow access - in production, add proper tenant access validation
+        # Enforce tenant access
+        _ensure_tenant_access(current_user, tenant_id)
         
         language_service = LanguageService(db)
         config = language_service.get_tenant_language_config(str(tenant_id))
@@ -80,8 +89,8 @@ async def update_tenant_language_config(
 ):
     """Update tenant's language configuration"""
     try:
-        # Verify user has access to tenant (implement tenant access check)
-        # For now, we'll allow access - in production, add proper tenant access validation
+        # Enforce tenant access
+        _ensure_tenant_access(current_user, tenant_id)
         
         language_service = LanguageService(db)
         config = language_service.update_tenant_language_config(str(tenant_id), config_update)
@@ -138,7 +147,8 @@ async def get_tenant_supported_languages(
 ):
     """Get list of supported languages for a specific tenant"""
     try:
-        # Verify user has access to tenant (implement tenant access check)
+        # Enforce tenant access
+        _ensure_tenant_access(current_user, tenant_id)
         
         language_service = LanguageService(db)
         supported_languages = language_service.get_supported_languages(str(tenant_id))
@@ -161,7 +171,8 @@ async def get_tenant_default_language(
 ):
     """Get tenant's default language"""
     try:
-        # Verify user has access to tenant (implement tenant access check)
+        # Enforce tenant access
+        _ensure_tenant_access(current_user, tenant_id)
         
         language_service = LanguageService(db)
         default_language = language_service.get_default_language(str(tenant_id))
@@ -185,7 +196,8 @@ async def validate_language_support(
 ):
     """Validate if a language is supported by a tenant"""
     try:
-        # Verify user has access to tenant (implement tenant access check)
+        # Enforce tenant access
+        _ensure_tenant_access(current_user, tenant_id)
         
         language_service = LanguageService(db)
         is_supported = language_service.validate_language_support(str(tenant_id), language)

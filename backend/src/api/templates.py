@@ -788,8 +788,9 @@ async def test_template(
                 tenant_id=tenant_id
             )
             
-            # Perform extraction
-            result = extraction_service.extract_data(extraction_request)
+            # Perform extraction in background thread to avoid blocking event loop
+            import asyncio
+            result = await asyncio.to_thread(extraction_service.extract_data, extraction_request)
             
             return {
                 "status": result.status,

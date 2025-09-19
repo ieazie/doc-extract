@@ -130,18 +130,19 @@ export const LanguageConfiguration: React.FC<LanguageConfigurationProps> = ({ te
       ? config.supported_languages.filter(lang => lang !== languageCode)
       : [...config.supported_languages, languageCode];
     
-    // Ensure default language is always in supported languages
-    if (config.default_language === languageCode && isSelected && newLanguages.length > 0) {
-      return; // Can't remove the default language if it's the only one
+    // Prevent removing the last remaining language
+    if (isSelected && config.supported_languages.length === 1) {
+      return; // Can't remove the only supported language
     }
     
     setConfig({
       ...config,
       supported_languages: newLanguages,
       // Update default language if it was removed
-      default_language: config.default_language === languageCode && isSelected 
-        ? newLanguages[0] || 'en'
-        : config.default_language
+      default_language:
+        config.default_language === languageCode && isSelected
+          ? newLanguages[0] // guaranteed by the guard above
+          : config.default_language
     });
   };
 
