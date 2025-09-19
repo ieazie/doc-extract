@@ -1619,7 +1619,7 @@ class ApiClient {
   }
 
   async detectDocumentLanguage(text: string): Promise<LanguageDetectionResult> {
-    const response = await this.client.post(`/api/language/detect?text=${encodeURIComponent(text)}`);
+    const response = await this.client.post('/api/language/detect', { text });
     return response.data;
   }
 
@@ -1634,7 +1634,7 @@ class ApiClient {
   }
 
   async validateLanguageSupport(tenantId: string, language: string): Promise<LanguageValidationResponse> {
-    const response = await this.client.post(`/api/language/validate?tenant_id=${tenantId}&language=${encodeURIComponent(language)}`);
+    const response = await this.client.post('/api/language/validate', { tenant_id: tenantId, language });
     return response.data;
   }
 

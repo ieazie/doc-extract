@@ -665,7 +665,7 @@ class TenantLanguageConfig(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    supported_languages = Column(JSONB, nullable=False, default=["en"], server_default='["en"]')
+    supported_languages = Column(JSONB, nullable=False, default=list, server_default='["en"]')
     default_language = Column(String(10), nullable=False, default="en")
     auto_detect_language = Column(Boolean, default=True)
     require_language_match = Column(Boolean, default=False)
@@ -681,6 +681,7 @@ class TenantLanguageConfig(Base):
         CheckConstraint("default_language ~ '^[a-z]{2}(-[A-Z]{2})?$'", name='valid_default_language'),
         CheckConstraint("jsonb_array_length(supported_languages) > 0", name='supported_languages_not_empty'),
         CheckConstraint("jsonb_array_length(supported_languages) = (SELECT count(*) FROM jsonb_array_elements(supported_languages) AS elem WHERE elem::text ~ '^\"[a-z]{2}(-[A-Z]{2})?\"$')", name='valid_supported_languages_format'),
+        CheckConstraint("supported_languages @> jsonb_build_array(default_language)", name="default_lang_in_supported"),
     )
     
     def __repr__(self):

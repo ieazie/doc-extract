@@ -435,6 +435,23 @@ class AnthropicProvider(LLMProvider):
         
         return "\n".join(prompt_parts)
 
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract JSON from text response"""
+        import re
+        
+        # Look for JSON objects
+        json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+        matches = re.findall(json_pattern, text, re.DOTALL)
+        
+        for match in matches:
+            try:
+                return json.loads(match)
+            except json.JSONDecodeError:
+                continue
+        
+        # If no JSON found, return empty object
+        return {}
+
 
 class LLMProviderFactory:
     """Factory for creating LLM providers"""
