@@ -14,7 +14,7 @@ import {
   XCircle
 } from 'lucide-react';
 
-import { apiClient } from '@/services/api';
+import { AuthService, serviceFactory } from '@/services/api/index';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -294,7 +294,10 @@ const UsersPage: React.FC = () => {
   // Fetch users
   const { data: users, isLoading, error } = useQuery<User[]>(
     'users',
-    () => apiClient.getUsers(),
+    () => {
+      const authService = serviceFactory.get<AuthService>('auth');
+      return authService.getUsers();
+    },
     {
       enabled: !!currentUser,
     }
@@ -302,7 +305,10 @@ const UsersPage: React.FC = () => {
 
   // Create user mutation
   const createUserMutation = useMutation(
-    (userData: CreateUserData) => apiClient.createUser(userData),
+    (userData: CreateUserData) => {
+      const authService = serviceFactory.get<AuthService>('auth');
+      return authService.createUser(userData);
+    },
     {
       onSuccess: () => {
         queryClient.invalidateQueries('users');
@@ -317,8 +323,10 @@ const UsersPage: React.FC = () => {
 
   // Update user mutation
   const updateUserMutation = useMutation(
-    ({ userId, userData }: { userId: string; userData: UpdateUserData }) =>
-      apiClient.updateUser(userId, userData),
+    ({ userId, userData }: { userId: string; userData: UpdateUserData }) => {
+      const authService = serviceFactory.get<AuthService>('auth');
+      return authService.updateUser(userId, userData);
+    },
     {
       onSuccess: () => {
         queryClient.invalidateQueries('users');

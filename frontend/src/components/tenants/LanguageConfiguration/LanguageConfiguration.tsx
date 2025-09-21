@@ -19,12 +19,13 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { SuccessMessage } from '@/components/common/SuccessMessage';
 import Button from '@/components/ui/Button';
 import { 
-  apiClient, 
+  LanguageService, 
+  serviceFactory,
   SupportedLanguage, 
   TenantLanguageConfig, 
   TenantLanguageConfigUpdate,
-  LanguageDetectionResult 
-} from '@/services/api';
+  LanguageDetectionResultType 
+} from '@/services/api/index';
 import {
   ConfigurationContainer,
   SectionCard,
@@ -72,7 +73,7 @@ export const LanguageConfiguration: React.FC<LanguageConfigurationProps> = ({ te
   
   // Test detection state
   const [testText, setTestText] = useState('');
-  const [detectionResult, setDetectionResult] = useState<LanguageDetectionResult | null>(null);
+  const [detectionResult, setDetectionResult] = useState<LanguageDetectionResultType | null>(null);
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
@@ -83,8 +84,14 @@ export const LanguageConfiguration: React.FC<LanguageConfigurationProps> = ({ te
     try {
       setLoading(true);
       const [configData, languagesData] = await Promise.all([
-        apiClient.getTenantLanguageConfig(tenantId),
-        apiClient.getSupportedLanguages()
+        (async () => {
+          const languageService = serviceFactory.get<LanguageService>('language');
+          return languageService.getTenantLanguageConfig(tenantId);
+        })(),
+        (async () => {
+          const languageService = serviceFactory.get<LanguageService>('language');
+          return languageService.getSupportedLanguages();
+        })()
       ]);
       
       setConfig(configData);
@@ -111,7 +118,8 @@ export const LanguageConfiguration: React.FC<LanguageConfigurationProps> = ({ te
         require_language_match: config.require_language_match
       };
       
-      const updatedConfig = await apiClient.updateTenantLanguageConfig(tenantId, updateData);
+      const languageService = serviceFactory.get<LanguageService>('language');
+      const updatedConfig = await languageService.updateTenantLanguageConfig(tenantId, updateData);
       setConfig(updatedConfig);
       setMessage({ type: 'success', text: 'Language configuration saved successfully' });
     } catch (error) {
@@ -166,14 +174,16 @@ export const LanguageConfiguration: React.FC<LanguageConfigurationProps> = ({ te
     
     try {
       setTesting(true);
-      const result = await apiClient.detectDocumentLanguage(testText);
+      const languageService = serviceFactory.get<LanguageService>('language');
+      const result = await languageService.detectDocumentLanguage(testText);
       setDetectionResult(result);
     } catch (error) {
       console.error('Language detection test failed:', error);
       setDetectionResult({
         language: 'unknown',
         confidence: 0,
-        source: 'error'
+        source: 'error',
+        detected_at: new Date().toISOString()
       });
     } finally {
       setTesting(false);

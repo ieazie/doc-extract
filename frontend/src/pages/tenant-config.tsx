@@ -22,7 +22,7 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { SuccessMessage } from '@/components/common/SuccessMessage';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
-import { apiClient, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant, TenantEnvironmentInfo } from '@/services/api';
+import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant, TenantEnvironmentInfo } from '@/services/api/index';
 import InfrastructureManagement from '@/components/tenants/InfrastructureManagement';
 import { LanguageConfiguration } from '@/components/tenants/LanguageConfiguration';
 
@@ -254,7 +254,8 @@ const TenantConfigPage: React.FC = () => {
     
     try {
       setLoading(true);
-      const summary = await apiClient.getTenantConfigSummary();
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      const summary = await tenantService.getTenantConfigSummary();
       
       // Initialize config structure
       const config: TenantLLMConfigs = {
@@ -286,14 +287,14 @@ const TenantConfigPage: React.FC = () => {
       
       // Test health of both configurations
       try {
-        const health = await apiClient.checkLLMHealth('field_extraction');
+        const health = await serviceFactory.get<HealthService>('health').checkLLMHealth({ config_type: 'field_extraction' });
         setFieldLlmHealth(health.healthy ? 'healthy' : 'unhealthy');
       } catch {
         setFieldLlmHealth('unhealthy');
       }
       
       try {
-        const health = await apiClient.checkLLMHealth('document_extraction');
+        const health = await serviceFactory.get<HealthService>('health').checkLLMHealth({ config_type: 'document_extraction' });
         setDocumentLlmHealth(health.healthy ? 'healthy' : 'unhealthy');
       } catch {
         setDocumentLlmHealth('unhealthy');
@@ -318,7 +319,8 @@ const TenantConfigPage: React.FC = () => {
         document_extraction: tenantConfig.document_extraction
       };
       
-      await apiClient.createTenantConfiguration({
+      await serviceFactory.get<TenantService>('tenants').createTenantConfiguration({
+        tenant_id: tenant.id,
         config_type: 'llm',
         config_data: llmConfigs,
       });
@@ -328,7 +330,7 @@ const TenantConfigPage: React.FC = () => {
       // Check health after saving if we have API key or using Ollama
       if (tenantConfig.field_extraction.api_key || tenantConfig.field_extraction.provider === 'ollama') {
         try {
-          const health = await apiClient.checkLLMHealth('field_extraction');
+          const health = await serviceFactory.get<HealthService>('health').checkLLMHealth({ config_type: 'field_extraction' });
           setFieldLlmHealth(health.healthy ? 'healthy' : 'unhealthy');
         } catch {
           setFieldLlmHealth('unhealthy');
@@ -354,7 +356,8 @@ const TenantConfigPage: React.FC = () => {
         document_extraction: tenantConfig.document_extraction
       };
       
-      await apiClient.createTenantConfiguration({
+      await serviceFactory.get<TenantService>('tenants').createTenantConfiguration({
+        tenant_id: tenant.id,
         config_type: 'llm',
         config_data: llmConfigs,
       });
@@ -364,7 +367,7 @@ const TenantConfigPage: React.FC = () => {
       // Check health after saving if we have API key or using Ollama
       if (tenantConfig.document_extraction.api_key || tenantConfig.document_extraction.provider === 'ollama') {
         try {
-          const health = await apiClient.checkLLMHealth('document_extraction');
+          const health = await serviceFactory.get<HealthService>('health').checkLLMHealth({ config_type: 'document_extraction' });
           setDocumentLlmHealth(health.healthy ? 'healthy' : 'unhealthy');
         } catch {
           setDocumentLlmHealth('unhealthy');
@@ -394,7 +397,7 @@ const TenantConfigPage: React.FC = () => {
       setTestingField(true);
       setFieldExtractionMessage(null);
       
-      const testResult = await apiClient.testLLMExtraction({
+      const testResult = await serviceFactory.get<HealthService>('health').testLLMExtraction({
         config_type: 'field_extraction',
         document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
         schema: { 
@@ -432,7 +435,7 @@ const TenantConfigPage: React.FC = () => {
       setTestingDocument(true);
       setDocumentExtractionMessage(null);
       
-      const testResult = await apiClient.testLLMExtraction({
+      const testResult = await serviceFactory.get<HealthService>('health').testLLMExtraction({
         config_type: 'document_extraction',
         document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
         schema: { 
@@ -516,7 +519,7 @@ const TenantConfigPage: React.FC = () => {
             <Label>LLM Provider</Label>
             <Dropdown
               value={tenantConfig?.field_extraction?.provider || 'openai'}
-              onChange={(value: string) => setTenantConfig(prev => prev ? {
+              onChange={(value: string) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 field_extraction: {
                   ...prev.field_extraction!,
@@ -535,7 +538,7 @@ const TenantConfigPage: React.FC = () => {
             <Label>Model</Label>
             <Input 
               value={tenantConfig?.field_extraction?.model_name || ''}
-              onChange={(e) => setTenantConfig(prev => prev ? {
+              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 field_extraction: {
                   ...prev.field_extraction!,
@@ -553,7 +556,7 @@ const TenantConfigPage: React.FC = () => {
             <Input 
               type="password"
               value={tenantConfig?.field_extraction?.api_key || ''}
-              onChange={(e) => setTenantConfig(prev => prev ? {
+              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 field_extraction: {
                   ...prev.field_extraction!,
@@ -576,7 +579,7 @@ const TenantConfigPage: React.FC = () => {
             <Input 
               type="password"
               value={tenantConfig?.field_extraction?.api_key || ''}
-              onChange={(e) => setTenantConfig(prev => prev ? {
+              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 field_extraction: {
                   ...prev.field_extraction!,
@@ -634,7 +637,7 @@ const TenantConfigPage: React.FC = () => {
             <Label>LLM Provider</Label>
             <Dropdown
               value={tenantConfig?.document_extraction?.provider || 'ollama'}
-              onChange={(value: string) => setTenantConfig(prev => prev ? {
+              onChange={(value: string) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 document_extraction: {
                   ...prev.document_extraction!,
@@ -653,7 +656,7 @@ const TenantConfigPage: React.FC = () => {
             <Label>Model</Label>
             <Input 
               value={tenantConfig?.document_extraction?.model_name || ''}
-              onChange={(e) => setTenantConfig(prev => prev ? {
+              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 document_extraction: {
                   ...prev.document_extraction!,
@@ -671,7 +674,7 @@ const TenantConfigPage: React.FC = () => {
             <Input 
               type="password"
               value={tenantConfig?.document_extraction?.api_key || ''}
-              onChange={(e) => setTenantConfig(prev => prev ? {
+              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 document_extraction: {
                   ...prev.document_extraction!,
@@ -689,7 +692,7 @@ const TenantConfigPage: React.FC = () => {
             <Input 
               type="password"
               value={tenantConfig?.document_extraction?.api_key || ''}
-              onChange={(e) => setTenantConfig(prev => prev ? {
+              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 document_extraction: {
                   ...prev.document_extraction!,

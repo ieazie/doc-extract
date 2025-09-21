@@ -7,7 +7,7 @@ import { X, Clock, Calendar, Repeat, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import { CronBuilder } from './CronBuilder';
-import { apiClient, ExtractionJob, ExtractionJobCreate, ExtractionJobUpdate, Category } from '@/services/api';
+import { JobService, CategoryService, TemplateService, serviceFactory, Job, JobCreateRequest, JobUpdateRequest, Category } from '@/services/api/index';
 import styled from 'styled-components';
 
 // Styled Components
@@ -295,8 +295,8 @@ const ErrorMessage = styled.div`
 interface JobModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (job: ExtractionJob) => void;
-  job?: ExtractionJob | null;
+  onSave: (job: Job) => void;
+  job?: Job | null;
 }
 
 export const JobModal: React.FC<JobModalProps> = ({
@@ -311,78 +311,136 @@ export const JobModal: React.FC<JobModalProps> = ({
   const [templates, setTemplates] = useState<any[]>([]);
   
   // Form state
-  const [formData, setFormData] = useState<ExtractionJobCreate>({
+  const [formData, setFormData] = useState<JobCreateRequest>({
     name: '',
     description: '',
-    category_id: '',
-    template_id: '',
+    job_type: 'extraction',
     schedule_type: 'immediate',
-    priority: 5,
-    max_concurrency: 5,
+    schedule_config: {
+      cron: '',
+      cron_expression: '', // For UI compatibility
+      timezone: 'UTC'
+    },
+    execution_config: {
+      template_id: '',
+      category_id: ''
+    },
     retry_policy: {
       max_retries: 3,
-      retry_delay_minutes: 5
-    },
-    is_active: true
+      retry_delay_minutes: 5,
+      backoff_multiplier: 2,
+      max_retry_delay_minutes: 60,
+      retry_on_failure_types: ['network_error', 'timeout', 'server_error']
+    }
   });
 
   // Load data when modal opens
   useEffect(() => {
     if (isOpen) {
-      loadCategories();
-      loadTemplates();
+      const initializeModal = async () => {
+        // Load categories and templates first and get the data directly
+        const [categoriesResponse, templatesResponse] = await Promise.all([
+          loadCategoriesAndGetData(),
+          loadTemplatesAndGetData()
+        ]);
+        
+        // Set the state for the dropdowns
+        setCategories(categoriesResponse);
+        setTemplates(templatesResponse);
+        
+        // Then set form data after data is loaded
+        if (job) {
+          // Edit mode - populate form with job data
+          console.log('Setting form data for job:', job);
+          console.log('Job execution_config:', job.execution_config);
+          console.log('Job template_id:', job.template_id);
+          console.log('Job category_id:', job.category_id);
+          console.log('Available categories:', categoriesResponse);
+          console.log('Available templates:', templatesResponse);
+          
+          const formDataToSet = {
+            name: job.name,
+            description: job.description || '',
+            job_type: job.job_type,
+            schedule_type: job.schedule_type,
+            schedule_config: {
+              cron: job.schedule_config?.cron || job.schedule_config?.cron_expression || '',
+              cron_expression: job.schedule_config?.cron || job.schedule_config?.cron_expression || '', // For UI compatibility
+              timezone: job.schedule_config?.timezone || 'UTC'
+            },
+            execution_config: {
+              template_id: job.execution_config?.template_id || job.template_id || '',
+              category_id: job.execution_config?.category_id || job.category_id || ''
+            },
+            retry_policy: job.retry_policy || {
+              max_retries: 3,
+              retry_delay_minutes: 5,
+              backoff_multiplier: 2,
+              max_retry_delay_minutes: 60,
+              retry_on_failure_types: ['network_error', 'timeout', 'server_error']
+            }
+          };
+          
+          console.log('Form data being set:', formDataToSet);
+          console.log('Form execution_config:', formDataToSet.execution_config);
+          console.log('Form template_id:', formDataToSet.execution_config.template_id);
+          console.log('Form category_id:', formDataToSet.execution_config.category_id);
+          setFormData(formDataToSet);
+        } else {
+          // Create mode - reset form
+          setFormData({
+            name: '',
+            description: '',
+            job_type: 'extraction',
+            schedule_type: 'immediate',
+            schedule_config: {
+              cron: '',
+              cron_expression: '', // For UI compatibility
+              timezone: 'UTC'
+            },
+            execution_config: {
+              template_id: '',
+              category_id: ''
+            },
+            retry_policy: {
+              max_retries: 3,
+              retry_delay_minutes: 5,
+              backoff_multiplier: 2,
+              max_retry_delay_minutes: 60,
+              retry_on_failure_types: ['network_error', 'timeout', 'server_error']
+            }
+          });
+        }
+        setError(null);
+      };
       
-      if (job) {
-        // Edit mode - populate form with job data
-        setFormData({
-          name: job.name,
-          description: job.description || '',
-          category_id: job.category_id,
-          template_id: job.template_id,
-          schedule_type: job.schedule_type,
-          run_at: job.run_at || undefined,
-          schedule_config: job.schedule_config || undefined,
-          priority: job.priority,
-          max_concurrency: job.max_concurrency,
-          retry_policy: job.retry_policy,
-          is_active: job.is_active
-        });
-      } else {
-        // Create mode - reset form
-        setFormData({
-          name: '',
-          description: '',
-          category_id: '',
-          template_id: '',
-          schedule_type: 'immediate',
-          priority: 5,
-          max_concurrency: 5,
-          retry_policy: {
-            max_retries: 3,
-            retry_delay_minutes: 5
-          },
-          is_active: true
-        });
-      }
-      setError(null);
+      initializeModal();
     }
   }, [isOpen, job]);
 
-  const loadCategories = async () => {
+  const loadCategoriesAndGetData = async (): Promise<any[]> => {
     try {
-      const response = await apiClient.getCategories();
-      setCategories(response.categories);
+      const categoryService = serviceFactory.get<CategoryService>('categories');
+      const response = await categoryService.getCategories();
+      console.log('Categories API response:', response);
+      console.log('Categories array:', response.categories);
+      return response.categories || [];
     } catch (err) {
       console.error('Failed to load categories:', err);
+      return [];
     }
   };
 
-  const loadTemplates = async () => {
+  const loadTemplatesAndGetData = async (): Promise<any[]> => {
     try {
-      const response = await apiClient.getTemplates(1, 100);
-      setTemplates(response.templates);
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      const response = await templateService.getTemplates({ page: 1, per_page: 100 });
+      console.log('Templates API response:', response);
+      console.log('Templates array:', response.templates);
+      return response.templates || [];
     } catch (err) {
       console.error('Failed to load templates:', err);
+      return [];
     }
   };
 
@@ -393,19 +451,46 @@ export const JobModal: React.FC<JobModalProps> = ({
     }));
   };
 
+  const handleExecutionConfigChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      execution_config: {
+        ...prev.execution_config,
+        [field]: value
+      }
+    }));
+  };
+
+  const handleRetryPolicyChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      retry_policy: {
+        max_retries: prev.retry_policy?.max_retries || 3,
+        retry_delay_minutes: prev.retry_policy?.retry_delay_minutes || 5,
+        backoff_multiplier: prev.retry_policy?.backoff_multiplier || 2,
+        max_retry_delay_minutes: prev.retry_policy?.max_retry_delay_minutes || 60,
+        retry_on_failure_types: prev.retry_policy?.retry_on_failure_types || ['network_error', 'timeout', 'server_error'],
+        [field]: value
+      }
+    }));
+  };
+
   const handleScheduleTypeChange = (scheduleType: 'immediate' | 'scheduled' | 'recurring') => {
     setFormData(prev => ({
       ...prev,
       schedule_type: scheduleType,
-      run_at: scheduleType === 'scheduled' ? prev.run_at : undefined,
-      schedule_config: scheduleType === 'recurring' ? prev.schedule_config : undefined
+      schedule_config: {
+        cron: scheduleType === 'recurring' ? (prev.schedule_config.cron || prev.schedule_config.cron_expression) : '',
+        cron_expression: scheduleType === 'recurring' ? (prev.schedule_config.cron || prev.schedule_config.cron_expression) : '', // For UI compatibility
+        timezone: prev.schedule_config.timezone || 'UTC'
+      }
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.category_id || !formData.template_id) {
+    if (!formData.name || !formData.execution_config?.template_id || !formData.execution_config?.category_id) {
       setError('Please fill in all required fields');
       return;
     }
@@ -414,26 +499,25 @@ export const JobModal: React.FC<JobModalProps> = ({
       setLoading(true);
       setError(null);
 
-      let savedJob: ExtractionJob;
+      let savedJob: Job;
       
       if (job) {
         // Update existing job
-        const updateData: ExtractionJobUpdate = {
+        const updateData: JobUpdateRequest = {
           name: formData.name,
           description: formData.description,
           schedule_type: formData.schedule_type,
-          run_at: formData.run_at,
           schedule_config: formData.schedule_config,
-          priority: formData.priority,
-          max_concurrency: formData.max_concurrency,
-          retry_policy: formData.retry_policy,
-          is_active: formData.is_active
+          execution_config: formData.execution_config,
+          retry_policy: formData.retry_policy
         };
         
-        savedJob = await apiClient.updateJob(job.id, updateData);
+        const jobService = serviceFactory.get<JobService>('jobs');
+        savedJob = await jobService.updateJob(job.id, updateData);
       } else {
         // Create new job
-        savedJob = await apiClient.createJob(formData);
+        const jobService = serviceFactory.get<JobService>('jobs');
+        savedJob = await jobService.createJob(formData);
       }
 
       onSave(savedJob);
@@ -479,8 +563,8 @@ export const JobModal: React.FC<JobModalProps> = ({
               <FormGroup>
                 <FormLabel>Category *</FormLabel>
                 <Dropdown
-                  value={formData.category_id}
-                  onChange={(value) => handleInputChange('category_id', value)}
+                  value={formData.execution_config?.category_id || ''}
+                  onChange={(value) => handleExecutionConfigChange('category_id', value)}
                   options={[
                     { value: '', label: 'Select category' },
                     ...categories.map(cat => ({
@@ -505,8 +589,8 @@ export const JobModal: React.FC<JobModalProps> = ({
             <FormGroup style={{ marginBottom: '24px' }}>
               <FormLabel>Template *</FormLabel>
               <Dropdown
-                value={formData.template_id}
-                onChange={(value) => handleInputChange('template_id', value)}
+                value={formData.execution_config?.template_id || ''}
+                onChange={(value) => handleExecutionConfigChange('template_id', value)}
                 options={[
                   { value: '', label: 'Select template' },
                   ...templates.map(tpl => ({
@@ -566,24 +650,15 @@ export const JobModal: React.FC<JobModalProps> = ({
                 </ScheduleTypeOption>
               </ScheduleTypeGrid>
 
-              {formData.schedule_type === 'scheduled' && (
-                <FormGroup>
-                  <FormLabel>Run At</FormLabel>
-                  <FormInput
-                    type="datetime-local"
-                    value={formData.run_at ? new Date(formData.run_at).toISOString().slice(0, 16) : ''}
-                    onChange={(e) => handleInputChange('run_at', e.target.value ? new Date(e.target.value).toISOString() : undefined)}
-                  />
-                </FormGroup>
-              )}
 
               {formData.schedule_type === 'recurring' && (
                 <FormGroup>
                   <CronBuilder
-                    value={formData.schedule_config?.cron || '0 9 * * *'}
+                    value={formData.schedule_config?.cron || formData.schedule_config?.cron_expression || '0 9 * * *'}
                     onChange={(cronExpression) => handleInputChange('schedule_config', {
                       ...formData.schedule_config,
                       cron: cronExpression,
+                      cron_expression: cronExpression, // Keep for UI compatibility
                       timezone: formData.schedule_config?.timezone || 'UTC'
                     })}
                   />
@@ -599,27 +674,7 @@ export const JobModal: React.FC<JobModalProps> = ({
               </AdvancedTitle>
 
               <AdvancedGrid>
-                <FormGroup>
-                  <FormLabel>Priority (1-10)</FormLabel>
-                  <FormInput
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={formData.priority || 5}
-                    onChange={(e) => handleInputChange('priority', parseInt(e.target.value))}
-                  />
-                </FormGroup>
 
-                <FormGroup>
-                  <FormLabel>Max Concurrency</FormLabel>
-                  <FormInput
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={formData.max_concurrency || 5}
-                    onChange={(e) => handleInputChange('max_concurrency', parseInt(e.target.value))}
-                  />
-                </FormGroup>
 
                 <FormGroup>
                   <FormLabel>Max Retries</FormLabel>
@@ -628,10 +683,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                     min="0"
                     max="10"
                     value={formData.retry_policy?.max_retries || 0}
-                    onChange={(e) => handleInputChange('retry_policy', {
-                      ...formData.retry_policy,
-                      max_retries: parseInt(e.target.value)
-                    })}
+                    onChange={(e) => handleRetryPolicyChange('max_retries', parseInt(e.target.value))}
                   />
                 </FormGroup>
 
@@ -642,30 +694,12 @@ export const JobModal: React.FC<JobModalProps> = ({
                     min="1"
                     max="60"
                     value={formData.retry_policy?.retry_delay_minutes || 1}
-                    onChange={(e) => handleInputChange('retry_policy', {
-                      ...formData.retry_policy,
-                      retry_delay_minutes: parseInt(e.target.value)
-                    })}
+                    onChange={(e) => handleRetryPolicyChange('retry_delay_minutes', parseInt(e.target.value))}
                   />
                 </FormGroup>
               </AdvancedGrid>
 
               <FormGroup style={{ marginTop: '16px' }}>
-                <ToggleContainer>
-                  <ToggleLabel>
-                    <Settings size={16} color="#6b7280" />
-                    <span>Active (job will be scheduled and can be executed)</span>
-                  </ToggleLabel>
-                  <HiddenCheckbox
-                    type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) => handleInputChange('is_active', e.target.checked)}
-                  />
-                  <ToggleSwitch 
-                    $active={!!formData.is_active}
-                    onClick={() => handleInputChange('is_active', !formData.is_active)}
-                  />
-                </ToggleContainer>
               </FormGroup>
             </AdvancedSection>
 

@@ -19,7 +19,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 // Types
-import { Document as ApiDocument } from '../../services/api';
+import { Document as ApiDocument } from '../../services/api/index';
 
 interface Document extends ApiDocument {
   file?: File;

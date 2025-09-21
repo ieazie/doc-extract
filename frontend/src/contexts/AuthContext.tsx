@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { apiClient } from '@/services/api';
+import { AuthService, TenantService, serviceFactory } from '@/services/api/index';
 
 // Auth Types
 export interface User {
@@ -90,8 +90,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             parsedTenant = JSON.parse(storedTenant);
           }
 
-          // Set the token in the API client
-          apiClient.setAuthToken(parsedTokens.access_token);
+          // Set the token in the service factory
+          serviceFactory.setAuthToken(parsedTokens.access_token);
           
           // Set the stored data immediately
           setUser(parsedUser);
@@ -100,13 +100,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           
           // Verify token in the background (non-blocking)
           try {
-            const currentUser = await apiClient.getCurrentUser();
+            const authService = serviceFactory.get<AuthService>('auth');
+            const currentUser = await authService.getCurrentUser();
             
             // Only fetch tenant data for non-system-admin users
             let currentTenant = null;
             if (currentUser.role !== 'system_admin' && currentUser.tenant_id) {
               try {
-                currentTenant = await apiClient.getCurrentTenant();
+                currentTenant = await authService.getCurrentTenant();
               } catch (tenantError: any) {
                 console.warn('Failed to fetch tenant data during verification:', tenantError.message);
                 // Don't fail the entire verification for tenant fetch errors
@@ -155,7 +156,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(null);
     setTenant(null);
     setTokens(null);
-    apiClient.clearAuthToken();
+    serviceFactory.setAuthToken(null);
     localStorage.removeItem('auth_tokens');
     localStorage.removeItem('auth_user');
     localStorage.removeItem('auth_tenant');
@@ -170,11 +171,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setIsLoading(true);
       
-      const response = await apiClient.login(credentials);
+      const authService = serviceFactory.get<AuthService>('auth');
+      const response = await authService.login(credentials);
       
-      // Set the auth token in the API client immediately
-      apiClient.setAuthToken(response.access_token);
-      console.log('Token set in API client:', response.access_token.substring(0, 20) + '...');
+      // Set the auth token for all services immediately
+      serviceFactory.setAuthToken(response.access_token);
+      console.log('Token set in service factory:', response.access_token.substring(0, 20) + '...');
       
       // Store tokens and user data
       setTokens({
@@ -188,7 +190,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       let tenantData = null;
       if (response.user.role !== 'system_admin' && response.user.tenant_id) {
         try {
-          tenantData = await apiClient.getCurrentTenant();
+          const authService = serviceFactory.get<AuthService>('auth');
+          tenantData = await authService.getCurrentTenant();
           setTenant(tenantData);
         } catch (error: any) {
           console.error('Failed to get tenant data after login:', error);
@@ -234,12 +237,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const switchTenant = async (tenantId: string) => {
     try {
-      await apiClient.switchTenant(tenantId);
+      const authService = serviceFactory.get<AuthService>('auth');
+      await authService.switchTenant(tenantId);
       
       // Refresh user and tenant data
       const [userData, tenantData] = await Promise.all([
-        apiClient.getCurrentUser(),
-        apiClient.getCurrentTenant()
+        authService.getCurrentUser(),
+        authService.getCurrentTenant()
       ]);
       
       setUser(userData);

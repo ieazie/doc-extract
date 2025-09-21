@@ -14,7 +14,7 @@ import {
   Save,
   Edit3
 } from 'lucide-react';
-import { apiClient, ReviewStatus, ReviewActionRequest } from '../../services/api';
+import { ExtractionService, serviceFactory, ReviewStatus, ReviewActionRequest } from '../../services/api/index';
 import NotificationDialog from '../common/NotificationDialog';
 
 interface ReviewActionButtonsProps {
@@ -378,14 +378,14 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
 
     setIsLoading(true);
     try {
-      const request: ReviewActionRequest = {
-        action,
-        reviewer: 'current_user', // TODO: Get from auth context
-        comments: comments || undefined
+      const request = {
+        action: (action === 'start_review' ? 'start' : action) as 'start' | 'approve' | 'reject',
+        notes: comments || undefined
       };
 
-      const response = await apiClient.startReview(extractionId, request);
-      onStatusChange(response.review_status);
+      const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      const response = await extractionService.startReview(extractionId, request);
+      onStatusChange('pending');
       
       // Call the appropriate callback
       switch (action) {
@@ -433,14 +433,14 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
     
     setIsLoading(true);
     try {
-      const request: ReviewActionRequest = {
-        action: commentAction,
-        reviewer: 'current_user', // TODO: Get from auth context
-        comments: comments.trim() || undefined
+      const request = {
+        action: (commentAction === 'needs_correction' ? 'reject' : commentAction) as 'start' | 'approve' | 'reject',
+        notes: comments.trim() || undefined
       };
 
-      const response = await apiClient.startReview(extractionId, request);
-      onStatusChange(response.review_status);
+      const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      const response = await extractionService.startReview(extractionId, request);
+      onStatusChange('pending');
       
       // Call the appropriate callback
       switch (commentAction) {

@@ -19,7 +19,7 @@ import {
   ToggleRight
 } from 'lucide-react';
 
-import { apiClient } from '../services/api';
+import { DocumentService, CategoryService, serviceFactory } from '../services/api/index';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { SuccessMessage } from '../components/common/SuccessMessage';
@@ -256,20 +256,18 @@ const DocumentsPage: React.FC = () => {
       // Merge current filters with new params
       const mergedParams = { ...filters, ...params };
 
-      const response = await apiClient.getDocuments(
-        mergedParams.page || pagination.page,
-        mergedParams.per_page || pagination.per_page,
-        mergedParams.search,
-        mergedParams.category_id,
-        mergedParams.document_type_id,
-        mergedParams.tags,
-        mergedParams.status,
-        mergedParams.extraction_status,
-        mergedParams.job_status,
-        mergedParams.sort_by || 'created_at',
-        mergedParams.sort_order || 'desc',
-        includeTracking
-      );
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      const response = await documentService.getDocuments({
+        page: mergedParams.page || pagination.page,
+        per_page: mergedParams.per_page || pagination.per_page,
+        search: mergedParams.search,
+        category_id: mergedParams.category_id,
+        tags: mergedParams.tags,
+        status: mergedParams.status,
+        extraction_status: mergedParams.extraction_status,
+        sort_by: mergedParams.sort_by || 'created_at',
+        sort_order: mergedParams.sort_order || 'desc'
+      });
 
       setDocuments(response.documents);
       setPagination({

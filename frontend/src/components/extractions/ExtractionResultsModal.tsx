@@ -22,7 +22,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-import { apiClient } from '@/services/api';
+import { ExtractionService, DocumentService, TemplateService, serviceFactory } from '@/services/api/index';
 import { SourceLocationProvider } from './SourceLocationContext';
 import { ExtractionResultsPanel } from './ExtractionResultsPanel';
 import FlaggedFieldIndicator from './FlaggedFieldIndicator';
@@ -576,9 +576,21 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     error: extractionError 
   } = useQuery(
     ['extraction', extractionId],
-    () => apiClient.getExtraction(extractionId),
+    () => {
+      console.log('Fetching extraction with ID:', extractionId);
+      const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      return extractionService.getExtraction(extractionId);
+    },
     {
-      enabled: isOpen && !!extractionId
+      enabled: isOpen && !!extractionId,
+      onSuccess: (data) => {
+        console.log('Extraction loaded successfully:', data);
+        console.log('Extraction results:', data?.results);
+        console.log('Extraction status:', data?.status);
+      },
+      onError: (error) => {
+        console.error('Failed to load extraction:', error);
+      }
     }
   );
 
@@ -588,7 +600,10 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     isLoading: templateLoading 
   } = useQuery(
     ['template', extraction?.template_id],
-    () => apiClient.getTemplate(extraction!.template_id),
+    () => {
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      return templateService.getTemplate(extraction!.template_id);
+    },
     {
       enabled: isOpen && !!extraction?.template_id
     }
@@ -597,24 +612,46 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   // Fetch document content
   const { 
     data: documentContent, 
-    isLoading: documentLoading 
+    isLoading: documentLoading,
+    error: documentContentError
   } = useQuery(
     ['document-content', extraction?.document_id],
-    () => apiClient.getDocumentContent(extraction!.document_id),
+    () => {
+      console.log('Fetching document content for ID:', extraction?.document_id);
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      return documentService.getDocumentContent(extraction!.document_id);
+    },
     {
-      enabled: isOpen && !!extraction?.document_id
+      enabled: isOpen && !!extraction?.document_id,
+      onSuccess: (data) => {
+        console.log('Document content loaded successfully:', data);
+      },
+      onError: (error) => {
+        console.error('Failed to load document content:', error);
+      }
     }
   );
 
   // Fetch document preview
   const { 
     data: documentPreview, 
-    isLoading: previewLoading 
+    isLoading: previewLoading,
+    error: documentPreviewError
   } = useQuery(
     ['document-preview', extraction?.document_id],
-    () => apiClient.getDocumentPreview(extraction!.document_id),
+    () => {
+      console.log('Fetching document preview for ID:', extraction?.document_id);
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      return documentService.getDocumentPreview(extraction!.document_id);
+    },
     {
-      enabled: isOpen && !!extraction?.document_id
+      enabled: isOpen && !!extraction?.document_id,
+      onSuccess: (data) => {
+        console.log('Document preview loaded successfully:', data);
+      },
+      onError: (error) => {
+        console.error('Failed to load document preview:', error);
+      }
     }
   );
 
@@ -647,18 +684,20 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
       }
     },
     {
-      enabled: isOpen && !!extraction?.document_id && !!documentPreview?.has_preview,
+      enabled: isOpen && !!extraction?.document_id && !!documentPreview?.preview_url,
       staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     }
   );
 
   // Update review status when extraction data loads
   useEffect(() => {
-    if (extraction?.review_status) {
-      setReviewStatus(extraction.review_status);
-      console.log('Loaded review status from API:', extraction.review_status);
+    // Note: review_status is handled separately through ExtractionReview interface
+    // For now, we'll use a default status
+    if (extraction) {
+      setReviewStatus('pending');
+      console.log('Extraction loaded, setting default review status to pending');
     }
-  }, [extraction?.review_status]);
+  }, [extraction]);
 
   // Detect flagged fields when extraction data changes
   useEffect(() => {
@@ -715,12 +754,11 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     
     try {
       const originalValue = getNestedValue(extraction?.results, fieldPath);
-      await apiClient.correctField(extractionId, {
-        field_path: fieldPath,
-        original_value: originalValue,
+      const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      await extractionService.correctField(extractionId, {
+        field_name: fieldPath,
         corrected_value: newValue,
-        correction_reason: 'Field correction via UI',
-        corrected_by: 'current_user'
+        reason: 'Field correction via UI'
       });
       
       // Remove from pending corrections
@@ -758,12 +796,11 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
       // Save all pending corrections
       for (const [fieldPath, newValue] of Object.entries(pendingCorrections)) {
         const originalValue = getNestedValue(extraction?.results, fieldPath);
-        await apiClient.correctField(extractionId, {
-          field_path: fieldPath,
-          original_value: originalValue,
+        const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      await extractionService.correctField(extractionId, {
+          field_name: fieldPath,
           corrected_value: newValue,
-          correction_reason: 'Bulk field correction via UI',
-          corrected_by: 'current_user'
+          reason: 'Bulk field correction via UI'
         });
       }
       
@@ -805,7 +842,8 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     if (!extractionId) return;
     
     try {
-      const result = await apiClient.autoRouteExtraction(extractionId);
+      const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      const result = await extractionService.autoRouteExtraction(extractionId);
       console.log('Auto-routing result:', result);
       
       if (result.routed) {
@@ -930,11 +968,18 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
             <PanelContent collapsed={collapsedPanels.document}>
               {documentLoading || previewLoading || imageLoading ? (
                 <LoadingState>Loading document...</LoadingState>
-              ) : documentPreview?.has_preview && previewImageUrl ? (
+              ) : documentPreviewError || documentContentError ? (
+                <ErrorState>
+                  <div>Document Preview Failed</div>
+                  <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                    {(documentPreviewError as any)?.message || (documentContentError as any)?.message || 'Unable to load document preview'}
+                  </div>
+                </ErrorState>
+              ) : documentPreview?.preview_url && previewImageUrl ? (
                 <DocumentPreview>
                   <DocumentImage 
                     src={previewImageUrl} 
-                    alt={`Preview of ${documentPreview.filename}`}
+                    alt="Document preview"
                     onError={(e) => {
                       // Fallback to icon if image fails to load
                       e.currentTarget.style.display = 'none';
@@ -948,7 +993,7 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                     <FileText size={48} />
                     <div>Preview Unavailable</div>
                     <div style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                      {documentPreview.filename}
+                      Document
                     </div>
                   </DocumentIcon>
                 </DocumentPreview>
@@ -961,7 +1006,7 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                   <FileText size={48} />
                   <div>Preview Unavailable</div>
                   <div style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                    {documentPreview?.filename || 'Document'}
+                     Document
                   </div>
                 </DocumentIcon>
               )}
@@ -1015,6 +1060,13 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
             <PanelContent collapsed={collapsedPanels.results}>
               {extractionLoading ? (
                 <LoadingState>Loading results...</LoadingState>
+              ) : extractionError ? (
+                <ErrorState>
+                  <div>Failed to Load Extraction</div>
+                  <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                    {(extractionError as any)?.message || 'Unable to load extraction data'}
+                  </div>
+                </ErrorState>
               ) : extraction?.results ? (
                 <>
                   {flaggedFields.length > 0 && (
@@ -1059,8 +1111,30 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                     {extraction.error_message}
                   </div>
                 </ErrorState>
+              ) : extraction ? (
+                <ErrorState>
+                  <div>No Results Available</div>
+                  <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                    {extraction.status === 'processing' ? 'Extraction is still in progress...' :
+                     extraction.status === 'failed' ? 'Extraction failed to complete' :
+                     'No data was extracted from this document'}
+                  </div>
+                  {extraction.status && (
+                    <div style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#6b7280' }}>
+                      Status: {extraction.status}
+                    </div>
+                  )}
+                  <div style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#6b7280' }}>
+                    Debug: results is {extraction?.results ? 'present' : 'missing'}
+                  </div>
+                </ErrorState>
               ) : (
-                <ErrorState>No results available</ErrorState>
+                <ErrorState>
+                  <div>No Extraction Data</div>
+                  <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                    Unable to load extraction information
+                  </div>
+                </ErrorState>
               )}
             </PanelContent>
           </Panel>

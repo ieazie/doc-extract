@@ -15,7 +15,7 @@ import TableViewer from './TableViewer';
 import CardsViewer from './CardsViewer';
 import ViewModeSelector, { ViewMode } from './ViewModeSelector';
 import ReviewActionButtons from './ReviewActionButtons';
-import { ReviewStatus } from '../../services/api';
+import { ReviewStatus } from '../../services/api/index';
 
 // Styled Components
 const Header = styled.div`
@@ -259,6 +259,7 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
 
   // No results state
   if (!extractionResults?.results) {
+    console.log('ExtractionResultsPanel: No results found. Full extractionResults object:', extractionResults);
     return (
       <EmptyState>
         <FileText size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
@@ -266,6 +267,9 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
         <p style={{ margin: 0 }}>
           Run an extraction to see results here
         </p>
+        <div style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#6b7280' }}>
+          Debug: results is {extractionResults?.results ? 'present' : 'missing'}
+        </div>
       </EmptyState>
     );
   }

@@ -6,7 +6,7 @@ import styled from 'styled-components';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { X, Play, FileText, Zap } from 'lucide-react';
 
-import { apiClient } from '../../services/api';
+import { TemplateService, ExtractionService, serviceFactory, formatFileSize } from '../../services/api/index';
 
 // Styled Components
 const ModalOverlay = styled.div`
@@ -231,7 +231,10 @@ export const StartExtractionModal: React.FC<StartExtractionModalProps> = ({
     error: templatesError 
   } = useQuery(
     ['templates', { isActive: true }],
-    () => apiClient.getTemplates(1, 100, undefined, undefined, true),
+    () => {
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      return templateService.getTemplates({ page: 1, per_page: 100, is_active: true });
+    },
     {
       enabled: isOpen
     }
@@ -239,8 +242,10 @@ export const StartExtractionModal: React.FC<StartExtractionModalProps> = ({
 
   // Create extraction mutation
   const createExtractionMutation = useMutation(
-    (data: { document_id: string; template_id: string }) => 
-      apiClient.createExtraction(data),
+    (data: { document_id: string; template_id: string }) => {
+      const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      return extractionService.createExtraction(data);
+    },
     {
       onSuccess: () => {
         queryClient.invalidateQueries(['extractions']);
@@ -283,7 +288,7 @@ export const StartExtractionModal: React.FC<StartExtractionModalProps> = ({
               {document.original_filename}
             </DocumentName>
             <DocumentMeta>
-              <span>Size: {apiClient.formatFileSize(document.file_size)}</span>
+              <span>Size: {formatFileSize(document.file_size)}</span>
               <span>Type: {document.mime_type || 'Unknown'}</span>
             </DocumentMeta>
           </DocumentInfo>
@@ -305,7 +310,7 @@ export const StartExtractionModal: React.FC<StartExtractionModalProps> = ({
               </ErrorState>
             ) : (
               <TemplateGrid>
-                {templates.map((template) => (
+                {templates.map((template: any) => (
                   <TemplateCard
                     key={template.id}
                     selected={selectedTemplateId === template.id}

@@ -12,7 +12,7 @@ import {
   X,
   AlertCircle
 } from 'lucide-react';
-import { apiClient, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant } from '@/services/api';
+import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant } from '@/services/api/index';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
@@ -316,11 +316,17 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
   const loadAvailableModels = async (provider: string) => {
     try {
       console.log(`Loading models for provider: ${provider}`);
-      const response = await apiClient.getAvailableModels(provider);
-      console.log(`Loaded models for ${provider}:`, response.models);
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      const response = await tenantService.getAvailableModels();
+      const providerResponse = response.find(r => r.provider === provider);
+      if (!providerResponse) {
+        console.warn(`No models found for provider: ${provider}`);
+        return;
+      }
+      console.log(`Loaded models for ${provider}:`, providerResponse.models);
       
       // Clean and filter the models to ensure we have complete, valid names
-      const cleanedModels = response.models
+      const cleanedModels = providerResponse.models
         .filter(model => model && model.trim().length > 0) // Remove empty/invalid models
         .map(model => model.trim())
         .filter((model, index, arr) => arr.indexOf(model) === index); // Remove duplicates
@@ -358,7 +364,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       
       // For now, we'll use the current user's tenant config endpoint
       // In a real implementation, you'd have admin endpoints to get config for any tenant
-      const summary = await apiClient.getTenantConfigSummary();
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      const summary = await tenantService.getTenantConfigSummary();
       // Handle both old single config and new dual config structure
       if (summary.llm_config) {
         if (summary.llm_config.field_extraction && summary.llm_config.document_extraction) {
@@ -439,7 +446,9 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
             document_extraction: defaultDocumentConfig
           };
           
-          await apiClient.createTenantConfiguration({
+          const tenantService = serviceFactory.get<TenantService>('tenants');
+          await tenantService.createTenantConfiguration({
+            tenant_id: tenant.id,
             config_type: 'llm',
             config_data: llmConfigs,
             is_active: true
@@ -460,7 +469,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         
         if (fieldHasApiKey) {
           try {
-            const health = await apiClient.checkLLMHealth('field_extraction');
+            const healthService = serviceFactory.get<HealthService>('health');
+            const health = await healthService.checkLLMHealth({ config_type: 'field_extraction' });
             setLlmHealth({ healthy: health.healthy, error: health.error });
           } catch (err) {
             setLlmHealth({ healthy: false, error: 'Failed to check health' });
@@ -475,7 +485,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         
         if (documentHasApiKey) {
           try {
-            const health = await apiClient.checkLLMHealth('document_extraction');
+            const healthService = serviceFactory.get<HealthService>('health');
+            const health = await healthService.checkLLMHealth({ config_type: 'document_extraction' });
             setDocumentLlmHealth({ healthy: health.healthy, error: health.error });
           } catch (err) {
             setDocumentLlmHealth({ healthy: false, error: 'Failed to check health' });
@@ -560,7 +571,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         document_extraction: currentDocumentConfig
       };
       
-      await apiClient.createTenantConfiguration({
+      if (!tenant) {
+        console.error('No tenant available');
+        return;
+      }
+      
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      await tenantService.createTenantConfiguration({
+        tenant_id: tenant.id,
         config_type: 'llm',
         config_data: llmConfigs,
         is_active: true
@@ -571,7 +589,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       // Check health after saving if we have API key
       if (fieldExtractionConfig.api_key || fieldExtractionConfig.provider === 'ollama') {
         try {
-          const health = await apiClient.checkLLMHealth('field_extraction');
+          const healthService = serviceFactory.get<HealthService>('health');
+          const health = await healthService.checkLLMHealth({ config_type: 'field_extraction' });
           setLlmHealth({ healthy: health.healthy, error: health.error });
         } catch (err) {
           setLlmHealth({ healthy: false, error: 'Failed to check health' });
@@ -609,7 +628,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         document_extraction: documentExtractionConfig
       };
       
-      await apiClient.createTenantConfiguration({
+      if (!tenant) {
+        setError('No tenant selected');
+        return;
+      }
+      
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      await tenantService.createTenantConfiguration({
+        tenant_id: tenant.id,
         config_type: 'llm',
         config_data: llmConfigs,
         is_active: true
@@ -618,7 +644,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       // Check health after saving if we have API key or using Ollama
       if (documentExtractionConfig.api_key || documentExtractionConfig.provider === 'ollama') {
         try {
-          const health = await apiClient.checkLLMHealth('document_extraction');
+          const healthService = serviceFactory.get<HealthService>('health');
+          const health = await healthService.checkLLMHealth({ config_type: 'document_extraction' });
           setDocumentLlmHealth({ healthy: health.healthy, error: health.error });
         } catch (err) {
           setDocumentLlmHealth({ healthy: false, error: 'Failed to check health' });
@@ -641,7 +668,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       setSaving(true);
       setError(null);
       
-      await apiClient.createTenantConfiguration({
+      if (!tenant) {
+        setError('No tenant selected');
+        return;
+      }
+      
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      await tenantService.createTenantConfiguration({
+        tenant_id: tenant.id,
         config_type: 'rate_limits',
         config_data: rateLimitsConfig,
         is_active: true
@@ -672,7 +706,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       setTestingField(true);
       setFieldExtractionMessage(null);
       
-      const testResult = await apiClient.testLLMExtraction({
+      const healthService = serviceFactory.get<HealthService>('health');
+      const testResult = await healthService.testLLMExtraction({
         config_type: 'field_extraction',
         document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
         schema: {
@@ -711,7 +746,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       setTestingDocument(true);
       setDocumentExtractionMessage(null);
       
-      const testResult = await apiClient.testLLMExtraction({
+      const healthService = serviceFactory.get<HealthService>('health');
+      const testResult = await healthService.testLLMExtraction({
         config_type: 'document_extraction',
         document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
         schema: {
@@ -742,7 +778,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
 
   const handleResetRateLimits = async () => {
     try {
-      await apiClient.resetRateLimits();
+      const healthService = serviceFactory.get<HealthService>('health');
+      await healthService.resetRateLimits();
       setSuccess('Rate limits reset successfully');
       loadConfigurations();
     } catch (err) {
@@ -758,9 +795,9 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       setSaving(true);
       setError(null);
       
-      await apiClient.updateTenant(tenant.id, {
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      await tenantService.updateTenant(tenant.id, {
         name: editingTenant.name,
-        environment: editingTenant.environment,
         status: editingTenant.status,
         settings: {
           max_documents: editingTenant.max_documents,

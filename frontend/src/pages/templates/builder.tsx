@@ -5,8 +5,7 @@ import styled from 'styled-components';
 import { Settings, FileText, Play, Save, Eye, Upload, Download } from 'lucide-react';
 
 // import { Template } from '../../types/templates'; // Template type not available
-import { Document } from '../../services/api';
-import { apiClient } from '../../services/api';
+import { Document, TemplateService, DocumentService, ExtractionService, serviceFactory } from '../../services/api/index';
 import TemplateBuilder from '../../components/templates/TemplateBuilder';
 import DocumentViewer from '../../components/templates/DocumentViewer';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -202,7 +201,10 @@ const TemplateBuilderPage: React.FC = () => {
   // Fetch template data in edit mode
   const { data: template, isLoading, error, refetch } = useQuery(
     ['template', id],
-    () => apiClient.getTemplate(id as string),
+    () => {
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      return templateService.getTemplate(id as string);
+    },
     {
       enabled: isEditMode && !!id,
       staleTime: 0,
@@ -259,7 +261,8 @@ const TemplateBuilderPage: React.FC = () => {
 
   const loadTestDocument = async (documentId: string) => {
     try {
-      const document = await apiClient.getDocument(documentId);
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      const document = await documentService.getDocument(documentId);
       console.log('Loaded test document:', document);
       setSelectedDocument(document);
     } catch (error) {
@@ -351,7 +354,8 @@ const TemplateBuilderPage: React.FC = () => {
 
       if (isEditMode && templateData.id) {
         // Update existing template
-        await apiClient.updateTemplate(templateData.id, backendTemplateData);
+        const templateService = serviceFactory.get<TemplateService>('templates');
+        await templateService.updateTemplate(templateData.id, backendTemplateData);
         setNotification({
           isOpen: true,
           type: 'success',
@@ -360,7 +364,8 @@ const TemplateBuilderPage: React.FC = () => {
         });
       } else {
         // Create new template
-        const createdTemplate = await apiClient.createTemplate(backendTemplateData);
+        const templateService = serviceFactory.get<TemplateService>('templates');
+        const createdTemplate = await templateService.createTemplate(backendTemplateData);
         setTemplateData((prev: any) => ({ ...prev, id: createdTemplate.id }));
         setNotification({
           isOpen: true,
@@ -448,7 +453,8 @@ const TemplateBuilderPage: React.FC = () => {
           status: 'draft'
         };
 
-        const createdTemplate = await apiClient.createTemplate(backendTemplateData);
+        const templateService = serviceFactory.get<TemplateService>('templates');
+        const createdTemplate = await templateService.createTemplate(backendTemplateData);
         templateId = createdTemplate.id;
         
         // Update template data with the ID
@@ -483,7 +489,8 @@ const TemplateBuilderPage: React.FC = () => {
       }
 
       // Create extraction using real API
-      const extraction = await apiClient.createExtraction({
+      const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      const extraction = await extractionService.createExtraction({
         document_id: selectedDocument.id,
         template_id: templateId
       });
@@ -498,19 +505,20 @@ const TemplateBuilderPage: React.FC = () => {
       // Poll for extraction completion
       const pollExtraction = async () => {
         try {
-          const result = await apiClient.getExtraction(extraction.id);
+          const extractionService = serviceFactory.get<ExtractionService>('extractions');
+          const result = await extractionService.getExtraction(extraction.id);
           
           if (result.status === 'completed') {
             setExtractionResults({
               id: result.id,
               status: result.status,
               results: result.results,
-              confidence_score: result.confidence_score,
+              confidence_scores: result.confidence_scores,
               processing_time_ms: result.processing_time_ms,
               created_at: result.created_at
             });
             setIsExtracting(false);
-          } else if (result.status === 'error' || result.status === 'failed') {
+          } else if (result.status === 'failed') {
             const errorMsg = typeof result.error_message === 'string' 
               ? result.error_message 
               : JSON.stringify(result.error_message) || 'Extraction failed';
@@ -605,7 +613,8 @@ const TemplateBuilderPage: React.FC = () => {
       // Upload document immediately
       console.log('=== UPLOADING DOCUMENT ===');
       console.log('File:', file);
-      const uploadedDocument = await apiClient.uploadTestDocument(file, {
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      const uploadedDocument = await documentService.uploadTestDocument(file, {
         onUploadProgress: (progress) => {
           setUploadProgress(progress);
         }
