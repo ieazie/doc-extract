@@ -597,7 +597,8 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   // Fetch template details
   const { 
     data: template, 
-    isLoading: templateLoading 
+    isLoading: templateLoading,
+    error: templateError
   } = useQuery(
     ['template', extraction?.template_id],
     () => {
@@ -605,14 +606,37 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
       return templateService.getTemplate(extraction!.template_id);
     },
     {
-      enabled: isOpen && !!extraction?.template_id
+      enabled: isOpen && !!extraction?.template_id,
+      onError: (error) => {
+        console.error('Failed to load template:', error);
+      }
+    }
+  );
+
+  // Fetch document details (for language info)
+  const { 
+    data: documentData, 
+    isLoading: documentLoading,
+    error: documentError
+  } = useQuery(
+    ['document', extraction?.document_id],
+    () => {
+      console.log('Fetching document for ID:', extraction?.document_id);
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      return documentService.getDocument(extraction!.document_id);
+    },
+    {
+      enabled: isOpen && !!extraction?.document_id,
+      onError: (error) => {
+        console.error('Failed to load document:', error);
+      }
     }
   );
 
   // Fetch document content
   const { 
     data: documentContent, 
-    isLoading: documentLoading,
+    isLoading: documentContentLoading,
     error: documentContentError
   } = useQuery(
     ['document-content', extraction?.document_id],
@@ -623,9 +647,6 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     },
     {
       enabled: isOpen && !!extraction?.document_id,
-      onSuccess: (data) => {
-        console.log('Document content loaded successfully:', data);
-      },
       onError: (error) => {
         console.error('Failed to load document content:', error);
       }
@@ -898,8 +919,8 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                 {extraction.status}
               </StatusBadge>
             )}
-            {template && documentContent && (
-              <LanguageValidationInfoComponent template={template} document={documentContent} />
+            {template && documentData && (
+              <LanguageValidationInfoComponent template={template} document={documentData} />
             )}
           </HeaderLeft>
           
