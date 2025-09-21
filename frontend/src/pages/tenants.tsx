@@ -284,7 +284,7 @@ const TenantsPage: React.FC = () => {
       return tenantService.getTenants();
     },
     {
-      enabled: !!currentUser && currentUser.role === 'admin',
+      enabled: hasPermission('tenants:read_all'),
     }
   );
 

@@ -9,6 +9,8 @@ export class ApiError extends Error {
 
   constructor(message: string, status?: number, data?: any) {
     super(message);
+    // Ensure correct prototype for Error subclasses across TS/ES targets
+    Object.setPrototypeOf(this, new.target.prototype);
     this.status = status;
     this.data = data;
   }
@@ -19,6 +21,8 @@ export class NetworkError extends ApiError {
 
   constructor(message: string = 'Network error - please check your connection') {
     super(message);
+    // Ensure correct prototype for Error subclasses across TS/ES targets
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -28,6 +32,8 @@ export class AuthenticationError extends ApiError {
 
   constructor(message: string = 'Authentication failed') {
     super(message, 401);
+    // Ensure correct prototype for Error subclasses across TS/ES targets
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -37,6 +43,8 @@ export class AuthorizationError extends ApiError {
 
   constructor(message: string = 'Access denied') {
     super(message, 403);
+    // Ensure correct prototype for Error subclasses across TS/ES targets
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -46,6 +54,8 @@ export class ValidationError extends ApiError {
 
   constructor(message: string, data?: any) {
     super(message, 400, data);
+    // Ensure correct prototype for Error subclasses across TS/ES targets
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -55,6 +65,8 @@ export class NotFoundError extends ApiError {
 
   constructor(message: string = 'Resource not found') {
     super(message, 404);
+    // Ensure correct prototype for Error subclasses across TS/ES targets
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -64,6 +76,8 @@ export class ConflictError extends ApiError {
 
   constructor(message: string = 'Resource conflict') {
     super(message, 409);
+    // Ensure correct prototype for Error subclasses across TS/ES targets
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -73,6 +87,8 @@ export class RateLimitError extends ApiError {
 
   constructor(message: string = 'Rate limit exceeded') {
     super(message, 429);
+    // Ensure correct prototype for Error subclasses across TS/ES targets
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -82,6 +98,8 @@ export class ServerError extends ApiError {
 
   constructor(message: string = 'Internal server error') {
     super(message, 500);
+    // Ensure correct prototype for Error subclasses across TS/ES targets
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 

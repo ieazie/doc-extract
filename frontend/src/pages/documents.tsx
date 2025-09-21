@@ -265,6 +265,7 @@ const DocumentsPage: React.FC = () => {
         tags: mergedParams.tags,
         status: mergedParams.status,
         extraction_status: mergedParams.extraction_status,
+        job_status: mergedParams.job_status,
         sort_by: mergedParams.sort_by || 'created_at',
         sort_order: mergedParams.sort_order || 'desc'
       });

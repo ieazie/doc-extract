@@ -2,7 +2,7 @@
  * Edit Template Page
  * Redirects to unified template builder with template ID
  */
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 
 const EditTemplatePage: React.FC = () => {

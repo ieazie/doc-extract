@@ -34,7 +34,7 @@ export interface LanguageConfigCreate {
 export interface LanguageDetectionResult {
   language: string;
   confidence: number;
-  source: string;
+  source: DetectionSource;
   detected_at: string;
 }
 
@@ -158,9 +158,9 @@ export interface LanguageError {
 // Language Status Types
 export type LanguageStatus = 'active' | 'inactive' | 'deprecated' | 'experimental';
 
-export type DetectionSource = 'automatic' | 'manual' | 'fallback' | 'user_preference';
+export type DetectionSource = 'automatic' | 'manual' | 'fallback' | 'user_preference' | 'error';
 
-export type ValidationStatus = 'valid' | 'invalid' | 'warning' | 'unknown';
+export type LanguageValidationStatus = 'valid' | 'invalid' | 'warning' | 'unknown';
 
 // Language Constants
 export const DEFAULT_LANGUAGES = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko'];

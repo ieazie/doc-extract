@@ -200,21 +200,8 @@ export const UserDashboard: React.FC = () => {
       const categoryService = serviceFactory.get<CategoryService>('categories');
 
       const [statsData, categoriesData, documentsData] = await Promise.all([
-        // Create processing stats from document data
-        documentService.getDocuments({ page: 1, per_page: 1 }).then(response => ({
-          total_documents: response.total,
-          status_counts: {
-            pending: response.documents.filter((d: any) => d.extraction_status === 'pending').length,
-            processing: response.documents.filter((d: any) => d.extraction_status === 'processing').length,
-            completed: response.documents.filter((d: any) => d.extraction_status === 'completed').length,
-            failed: response.documents.filter((d: any) => d.extraction_status === 'failed').length
-          },
-          processing_rate: {
-            daily: 0.85,
-            weekly: 0.90
-          },
-          completion_rate: 0.90
-        })).catch((error) => {
+        // Get accurate processing stats from dedicated endpoint
+        documentService.getProcessingStats().catch((error) => {
           console.error('Failed to load processing stats:', error);
           return null;
         }),
@@ -280,7 +267,7 @@ export const UserDashboard: React.FC = () => {
         <StatCard accent="#3b82f6">
           <StatValue>{stats?.total_documents || 0}</StatValue>
           <StatLabel>My Documents</StatLabel>
-          <StatDescription>Documents you've uploaded</StatDescription>
+          <StatDescription>Documents you&apos;ve uploaded</StatDescription>
         </StatCard>
 
         <StatCard accent="#10b981">

@@ -56,6 +56,7 @@ export interface DocumentListParams {
   category_id?: string;
   status?: string;
   extraction_status?: string;
+  job_status?: string;
   search?: string;
   tags?: string[];
   sort_by?: string;

@@ -20,5 +20,6 @@ export function formatFileSize(bytes: number): string {
  */
 export function formatDate(date: string | Date): string {
   const d = new Date(date);
-  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
 }

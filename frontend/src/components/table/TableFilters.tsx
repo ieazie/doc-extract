@@ -58,10 +58,22 @@ export const TableFilters: React.FC<TableFiltersProps> = ({
               <Dropdown
                 value={filterValues[filter.key] || ''}
                 onChange={(value) => handleFilterChange(filter.key, value)}
-                options={[
-                  { value: '', label: `All ${filter.label}` },
-                  ...(filter.options || [])
-                ]}
+                options={(() => {
+                  const existingOptions = filter.options || [];
+                  // Check if there's already an option with empty value
+                  const hasEmptyOption = existingOptions.some(option => option.value === '');
+                  
+                  if (hasEmptyOption) {
+                    // Use existing options as-is if there's already an empty value option
+                    return existingOptions;
+                  } else {
+                    // Add "All" option only if there isn't already an empty value option
+                    return [
+                      { value: '', label: `All ${filter.label}` },
+                      ...existingOptions
+                    ];
+                  }
+                })()}
                 placeholder={`Select ${filter.label}`}
                 size="compact"
               />

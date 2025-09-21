@@ -2,6 +2,11 @@
  * Data Extraction Types
  */
 import { TenantEntity, BaseEntity } from '../../base/types/common';
+import { 
+  ScheduleType, 
+  JobsExecutionRequest, 
+  JobsExecutionResponse 
+} from '../../jobs/types/jobs';
 
 // Core Extraction Types
 export interface Extraction {
@@ -70,7 +75,7 @@ export interface ExtractionJob {
   description?: string;
   category_id: string;
   template_id: string;
-  schedule_type: 'immediate' | 'scheduled' | 'recurring';
+  schedule_type: ScheduleType;
   schedule_config?: {
     cron?: string;
     timezone?: string;
@@ -92,7 +97,7 @@ export interface ExtractionJobCreate {
   description?: string;
   category_id: string;
   template_id: string;
-  schedule_type: 'immediate' | 'scheduled' | 'recurring';
+  schedule_type: ScheduleType;
   schedule_config?: {
     cron?: string;
     timezone?: string;
@@ -109,7 +114,7 @@ export interface ExtractionJobCreate {
 export interface ExtractionJobUpdate {
   name?: string;
   description?: string;
-  schedule_type?: 'immediate' | 'scheduled' | 'recurring';
+  schedule_type?: ScheduleType;
   schedule_config?: {
     cron?: string;
     timezone?: string;
@@ -132,18 +137,11 @@ export interface ExtractionJobListResponse {
   total_pages: number;
 }
 
-// Job Execution Types
-export interface JobExecutionRequest {
-  triggered_by: 'manual' | 'immediate';
-}
-
-export interface JobExecutionResponse {
-  job_id: string;
-  execution_started: boolean;
-  documents_queued: number;
-  task_id?: string;
-  message: string;
-}
+// Job Execution Types (alias to canonical jobs module)
+export type { 
+  JobsExecutionRequest as JobExecutionRequest, 
+  JobsExecutionResponse as JobExecutionResponse 
+};
 
 // Extraction Review Types
 export interface ExtractionReview {
@@ -195,5 +193,3 @@ export interface ReviewActionRequest {
   action: 'approve' | 'reject' | 'start_review';
   reason?: string;
 }
-
-export type ScheduleType = 'immediate' | 'scheduled' | 'recurring';

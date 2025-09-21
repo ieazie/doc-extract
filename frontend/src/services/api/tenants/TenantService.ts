@@ -10,6 +10,8 @@ import {
   TenantUpdateRequest,
   TenantListParams,
   TenantConfiguration,
+  TenantConfigurationRead,
+  TenantConfigurationWrite,
   TenantConfigurationCreate,
   TenantConfigurationUpdate,
   TenantConfigSummary,
@@ -64,22 +66,22 @@ export class TenantService extends BaseApiClient {
     return this.get<TenantConfigSummary>('/api/tenant/configurations/summary');
   }
 
-  async getTenantConfiguration(configType: 'llm' | 'rate_limits'): Promise<TenantConfiguration> {
-    return this.get<TenantConfiguration>(`/api/tenant/configurations/${configType}`);
+  async getTenantConfiguration(configType: TenantConfiguration['config_type']): Promise<TenantConfigurationRead> {
+    return this.get<TenantConfigurationRead>(`/api/tenant/configurations/${configType}`);
   }
 
-  async createTenantConfiguration(config: TenantConfigurationCreate): Promise<TenantConfiguration> {
-    return this.post<TenantConfiguration>('/api/tenant/configurations', config);
+  async createTenantConfiguration(config: TenantConfigurationCreate): Promise<TenantConfigurationWrite> {
+    return this.post<TenantConfigurationWrite>('/api/tenant/configurations', config);
   }
 
   async updateTenantConfiguration(
-    configType: 'llm' | 'rate_limits',
+    configType: TenantConfiguration['config_type'],
     updates: TenantConfigurationUpdate
-  ): Promise<TenantConfiguration> {
-    return this.put<TenantConfiguration>(`/api/tenant/configurations/${configType}`, updates);
+  ): Promise<TenantConfigurationWrite> {
+    return this.put<TenantConfigurationWrite>(`/api/tenant/configurations/${configType}`, updates);
   }
 
-  async deleteTenantConfiguration(configType: 'llm' | 'rate_limits'): Promise<void> {
+  async deleteTenantConfiguration(configType: TenantConfiguration['config_type']): Promise<void> {
     await this.delete<void>(`/api/tenant/configurations/${configType}`);
   }
 

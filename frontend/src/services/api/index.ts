@@ -96,9 +96,37 @@ serviceFactory.register('health', new HealthService(axiosInstance));
 // Export the factory for advanced usage
 export { serviceFactory, axiosInstance };
 
-// Export base classes and types
+// Export base class and type aliases (avoid name clashes with error classes)
 export { BaseApiClient } from './base/BaseApiClient';
-export * from './base/types/common';
+export type {
+  ApiError as ApiErrorType,
+  NetworkError as NetworkErrorType,
+  ValidationError as ValidationErrorType,
+  AuthenticationError as AuthenticationErrorType,
+  AuthorizationError as AuthorizationErrorType,
+  NotFoundError as NotFoundErrorType,
+  ConflictError as ConflictErrorType,
+  RateLimitError as RateLimitErrorType,
+  ServerError as ServerErrorType,
+} from './base/types/common';
+export type {
+  PaginationParams,
+  PaginatedResponse,
+  SortParams,
+  FilterParams,
+  RequestConfig,
+  ResponseMetadata,
+  BaseEntity,
+  TenantEntity,
+  Status,
+  ProcessingStatus,
+  DataValidationStatus,
+  CreateRequest,
+  UpdateRequest,
+  ListParams,
+  BulkOperationRequest,
+  BulkOperationResponse
+} from './base/types/common';
 
 // Export error classes (avoid conflicts with common types)
 export {
@@ -188,6 +216,8 @@ export type {
   TenantCreateRequest,
   TenantUpdateRequest,
   TenantConfiguration,
+  TenantConfigurationRead,
+  TenantConfigurationWrite,
   TenantConfigurationCreate,
   TenantConfigurationUpdate,
   TenantConfigSummary,
@@ -198,12 +228,20 @@ export type {
   InfrastructureConfig,
   AvailableEnvironments,
   EnvironmentSecret,
+  EnvironmentSecretRead,
+  EnvironmentSecretWrite,
   EnvironmentSecretUpdate,
   EnvironmentConfig,
   AvailableModelsResponse,
   StorageConfig,
+  StorageConfigRead,
+  StorageConfigWrite,
   CacheConfig,
+  CacheConfigRead,
+  CacheConfigWrite,
   MessageQueueConfig,
+  MessageQueueConfigRead,
+  MessageQueueConfigWrite,
   LLMConfig,
   RateLimitsConfig,
   TenantLLMConfigs
@@ -240,8 +278,8 @@ export type {
   JobUpdateRequest,
   JobListResponse,
   JobExecution,
-  JobExecutionRequest as JobExecutionRequestType,
-  JobExecutionResponse as JobExecutionResponseType,
+  JobsExecutionRequest,
+  JobsExecutionResponse,
   JobHistoryResponse,
   JobStatistics,
   JobMonitor,

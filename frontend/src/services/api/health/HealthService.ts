@@ -16,6 +16,7 @@ import {
   RateLimitResetRequest,
   RateLimitResetResponse,
   AvailableModelsResponse,
+  ModelInfo,
   HealthMonitoringConfig,
   DEFAULT_HEALTH_THRESHOLDS
 } from './types/health';
@@ -27,7 +28,7 @@ export class HealthService extends BaseApiClient {
 
   // Basic Health Checks
   async getHealth(): Promise<HealthStatus> {
-    return this.get<HealthStatus>('/health');
+    return this.get<HealthStatus>('/health/detailed');
   }
 
   async getDetailedHealth(): Promise<DetailedHealthStatus> {
@@ -87,7 +88,7 @@ export class HealthService extends BaseApiClient {
       provider: string;
       model: string;
       tokens_used?: number;
-    }>('/health/llm/test-extraction', testData);
+    }>('/api/tenant/llm/test-extraction', testData);
   }
 
   // Available Models
@@ -95,22 +96,8 @@ export class HealthService extends BaseApiClient {
     return this.get<AvailableModelsResponse[]>('/health/llm/models');
   }
 
-  async getModelInfo(provider: string, model: string): Promise<{
-    provider: string;
-    model: string;
-    capabilities: string[];
-    limits: Record<string, any>;
-    status: string;
-    last_tested?: string;
-  }> {
-    return this.get<{
-      provider: string;
-      model: string;
-      capabilities: string[];
-      limits: Record<string, any>;
-      status: string;
-      last_tested?: string;
-    }>(`/health/llm/models/${provider}/${model}`);
+  async getModelInfo(provider: string, model: string): Promise<ModelInfo> {
+    return this.get<ModelInfo>(`/health/llm/models/${provider}/${model}`);
   }
 
   // Rate Limit Status
@@ -194,9 +181,7 @@ export class HealthService extends BaseApiClient {
         timestamp: string;
         metrics: Record<string, number>;
       }>;
-    }>('/health/performance', {
-      params: dateRange
-    });
+    }>('/health/performance', dateRange);
   }
 
   // System Alerts
@@ -334,10 +319,8 @@ export class HealthService extends BaseApiClient {
       status: string;
       metrics: Record<string, any>;
     }>>('/health/history', {
-      params: {
-        service: serviceName,
-        ...dateRange
-      }
+      service: serviceName,
+      ...dateRange
     });
   }
 

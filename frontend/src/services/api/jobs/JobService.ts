@@ -11,8 +11,8 @@ import {
   JobListParams,
   JobListResponse,
   JobExecution,
-  JobExecutionRequest,
-  JobExecutionResponse,
+  JobsExecutionRequest,
+  JobsExecutionResponse,
   JobHistoryResponse,
   JobStatistics,
   JobMonitor,
@@ -51,8 +51,8 @@ export class JobService extends BaseApiClient {
   }
 
   // Job Execution
-  async executeJob(jobId: string, request?: JobExecutionRequest): Promise<JobExecutionResponse> {
-    return this.post<JobExecutionResponse>(`/api/jobs/${jobId}/execute`, request || {
+  async executeJob(jobId: string, request?: JobsExecutionRequest): Promise<JobsExecutionResponse> {
+    return this.post<JobsExecutionResponse>(`/api/jobs/${jobId}/execute`, request || {
       triggered_by: 'manual'
     });
   }
@@ -87,7 +87,7 @@ export class JobService extends BaseApiClient {
     date_from?: string;
     date_to?: string;
   }): Promise<JobHistoryResponse> {
-    return this.get<JobHistoryResponse>(`/api/jobs/${jobId}/history`, { params });
+    return this.get<JobHistoryResponse>(`/api/jobs/${jobId}/history`, params);
   }
 
   async getJobStatistics(jobId: string): Promise<JobStatistics> {
@@ -121,14 +121,12 @@ export class JobService extends BaseApiClient {
       page: number;
       per_page: number;
       total_pages: number;
-    }>(`/api/jobs/${params.job_id}/execution-history`, { 
-      params: {
-        page: params.page,
-        per_page: params.per_page,
-        status: params.status,
-        date_from: params.date_from,
-        date_to: params.date_to
-      }
+    }>(`/api/jobs/${params.job_id}/execution-history`, {
+      page: params.page,
+      per_page: params.per_page,
+      status: params.status,
+      date_from: params.date_from,
+      date_to: params.date_to
     });
   }
 
@@ -277,7 +275,7 @@ export class JobService extends BaseApiClient {
     });
   }
 
-  async bulkExecuteJobs(jobIds: string[], request?: JobExecutionRequest): Promise<{
+  async bulkExecuteJobs(jobIds: string[], request?: JobsExecutionRequest): Promise<{
     success_count: number;
     failure_count: number;
     executions: Array<{
@@ -335,9 +333,7 @@ export class JobService extends BaseApiClient {
         executions: number;
         success_rate: number;
       }>;
-    }>('/api/jobs/analytics', {
-      params: dateRange
-    });
+    }>('/api/jobs/analytics', dateRange);
   }
 
   // Utility Methods

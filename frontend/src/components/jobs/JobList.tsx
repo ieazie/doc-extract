@@ -239,6 +239,8 @@ export const JobList: React.FC<JobListProps> = ({
         page: apiParams.page,
         per_page: apiParams.perPage,
         search: apiParams.search,
+        category_id: apiParams.categoryId,
+        template_id: apiParams.templateId,
         is_active: apiParams.isActive,
         schedule_type: apiParams.scheduleType,
         sort_by: apiParams.sortBy,

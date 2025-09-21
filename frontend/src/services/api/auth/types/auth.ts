@@ -1,7 +1,12 @@
 /**
  * Authentication and User Management Types
  */
-import { TenantEntity } from '../../base/types/common';
+// Use the canonical Tenant types
+import type {
+  Tenant,
+  TenantCreateRequest,
+  TenantUpdateRequest,
+} from '../../tenants/types/tenants';
 
 // Authentication Types
 export interface LoginCredentials {
@@ -13,28 +18,8 @@ export interface LoginResponse {
   access_token: string;
   token_type: string;
   expires_in: number;
-  user: {
-    id: string;
-    email: string;
-    first_name: string;
-    last_name: string;
-    role: string;
-    status: string;
-    tenant_id: string;
-    last_login?: string;
-    created_at: string;
-    updated_at: string;
-  };
-  tenant: {
-    id: string;
-    name: string;
-    slug: string;
-    settings: Record<string, any>;
-    status: string;
-    environment: string;
-    created_at: string;
-    updated_at: string;
-  };
+  user: User;
+  tenant: Tenant;
 }
 
 // User Types
@@ -45,7 +30,7 @@ export interface User {
   last_name: string;
   role: string;
   status: string;
-  tenant_id: string;
+  tenant_id: string | null;
   last_login?: string;
   created_at: string;
   updated_at: string;
@@ -70,31 +55,7 @@ export interface UserUpdateRequest {
   status?: string;
 }
 
-// Tenant Types
-export interface Tenant {
-  id: string;
-  name: string;
-  slug: string;
-  settings: Record<string, any>;
-  status: string;
-  environment: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TenantCreateRequest {
-  name: string;
-  slug: string;
-  environment: string;
-  settings?: Record<string, any>;
-}
-
-export interface TenantUpdateRequest {
-  name?: string;
-  slug?: string;
-  settings?: Record<string, any>;
-  status?: string;
-}
+// Tenant types are imported from tenants/types/tenants
 
 // Permission Types
 export interface UserPermissions {

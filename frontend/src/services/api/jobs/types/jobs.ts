@@ -65,6 +65,8 @@ export interface JobListParams {
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
   created_by?: string;
+  category_id?: string;
+  template_id?: string;
 }
 
 export interface JobListResponse {
@@ -141,13 +143,13 @@ export interface JobExecution extends BaseEntity {
   triggered_by_user?: string;
 }
 
-export interface JobExecutionRequest {
+export interface JobsExecutionRequest {
   triggered_by: 'manual' | 'api';
   parameters?: Record<string, any>;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
 }
 
-export interface JobExecutionResponse {
+export interface JobsExecutionResponse {
   execution_id: string;
   job_id: string;
   status: string;

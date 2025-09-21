@@ -128,8 +128,18 @@ export class DocumentService extends BaseApiClient {
   }
 
   // Document Content and Preview
-  async getDocumentContent(documentId: string): Promise<DocumentContent> {
-    return this.get<DocumentContent>(`/api/documents/${documentId}/content`);
+  async getDocumentContent(documentId: string): Promise<DocumentContent | null> {
+    try {
+      return await this.get<DocumentContent>(`/api/documents/${documentId}/content`);
+    } catch (error: any) {
+      // Handle 404 gracefully - document content might not exist yet
+      if (error?.status === 404 || error?.name === 'NotFoundError') {
+        console.log('Document content not found for ID:', documentId);
+        return null;
+      }
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   async getDocumentPreview(documentId: string): Promise<DocumentPreview> {
@@ -138,25 +148,12 @@ export class DocumentService extends BaseApiClient {
 
   // Document Downloads and Thumbnails
   async getDocumentDownloadUrl(documentId: string): Promise<string> {
-    // This endpoint redirects, so we get the redirect URL
-    const response = await this.request<any>({
-      method: 'GET',
-      url: `/api/documents/${documentId}/download`,
-      maxRedirects: 0,
-      validateStatus: (status) => status === 302
-    });
-    return (response as any).headers?.location || '';
+    // Return the endpoint; let the caller navigate to it
+    return `/api/documents/${documentId}/download`;
   }
 
   async getDocumentThumbnailUrl(documentId: string): Promise<string> {
-    // This endpoint redirects, so we get the redirect URL
-    const response = await this.request<any>({
-      method: 'GET',
-      url: `/api/documents/${documentId}/thumbnail`,
-      maxRedirects: 0,
-      validateStatus: (status) => status === 302
-    });
-    return (response as any).headers?.location || '';
+    return `/api/documents/${documentId}/thumbnail`;
   }
 
   // Document Tracking
@@ -170,7 +167,7 @@ export class DocumentService extends BaseApiClient {
 
   // Document Statistics
   async getProcessingStats(): Promise<ProcessingStats> {
-    return this.get<ProcessingStats>('/api/documents/processing-stats');
+    return this.get<ProcessingStats>('/api/documents/stats/processing');
   }
 
   // Batch Operations

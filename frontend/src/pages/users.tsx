@@ -14,7 +14,7 @@ import {
   XCircle
 } from 'lucide-react';
 
-import { AuthService, serviceFactory } from '@/services/api/index';
+import { AuthService, serviceFactory, User } from '@/services/api/index';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -23,19 +23,7 @@ import { SuccessMessage } from '@/components/common/SuccessMessage';
 import { Table, ColumnDefinition } from '@/components/table/Table';
 import { ActionButton, ActionGroup } from '@/components/table/Table.styled';
 
-// Types
-interface User {
-  id: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  role: string;
-  status: string;
-  tenant_id: string;
-  last_login?: string | null;
-  created_at: string;
-  updated_at: string;
-}
+// Types - User interface is imported from services/api
 
 interface CreateUserData {
   email: string;

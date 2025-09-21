@@ -1090,7 +1090,12 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         try {
           const documentService = serviceFactory.get<DocumentService>('documents');
           const contentResponse = await documentService.getDocumentContent(selectedDocument.id);
-          documentContent = contentResponse.content;
+          if (contentResponse) {
+            documentContent = contentResponse.content;
+          } else {
+            setGenerationError('Document content not available. Please try again.');
+            return;
+          }
         } catch (error) {
           console.error('Failed to fetch document content:', error);
           setGenerationError('Failed to fetch document content. Please try again.');

@@ -68,7 +68,7 @@ export class CategoryService extends BaseApiClient {
     if (sortBy) params.sort_by = sortBy;
     if (sortOrder) params.sort_order = sortOrder;
 
-    return this.get<CategoryDocumentsResponse>(`/api/categories/${categoryId}/documents`, { params });
+    return this.get<CategoryDocumentsResponse>(`/api/categories/${categoryId}/documents`, params);
   }
 
   async getCategoryUsageStats(): Promise<CategoryUsageStats> {

@@ -385,7 +385,15 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
 
       const extractionService = serviceFactory.get<ExtractionService>('extractions');
       const response = await extractionService.startReview(extractionId, request);
-      onStatusChange('pending');
+      
+      // Set the appropriate status based on the action
+      const nextStatusMap: Record<string, ReviewStatus> = {
+        start_review: 'in_review',
+        approve: 'approved',
+        reject: 'rejected',
+        needs_correction: 'needs_correction',
+      };
+      onStatusChange(nextStatusMap[action] ?? currentStatus);
       
       // Call the appropriate callback
       switch (action) {
@@ -440,7 +448,14 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
 
       const extractionService = serviceFactory.get<ExtractionService>('extractions');
       const response = await extractionService.startReview(extractionId, request);
-      onStatusChange('pending');
+      
+      // Set the appropriate status based on the action
+      const nextStatusMap: Record<string, ReviewStatus> = {
+        approve: 'approved',
+        reject: 'rejected',
+        needs_correction: 'needs_correction',
+      };
+      onStatusChange(nextStatusMap[commentAction] ?? currentStatus);
       
       // Call the appropriate callback
       switch (commentAction) {

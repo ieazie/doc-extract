@@ -137,7 +137,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Listen for auth logout events from API client
     const handleAuthLogout = () => {
-      console.log('Auth logout event received, clearing auth data');
       clearAuthData();
     };
 
@@ -152,7 +151,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const clearAuthData = () => {
-    console.log('Clearing auth data');
     setUser(null);
     setTenant(null);
     setTokens(null);
@@ -176,7 +174,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Set the auth token for all services immediately
       serviceFactory.setAuthToken(response.access_token);
-      console.log('Token set in service factory:', response.access_token.substring(0, 20) + '...');
       
       // Store tokens and user data
       setTokens({
@@ -353,15 +350,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const isAuthenticated = !!user && !!tokens;
   
-  // Debug authentication state changes
-  React.useEffect(() => {
-    console.log('Auth state changed:', { 
-      hasUser: !!user, 
-      hasTokens: !!tokens, 
-      isAuthenticated,
-      userEmail: user?.email 
-    });
-  }, [user, tokens, isAuthenticated]);
 
   const value: AuthContextType = {
     user,

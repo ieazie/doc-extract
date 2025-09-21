@@ -10,13 +10,15 @@ import {
   User,
   UserCreateRequest,
   UserUpdateRequest,
-  Tenant,
-  TenantCreateRequest,
-  TenantUpdateRequest,
   UserPermissions,
   TenantSwitchRequest,
   TenantSwitchResponse
 } from './types/auth';
+import type {
+  Tenant,
+  TenantCreateRequest,
+  TenantUpdateRequest
+} from '../tenants/types/tenants';
 
 export class AuthService extends BaseApiClient {
   constructor(client: AxiosInstance) {

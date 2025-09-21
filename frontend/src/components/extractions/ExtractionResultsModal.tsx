@@ -641,7 +641,6 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   } = useQuery(
     ['document-content', extraction?.document_id],
     () => {
-      console.log('Fetching document content for ID:', extraction?.document_id);
       const documentService = serviceFactory.get<DocumentService>('documents');
       return documentService.getDocumentContent(extraction!.document_id);
     },
@@ -649,6 +648,13 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
       enabled: isOpen && !!extraction?.document_id,
       onError: (error) => {
         console.error('Failed to load document content:', error);
+      },
+      // Handle 404 as success (document content might not exist)
+      retry: (failureCount, error: any) => {
+        if (error?.status === 404 || error?.name === 'NotFoundError') {
+          return false; // Don't retry 404 errors
+        }
+        return failureCount < 3; // Retry other errors up to 3 times
       }
     }
   );
@@ -661,14 +667,13 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   } = useQuery(
     ['document-preview', extraction?.document_id],
     () => {
-      console.log('Fetching document preview for ID:', extraction?.document_id);
       const documentService = serviceFactory.get<DocumentService>('documents');
       return documentService.getDocumentPreview(extraction!.document_id);
     },
     {
       enabled: isOpen && !!extraction?.document_id,
       onSuccess: (data) => {
-        console.log('Document preview loaded successfully:', data);
+        // Document preview loaded successfully
       },
       onError: (error) => {
         console.error('Failed to load document preview:', error);
@@ -716,7 +721,6 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     // For now, we'll use a default status
     if (extraction) {
       setReviewStatus('pending');
-      console.log('Extraction loaded, setting default review status to pending');
     }
   }, [extraction]);
 
@@ -726,19 +730,12 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
       // Only run confidence detection if we have actual confidence scores
       const hasConfidenceData = extraction.confidence_scores && typeof extraction.confidence_scores === 'object' && Object.keys(extraction.confidence_scores).length > 0;
       
-      console.log('DEBUG - Extraction confidence data:', {
-        confidence_scores: extraction.confidence_scores,
-        hasConfidenceData,
-        results: extraction.results
-      });
-      
       const confidenceThreshold = template.extraction_settings?.confidence_threshold || 0.7;
       const detection = detectLowConfidenceFields(
         extraction.results, 
         extraction.confidence_scores, 
         confidenceThreshold
       );
-      console.log('DEBUG - Confidence detection result:', detection);
       setFlaggedFields(detection.flaggedFields);
       // Initialize all flagged fields as visible
       setVisibleFields(new Set(detection.flaggedFields.map(field => field.path)));

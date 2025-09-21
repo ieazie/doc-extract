@@ -27,37 +27,18 @@ export interface FilterParams {
   [key: string]: any;
 }
 
-// Error handling
-export interface ApiError extends Error {
-  status?: number;
-  data?: any;
-  name: string;
-}
-
-export interface NetworkError extends Error {
-  name: 'NetworkError';
-}
-
-export interface ValidationError extends Error {
-  name: 'ValidationError';
-  status: 400;
-  data?: any;
-}
-
-export interface AuthenticationError extends Error {
-  name: 'AuthenticationError';
-  status: 401;
-}
-
-export interface AuthorizationError extends Error {
-  name: 'AuthorizationError';
-  status: 403;
-}
-
-export interface NotFoundError extends Error {
-  name: 'NotFoundError';
-  status: 404;
-}
+// Error handling - Import error classes from ApiErrors.ts
+export type {
+  ApiError,
+  NetworkError,
+  ValidationError,
+  AuthenticationError,
+  AuthorizationError,
+  NotFoundError,
+  ConflictError,
+  RateLimitError,
+  ServerError
+} from '../errors/ApiErrors';
 
 // Request configuration
 export interface RequestConfig {
@@ -89,7 +70,7 @@ export type Status = 'active' | 'inactive' | 'pending' | 'failed' | 'completed';
 
 export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
-export type ValidationStatus = 'pending' | 'validated' | 'rejected' | 'corrected';
+export type DataValidationStatus = 'pending' | 'validated' | 'rejected' | 'corrected';
 
 // Common request/response patterns
 export interface CreateRequest {

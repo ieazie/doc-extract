@@ -301,14 +301,10 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
     setLoading(true);
     setError(null);
     try {
-      console.log('Loading infrastructure data for:', tenantInfo.slug, currentEnvironment);
-      
       // Try to load each piece of data individually to better identify failures
       try {
         const tenantService = serviceFactory.get<TenantService>('tenants');
-        console.log('Attempting to get infrastructure status...');
         const status = await tenantService.getInfrastructureStatus(tenantInfo.slug, currentEnvironment);
-        console.log('Infrastructure status loaded:', status);
         setInfrastructureStatus(status);
       } catch (statusErr: any) {
         console.error('Failed to load infrastructure status:', statusErr);
@@ -317,9 +313,7 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
 
       try {
         const tenantService = serviceFactory.get<TenantService>('tenants');
-        console.log('Attempting to get infrastructure config...');
         const config = await tenantService.getInfrastructureConfig(tenantInfo.slug, currentEnvironment);
-        console.log('Infrastructure config loaded:', config);
         setInfrastructureConfig(config);
       } catch (configErr: any) {
         console.error('Failed to load infrastructure config:', configErr);
@@ -328,9 +322,7 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
 
       try {
         const tenantService = serviceFactory.get<TenantService>('tenants');
-        console.log('Attempting to get environment secrets...');
         const secrets = await tenantService.getEnvironmentSecrets(currentEnvironment);
-        console.log('Environment secrets loaded:', secrets);
         setEnvironmentSecrets(secrets || []);
       } catch (secretsErr: any) {
         console.error('Failed to load environment secrets:', secretsErr);

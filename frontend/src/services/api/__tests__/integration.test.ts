@@ -4,7 +4,9 @@
  */
 
 // @ts-ignore - Jest globals
-declare const describe: any, it: any, expect: any, beforeAll: any, fail: any;
+declare const describe: any, it: any, expect: any, beforeAll: any, fail: any, jest: any;
+
+import axios from 'axios';
 import {
   AuthService, 
   DocumentService, 
@@ -17,6 +19,9 @@ import {
   HealthService,
   serviceFactory
 } from '../index';
+
+// Mock axios responses
+const mockAxios = axios as any;
 
 // Mock data for testing
 const mockCredentials = {
@@ -91,7 +96,25 @@ describe('Domain Services Integration Tests', () => {
   let healthService: HealthService;
 
   beforeAll(() => {
-    // Get services from factory
+    // Setup axios mocks to prevent real HTTP calls
+    const mockAxiosInstance = {
+      get: jest.fn(),
+      post: jest.fn(),
+      put: jest.fn(),
+      patch: jest.fn(),
+      delete: jest.fn(),
+      request: jest.fn(),
+      interceptors: {
+        request: { use: jest.fn(), eject: jest.fn() },
+        response: { use: jest.fn(), eject: jest.fn() },
+      },
+      defaults: {},
+    };
+
+    // Mock axios.create to return our mock instance
+    mockAxios.create.mockReturnValue(mockAxiosInstance as any);
+
+    // Get services from factory (now using mocked axios)
     authService = serviceFactory.get<AuthService>('auth');
     documentService = serviceFactory.get<DocumentService>('documents');
     templateService = serviceFactory.get<TemplateService>('templates');
@@ -105,6 +128,39 @@ describe('Domain Services Integration Tests', () => {
 
   describe('Authentication Flow Integration', () => {
     it('should handle complete authentication workflow', async () => {
+      // Mock login response
+      const mockLoginResponse = {
+        access_token: 'mock-token',
+        user: { id: 'user-1', email: 'test@example.com', role: 'admin' }
+      };
+
+      // Mock current user response
+      const mockUserResponse = {
+        id: 'user-1',
+        email: 'test@example.com',
+        role: 'admin'
+      };
+
+      // Mock current tenant response
+      const mockTenantResponse = {
+        id: 'tenant-1',
+        name: 'Test Tenant'
+      };
+
+      // Mock permissions response
+      const mockPermissionsResponse = {
+        permissions: ['documents:read', 'documents:write'],
+        role: 'admin'
+      };
+
+      // Setup axios mocks
+      const mockAxiosInstance = (mockAxios.create as any).mock.results[0].value;
+      mockAxiosInstance.post.mockResolvedValueOnce({ data: mockLoginResponse });
+      mockAxiosInstance.get
+        .mockResolvedValueOnce({ data: mockUserResponse })
+        .mockResolvedValueOnce({ data: mockTenantResponse })
+        .mockResolvedValueOnce({ data: mockPermissionsResponse });
+
       // Test login
       const loginResponse = await authService.login(mockCredentials);
       expect(loginResponse).toHaveProperty('access_token');
@@ -320,11 +376,7 @@ describe('Domain Services Integration Tests', () => {
 
   describe('Cross-Domain Integration Workflows', () => {
     it('should handle document upload with template extraction workflow', async () => {
-      // 1. Create category
-      const category = await categoryService.createCategory(mockCategory);
-      const categoryId = category.id;
-
-      // 2. Create template
+      // 1. Create template
       const template = await templateService.createTemplate({
         ...mockTemplate,
         name: 'Cross-domain Test Template'

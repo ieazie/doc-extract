@@ -1,13 +1,41 @@
 /**
- * Mock implementation of Axios for testing API services
- * Note: This is a simplified mock for development. Full testing setup will be added later.
+ * Jest-friendly Axios mock that supports axios.create(...) and verb methods.
  */
-import { AxiosInstance } from 'axios';
+import type { AxiosInstance } from 'axios';
 
-// Simplified mock for now - full implementation will be added when testing is set up
-export const mockAxiosInstance = {} as AxiosInstance;
+// Jest type declarations for this mock file
+declare const jest: any;
 
-// Note: Mock implementations will be added when actual testing is set up
-// For now, these are just placeholder functions
+// Per-instance verb stubs
+const instanceMethods = {
+  get:    jest.fn(),
+  post:   jest.fn(),
+  put:    jest.fn(),
+  patch:  jest.fn(),
+  delete: jest.fn(),
+  request: jest.fn(),
+};
 
-export default mockAxiosInstance;
+// Interceptor stubs
+const interceptors = {
+  request: { use: jest.fn(), eject: jest.fn() },
+  response: { use: jest.fn(), eject: jest.fn() },
+};
+
+export const mockAxiosInstance = {
+  ...instanceMethods,
+  interceptors,
+  defaults: {} as any,
+} as unknown as AxiosInstance;
+
+// Default export that mimics the axios module
+const mockAxios: any = {
+  ...instanceMethods,
+  interceptors,
+  defaults: {} as any,
+  create: jest.fn(() => mockAxiosInstance),
+  isAxiosError: (e: any) => !!e?.isAxiosError,
+};
+
+export { mockAxios };
+export default mockAxios;

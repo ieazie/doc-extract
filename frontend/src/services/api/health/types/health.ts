@@ -275,6 +275,26 @@ export interface RateLimitResetResponse {
   message: string;
 }
 
+// Model Info for individual model details
+export interface ModelInfo {
+  provider: string;
+  model: string;
+  capabilities: {
+    field_extraction: boolean;
+    document_extraction: boolean;
+    language_detection: boolean;
+    summarization: boolean;
+  };
+  limits: {
+    max_tokens: number;
+    max_input_length: number;
+    requests_per_minute: number;
+    tokens_per_minute: number;
+  };
+  status: string;
+  last_tested?: string;
+}
+
 // Available Models
 export interface AvailableModelsResponse {
   provider: string;

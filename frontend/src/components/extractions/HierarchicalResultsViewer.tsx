@@ -381,15 +381,7 @@ export const HierarchicalResultsViewer: React.FC<HierarchicalResultsViewerProps>
   // Low confidence field detection
   const confidenceThreshold = getConfidenceThreshold(templateSettings);
   
-  console.log('DEBUG - HierarchicalResultsViewer confidence data:', {
-    confidenceScores,
-    showLowConfidenceFlags,
-    results
-  });
-  
   const lowConfidenceDetection = detectLowConfidenceFields(results, confidenceScores, confidenceThreshold);
-    
-  console.log('DEBUG - Low confidence detection result:', lowConfidenceDetection);
   
   const lowConfidenceFieldsMap = new Map(
     lowConfidenceDetection.flaggedFields.map(field => [field.path, field])
