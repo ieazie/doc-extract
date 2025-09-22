@@ -22,7 +22,7 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { SuccessMessage } from '@/components/common/SuccessMessage';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
-import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant, TenantEnvironmentInfo } from '@/services/api/index';
+import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, ApiTenant, TenantEnvironmentInfo } from '@/services/api/index';
 import InfrastructureManagement from '@/components/tenants/InfrastructureManagement';
 import { LanguageConfiguration } from '@/components/tenants/LanguageConfiguration';
 

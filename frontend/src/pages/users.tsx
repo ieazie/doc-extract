@@ -267,17 +267,8 @@ const UsersPage: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Check if user has permission to access user management
-  if (!hasPermission('users:read')) {
-    return (
-      <PageContainer>
-        <PageHeader>
-          <PageTitle>Access Denied</PageTitle>
-        </PageHeader>
-        <ErrorMessage message="You don't have permission to access user management." />
-      </PageContainer>
-    );
-  }
+  // Check permission without early return to avoid conditional hooks
+  const canReadUsers = hasPermission('users:read');
 
   // Fetch users
   const { data: users, isLoading, error } = useQuery<User[]>(
@@ -287,7 +278,7 @@ const UsersPage: React.FC = () => {
       return authService.getUsers();
     },
     {
-      enabled: !!currentUser,
+      enabled: !!currentUser && canReadUsers,
     }
   );
 
@@ -511,6 +502,18 @@ const UsersPage: React.FC = () => {
     );
   }
 
+  // Check permission after all hooks and render access denied if needed
+  if (!canReadUsers) {
+    return (
+      <PageContainer>
+        <PageHeader>
+          <PageTitle>Access Denied</PageTitle>
+        </PageHeader>
+        <ErrorMessage message="You don't have permission to access user management." />
+      </PageContainer>
+    );
+  }
+
   return (
     <PageContainer>
         <PageHeader>
@@ -678,7 +681,7 @@ const UsersPage: React.FC = () => {
                     name="role"
                     defaultValue={editingUser.role}
                   >
-                    <option value="system_admin">System Admin</option>
+                    {isSystemAdmin() && <option value="system_admin">System Admin</option>}
                     <option value="tenant_admin">Tenant Admin</option>
                     <option value="user">User</option>
                     <option value="viewer">Viewer</option>

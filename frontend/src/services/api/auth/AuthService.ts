@@ -15,7 +15,7 @@ import {
   TenantSwitchResponse
 } from './types/auth';
 import type {
-  Tenant,
+  ApiTenant,
   TenantCreateRequest,
   TenantUpdateRequest
 } from '../tenants/types/tenants';
@@ -30,12 +30,32 @@ export class AuthService extends BaseApiClient {
     return this.post<LoginResponse>('/api/auth/login', credentials);
   }
 
-  async getCurrentUser(): Promise<User> {
-    return this.get<User>('/api/auth/me');
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      return await this.get<User>('/api/auth/me');
+    } catch (error: any) {
+      // Handle authentication errors gracefully
+      if (error?.name === 'AuthenticationError' || error?.status === 401 || error?.status === 403) {
+        // Auth error was handled by global interceptor, return null
+        return null;
+      }
+      // Re-throw other errors
+      throw error;
+    }
   }
 
-  async getCurrentTenant(): Promise<Tenant> {
-    return this.get<Tenant>('/api/auth/tenant');
+  async getCurrentTenant(): Promise<ApiTenant | null> {
+    try {
+      return await this.get<ApiTenant>('/api/auth/tenant');
+    } catch (error: any) {
+      // Handle authentication errors gracefully
+      if (error?.name === 'AuthenticationError' || error?.status === 401 || error?.status === 403) {
+        // Auth error was handled by global interceptor, return null
+        return null;
+      }
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   async switchTenant(tenantId: string): Promise<void> {
@@ -80,15 +100,15 @@ export class AuthService extends BaseApiClient {
   }
 
   // Tenant Management Methods (if needed)
-  async createTenant(tenantData: TenantCreateRequest): Promise<Tenant> {
-    return this.post<Tenant>('/api/auth/tenants', tenantData);
+  async createTenant(tenantData: TenantCreateRequest): Promise<ApiTenant> {
+    return this.post<ApiTenant>('/api/auth/tenants', tenantData);
   }
 
-  async updateTenant(tenantId: string, tenantData: TenantUpdateRequest): Promise<Tenant> {
-    return this.put<Tenant>(`/api/auth/tenants/${tenantId}`, tenantData);
+  async updateTenant(tenantId: string, tenantData: TenantUpdateRequest): Promise<ApiTenant> {
+    return this.put<ApiTenant>(`/api/auth/tenants/${tenantId}`, tenantData);
   }
 
-  async getUserTenants(): Promise<Tenant[]> {
-    return this.get<Tenant[]>('/api/auth/tenants');
+  async getUserTenants(): Promise<ApiTenant[]> {
+    return this.get<ApiTenant[]>('/api/auth/tenants');
   }
 }

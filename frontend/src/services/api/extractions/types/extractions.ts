@@ -29,7 +29,7 @@ export interface Extraction {
   document_name?: string;
   template_name?: string;
   // Review workflow fields
-  review_status?: string;
+  review_status?: ReviewStatus;
   assigned_reviewer?: string;
   review_comments?: string;
   review_completed_at?: string;
@@ -190,6 +190,6 @@ export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed'
 export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'needs_correction' | 'in_review';
 
 export interface ReviewActionRequest {
-  action: 'approve' | 'reject' | 'start_review';
+  action: 'start' | 'approve' | 'reject';
   reason?: string;
 }

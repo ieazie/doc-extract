@@ -3,7 +3,7 @@
  */
 // Use the canonical Tenant types
 import type {
-  Tenant,
+  ApiTenant,
   TenantCreateRequest,
   TenantUpdateRequest,
 } from '../../tenants/types/tenants';
@@ -19,7 +19,7 @@ export interface LoginResponse {
   token_type: string;
   expires_in: number;
   user: User;
-  tenant: Tenant;
+  tenant: ApiTenant;
 }
 
 // User Types
@@ -84,5 +84,5 @@ export interface TenantSwitchRequest {
 export interface TenantSwitchResponse {
   success: boolean;
   message: string;
-  new_tenant: Tenant;
+  new_tenant: ApiTenant;
 }

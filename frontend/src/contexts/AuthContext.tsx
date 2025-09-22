@@ -105,7 +105,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             
             // Only fetch tenant data for non-system-admin users
             let currentTenant = null;
-            if (currentUser.role !== 'system_admin' && currentUser.tenant_id) {
+            if (currentUser && currentUser.role !== 'system_admin' && currentUser.tenant_id) {
               try {
                 currentTenant = await authService.getCurrentTenant();
               } catch (tenantError: any) {
@@ -115,8 +115,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
             
             // Update with fresh data if verification succeeds
-            setUser(currentUser);
-            setTenant(currentTenant);
+            if (currentUser) {
+              setUser(currentUser);
+              setTenant(currentTenant);
+            } else {
+              // Auth verification failed, clear auth data
+              clearAuthData();
+            }
           } catch (error: any) {
             // Only clear data if it's an authentication error (401/403)
             if (error?.response?.status === 401 || error?.response?.status === 403) {

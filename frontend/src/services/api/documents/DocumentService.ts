@@ -4,6 +4,7 @@
  */
 import { AxiosInstance } from 'axios';
 import { BaseApiClient } from '../base/BaseApiClient';
+import { NotFoundError } from '../base/errors/ApiErrors';
 import {
   Document,
   DocumentListResponse,
@@ -133,8 +134,7 @@ export class DocumentService extends BaseApiClient {
       return await this.get<DocumentContent>(`/api/documents/${documentId}/content`);
     } catch (error: any) {
       // Handle 404 gracefully - document content might not exist yet
-      if (error?.status === 404 || error?.name === 'NotFoundError') {
-        console.log('Document content not found for ID:', documentId);
+      if (error instanceof NotFoundError || error?.response?.status === 404) {
         return null;
       }
       // Re-throw other errors
@@ -144,6 +144,22 @@ export class DocumentService extends BaseApiClient {
 
   async getDocumentPreview(documentId: string): Promise<DocumentPreview> {
     return this.get<DocumentPreview>(`/api/documents/preview/${documentId}`);
+  }
+
+  async getDocumentPreviewImage(previewUrl: string): Promise<Blob> {
+    // Use the shared Axios instance with proper authentication and base URL
+    // Handle both absolute and relative URLs
+    const url = previewUrl.startsWith('http') 
+      ? previewUrl 
+      : `${this.client.defaults.baseURL}${previewUrl}`;
+    
+    const response = await this.client.get(url, {
+      responseType: 'blob',
+      headers: {
+        'Accept': 'image/*'
+      }
+    });
+    return response.data;
   }
 
   // Document Downloads and Thumbnails

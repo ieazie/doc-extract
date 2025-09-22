@@ -12,7 +12,7 @@ import {
   X,
   AlertCircle
 } from 'lucide-react';
-import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, Tenant } from '@/services/api/index';
+import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, ApiTenant } from '@/services/api/index';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
@@ -283,7 +283,7 @@ const TestButton = styled(Button)`
 `;
 
 interface TenantConfigModalProps {
-  tenant: Tenant | null;
+  tenant: ApiTenant | null;
   onClose: () => void;
 }
 

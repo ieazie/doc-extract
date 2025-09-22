@@ -5,13 +5,12 @@
 import { AxiosInstance } from 'axios';
 import { BaseApiClient } from '../base/BaseApiClient';
 import {
-  Tenant,
+  ApiTenant,
   TenantCreateRequest,
   TenantUpdateRequest,
   TenantListParams,
   TenantConfiguration,
   TenantConfigurationRead,
-  TenantConfigurationWrite,
   TenantConfigurationCreate,
   TenantConfigurationUpdate,
   TenantConfigSummary,
@@ -33,28 +32,28 @@ export class TenantService extends BaseApiClient {
   }
 
   // Tenant CRUD Operations
-  async getTenants(params?: TenantListParams): Promise<Tenant[]> {
-    return this.get<Tenant[]>('/api/auth/tenants/all', params);
+  async getTenants(params?: TenantListParams): Promise<ApiTenant[]> {
+    return this.get<ApiTenant[]>('/api/auth/tenants/all', params);
   }
 
-  async getTenant(tenantId: string): Promise<Tenant> {
-    return this.get<Tenant>(`/api/auth/tenants/${tenantId}`);
+  async getTenant(tenantId: string): Promise<ApiTenant> {
+    return this.get<ApiTenant>(`/api/auth/tenants/${tenantId}`);
   }
 
-  async createTenant(tenantData: TenantCreateRequest): Promise<Tenant> {
-    return this.post<Tenant>('/api/auth/tenants', tenantData);
+  async createTenant(tenantData: TenantCreateRequest): Promise<ApiTenant> {
+    return this.post<ApiTenant>('/api/auth/tenants', tenantData);
   }
 
-  async updateTenant(tenantId: string, tenantData: TenantUpdateRequest): Promise<Tenant> {
-    return this.put<Tenant>(`/api/auth/tenants/${tenantId}`, tenantData);
+  async updateTenant(tenantId: string, tenantData: TenantUpdateRequest): Promise<ApiTenant> {
+    return this.put<ApiTenant>(`/api/auth/tenants/${tenantId}`, tenantData);
   }
 
   async deleteTenant(tenantId: string): Promise<void> {
     await this.delete<void>(`/api/auth/tenants/${tenantId}`);
   }
 
-  async getUserTenants(): Promise<Tenant[]> {
-    return this.get<Tenant[]>('/api/auth/tenants');
+  async getUserTenants(): Promise<ApiTenant[]> {
+    return this.get<ApiTenant[]>('/api/auth/tenants');
   }
 
   // Tenant Configuration Management
@@ -70,15 +69,15 @@ export class TenantService extends BaseApiClient {
     return this.get<TenantConfigurationRead>(`/api/tenant/configurations/${configType}`);
   }
 
-  async createTenantConfiguration(config: TenantConfigurationCreate): Promise<TenantConfigurationWrite> {
-    return this.post<TenantConfigurationWrite>('/api/tenant/configurations', config);
+  async createTenantConfiguration(config: TenantConfigurationCreate): Promise<TenantConfigurationRead> {
+    return this.post<TenantConfigurationRead>('/api/tenant/configurations', config);
   }
 
   async updateTenantConfiguration(
     configType: TenantConfiguration['config_type'],
     updates: TenantConfigurationUpdate
-  ): Promise<TenantConfigurationWrite> {
-    return this.put<TenantConfigurationWrite>(`/api/tenant/configurations/${configType}`, updates);
+  ): Promise<TenantConfigurationRead> {
+    return this.put<TenantConfigurationRead>(`/api/tenant/configurations/${configType}`, updates);
   }
 
   async deleteTenantConfiguration(configType: TenantConfiguration['config_type']): Promise<void> {
@@ -161,8 +160,8 @@ export class TenantService extends BaseApiClient {
   }
 
   // Tenant Search
-  async searchTenants(query: string, filters?: Partial<TenantListParams>): Promise<Tenant[]> {
-    return this.get<Tenant[]>('/api/tenant/search', {
+  async searchTenants(query: string, filters?: Partial<TenantListParams>): Promise<ApiTenant[]> {
+    return this.get<ApiTenant[]>('/api/tenant/search', {
       q: query,
       ...filters
     });

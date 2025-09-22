@@ -2,6 +2,7 @@
  * Document Management Types
  */
 import { TenantEntity, BaseEntity } from '../../base/types/common';
+import type { ExtractionStatus } from '../../extractions/types/extractions';
 
 // Core Document Types
 export interface Document {
@@ -17,8 +18,8 @@ export interface Document {
     color: string;
   };
   tags: string[];
-  status: string;
-  extraction_status: string;
+  status: DocumentStatus;
+  extraction_status: ExtractionStatus;
   extraction_error?: string;
   page_count?: number;
   character_count?: number;
@@ -44,9 +45,9 @@ export interface DocumentListResponse {
 
 export interface DocumentUploadResponse {
   document_id: string;
-  status: string;
+  status: DocumentStatus;
   message: string;
-  extraction_status: string;
+  extraction_status: ExtractionStatus;
 }
 
 // Document Request Types
@@ -54,8 +55,8 @@ export interface DocumentListParams {
   page?: number;
   per_page?: number;
   category_id?: string;
-  status?: string;
-  extraction_status?: string;
+  status?: DocumentStatus;
+  extraction_status?: ExtractionStatus;
   job_status?: string;
   search?: string;
   tags?: string[];
@@ -93,7 +94,7 @@ export interface DocumentExtractionTracking {
   document_id: string;
   job_id: string;
   extraction_id?: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+  status: ExtractionStatus;
   triggered_by: 'schedule' | 'manual' | 'immediate';
   queued_at: string;
   started_at?: string;
@@ -140,7 +141,7 @@ export interface ProcessingStats {
 // Document Status Types
 export type DocumentStatus = 'uploaded' | 'processing' | 'processed' | 'failed' | 'archived';
 
-export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+export type { ExtractionStatus } from '../../extractions/types/extractions';
 
 // Document Metadata
 export interface DocumentMetadata {

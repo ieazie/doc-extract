@@ -58,6 +58,40 @@ export abstract class BaseApiClient {
       },
       (error) => {
         try {
+          // Handle authentication errors gracefully
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            // Clear tokens and dispatch logout event
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('auth_tokens');
+              window.dispatchEvent(new CustomEvent('auth:logout'));
+              console.warn('Authentication failed - tokens cleared and logout event dispatched');
+            }
+            
+            // Don't throw exception for auth errors - return a resolved promise with error info
+            return Promise.resolve({
+              data: null,
+              status: error.response?.status || 401,
+              statusText: 'Authentication Required',
+              headers: {},
+              config: error.config,
+              isAuthError: true
+            });
+          }
+          
+          // Handle 404 errors gracefully - let services handle them
+          if (error.response?.status === 404) {
+            // Don't throw exception for 404 errors - let services handle them gracefully
+            return Promise.resolve({
+              data: null,
+              status: 404,
+              statusText: 'Not Found',
+              headers: {},
+              config: error.config,
+              isNotFoundError: true
+            });
+          }
+          
+          // For other errors, handle normally
           const handledError = this.handleError(error);
           return Promise.reject(handledError);
         } catch (e) {
@@ -89,6 +123,22 @@ export abstract class BaseApiClient {
   public async request<T>(config: AxiosRequestConfig): Promise<T> {
     try {
       const response: AxiosResponse<T> = await this.client.request(config);
+      
+      // Check if this is an auth error response (from global interceptor)
+      if ((response as any).isAuthError) {
+        // Auth error was handled gracefully by global interceptor
+        // The AuthContext will handle the logout event and redirect to login
+        // Return null to indicate no data available due to auth error
+        return null as T;
+      }
+      
+      // Check if this is a 404 error response (from global interceptor)
+      if ((response as any).isNotFoundError) {
+        // 404 error was handled gracefully by global interceptor
+        // Services can handle this by returning null or appropriate defaults
+        return null as T;
+      }
+      
       return response.data;
     } catch (error) {
       // Error is already handled by the response interceptor

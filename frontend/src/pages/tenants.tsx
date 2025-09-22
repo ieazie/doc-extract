@@ -472,12 +472,14 @@ const TenantsPage: React.FC = () => {
       <ActionButton
         onClick={() => setSelectedTenant(tenant)}
         title="Manage tenant"
+        disabled={!hasPermission('tenants:update')}
       >
         <Settings size={16} />
       </ActionButton>
       <ActionButton
         onClick={() => handleDeleteTenant(tenant.id)}
         title="Delete tenant"
+        disabled={!hasPermission('tenants:delete')}
       >
         <Trash2 size={16} />
       </ActionButton>

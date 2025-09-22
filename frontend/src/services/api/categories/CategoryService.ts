@@ -176,9 +176,7 @@ export class CategoryService extends BaseApiClient {
         document_count: number;
         size: number;
       }>;
-    }>(`/api/categories/${categoryId}/analytics`, {
-      params: dateRange
-    });
+    }>(`/api/categories/${categoryId}/analytics`, dateRange);
   }
 
   // Category Health

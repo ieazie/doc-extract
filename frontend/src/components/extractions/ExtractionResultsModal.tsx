@@ -686,23 +686,15 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
     data: previewImageUrl, 
     isLoading: imageLoading 
   } = useQuery(
-    ['document-preview-image', extraction?.document_id],
+    ['document-preview-image', extraction?.document_id, documentPreview?.preview_url],
     async () => {
-      if (!extraction?.document_id) return null;
+      if (!extraction?.document_id || !documentPreview?.preview_url) return null;
       
       try {
-        // Fetch the image as a blob with authentication
-        const response = await fetch(`http://localhost:8000/api/documents/preview-image/${extraction.document_id}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_tokens') ? JSON.parse(localStorage.getItem('auth_tokens')!).access_token : ''}`
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch preview image');
-        }
-        
-        const blob = await response.blob();
+        // Use DocumentService with centralized authentication and base URL handling
+        // Use server-provided preview_url instead of constructing the URL
+        const documentService = serviceFactory.get<DocumentService>('documents');
+        const blob = await documentService.getDocumentPreviewImage(documentPreview.preview_url);
         return URL.createObjectURL(blob);
       } catch (error) {
         console.error('Error fetching preview image:', error);

@@ -4,7 +4,7 @@
 import { TenantEntity, BaseEntity } from '../../base/types/common';
 
 // Core Tenant Types
-export interface Tenant {
+export interface ApiTenant {
   id: string;
   name: string;
   slug: string;

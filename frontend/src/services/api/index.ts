@@ -8,14 +8,11 @@ import { ServiceFactory } from './base/ServiceFactory';
 // Create axios instance
 const createAxiosInstance = (): AxiosInstance => {
   // Determine the correct API URL based on environment
-  let apiBaseUrl;
-  if (typeof window === 'undefined') {
-    // Server-side (Next.js SSR) - use Docker service name
-    apiBaseUrl = 'http://backend:8000';
-  } else {
-    // Client-side (browser) - use localhost
-    apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  }
+  const apiBaseUrl =
+    (typeof window === 'undefined'
+      ? process.env.API_BASE_URL
+      : process.env.NEXT_PUBLIC_API_URL)
+    || 'http://localhost:8000';
   
   const instance = axios.create({
     baseURL: apiBaseUrl,
@@ -51,12 +48,28 @@ const createAxiosInstance = (): AxiosInstance => {
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
-      // Handle 401 errors by clearing tokens
-      if (error.response?.status === 401 && typeof window !== 'undefined') {
+      // Handle 401/403 errors by clearing tokens and dispatching logout event
+      if ((error.response?.status === 401 || error.response?.status === 403) && typeof window !== 'undefined') {
         localStorage.removeItem('auth_tokens');
-        // Redirect to login or show auth error
-        console.error('Authentication failed - tokens cleared');
+        
+        // Dispatch auth logout event for graceful handling
+        window.dispatchEvent(new CustomEvent('auth:logout'));
+        
+        console.warn('Authentication failed - tokens cleared and logout event dispatched');
+        
+        // Don't throw exception for auth errors - let the app handle gracefully
+        // Return a resolved promise with error info instead
+        return Promise.resolve({
+          data: null,
+          status: error.response?.status || 401,
+          statusText: 'Authentication Required',
+          headers: {},
+          config: error.config,
+          isAuthError: true
+        });
       }
+      
+      // For other errors, still reject the promise
       return Promise.reject(error);
     }
   );
@@ -212,7 +225,7 @@ export type {
 } from './extractions/types/extractions';
 
 export type {
-  Tenant,
+  ApiTenant,
   TenantCreateRequest,
   TenantUpdateRequest,
   TenantConfiguration,
