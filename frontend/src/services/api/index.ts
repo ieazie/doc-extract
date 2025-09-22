@@ -57,16 +57,9 @@ const createAxiosInstance = (): AxiosInstance => {
         
         console.warn('Authentication failed - tokens cleared and logout event dispatched');
         
-        // Don't throw exception for auth errors - let the app handle gracefully
-        // Return a resolved promise with error info instead
-        return Promise.resolve({
-          data: null,
-          status: error.response?.status || 401,
-          statusText: 'Authentication Required',
-          headers: {},
-          config: error.config,
-          isAuthError: true
-        });
+        // Reject the promise to ensure consistent error handling
+        // This prevents silent failures in direct client calls
+        return Promise.reject(error);
       }
       
       // For other errors, still reject the promise

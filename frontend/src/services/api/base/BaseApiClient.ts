@@ -129,17 +129,6 @@ export abstract class BaseApiClient {
     try {
       const response: AxiosResponse<T> = await this.client.request(config);
       
-      // Check if this is an auth error response (from global interceptor)
-      if ((response as any).isAuthError) {
-        // Auth error was handled gracefully by global interceptor
-        // The AuthContext will handle the logout event and redirect to login
-        // Throw a proper error to maintain type safety
-        const authError = new Error('Authentication failed');
-        (authError as any).name = 'AuthenticationError';
-        (authError as any).status = 401;
-        throw authError;
-      }
-      
       // Check if this is a 404 error response (from global interceptor)
       if ((response as any).isNotFoundError) {
         // 404 error was handled gracefully by global interceptor
@@ -151,9 +140,18 @@ export abstract class BaseApiClient {
       }
       
       return response.data;
-    } catch (error) {
-      // Error is already handled by the response interceptor
-      // Just re-throw it as-is
+    } catch (error: any) {
+      // Handle auth errors (401/403) - these are now rejected by the interceptor
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        // Auth error was handled by global interceptor (tokens cleared, logout event dispatched)
+        // Throw a proper error to maintain type safety
+        const authError = new Error('Authentication failed');
+        (authError as any).name = 'AuthenticationError';
+        (authError as any).status = error.response.status;
+        throw authError;
+      }
+      
+      // Re-throw other errors as-is
       throw error;
     }
   }

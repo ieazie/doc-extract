@@ -68,7 +68,7 @@ export class DocumentService extends BaseApiClient {
       method: 'POST',
       url: '/api/documents/upload',
       data: formData,
-      headers: { 'Content-Type': 'multipart/form-data' },
+      // Do not set Content-Type; the browser will add the correct boundary
       onUploadProgress: options.onUploadProgress ? (progressEvent) => {
         const progress = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
         options.onUploadProgress!(progress);
@@ -88,7 +88,7 @@ export class DocumentService extends BaseApiClient {
       method: 'POST',
       url: '/api/documents/upload-test',
       data: formData,
-      headers: { 'Content-Type': 'multipart/form-data' },
+      // Do not set Content-Type; the browser will add the correct boundary
       onUploadProgress: options?.onUploadProgress ? (progressEvent) => {
         const progress = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
         options.onUploadProgress!(progress);
@@ -107,7 +107,7 @@ export class DocumentService extends BaseApiClient {
       method: 'PUT',
       url: `/api/documents/${documentId}/category`,
       data: formData,
-      headers: { 'Content-Type': 'multipart/form-data' }
+      // No explicit Content-Type for FormData
     });
   }
 
@@ -119,7 +119,7 @@ export class DocumentService extends BaseApiClient {
       method: 'PUT',
       url: `/api/documents/${documentId}/tags`,
       data: formData,
-      headers: { 'Content-Type': 'multipart/form-data' }
+      // No explicit Content-Type for FormData
     });
   }
 
@@ -147,19 +147,23 @@ export class DocumentService extends BaseApiClient {
   }
 
   async getDocumentPreviewImage(previewUrl: string): Promise<Blob> {
-    // Use the shared Axios instance with proper authentication and base URL
-    // Handle both absolute and relative URLs
-    const url = previewUrl.startsWith('http') 
-      ? previewUrl 
-      : `${this.client.defaults.baseURL}${previewUrl}`;
-    
-    const response = await this.client.get(url, {
+    // Resolve relative previewUrl against baseURL in a browser-safe way
+    const base = this.client.defaults.baseURL || (typeof window !== 'undefined' ? window.location.origin : undefined);
+    const url = previewUrl.startsWith('http') ? previewUrl : new URL(previewUrl, base).toString();
+
+    const blob = await this.request<Blob>({
+      method: 'GET',
+      url,
       responseType: 'blob',
-      headers: {
-        'Accept': 'image/*'
-      }
+      headers: { Accept: 'image/*' }
     });
-    return response.data;
+
+    // Validate that we received a proper Blob
+    if (!blob || !(blob instanceof Blob)) {
+      throw new Error('Invalid response: expected Blob but received null or invalid data');
+    }
+
+    return blob;
   }
 
   // Document Downloads and Thumbnails
