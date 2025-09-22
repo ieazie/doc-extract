@@ -17,9 +17,7 @@ const createAxiosInstance = (): AxiosInstance => {
   const instance = axios.create({
     baseURL: apiBaseUrl,
     timeout: 30000, // 30 seconds for file uploads
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { Accept: 'application/json' },
   });
 
   // Add authentication interceptor
@@ -48,12 +46,13 @@ const createAxiosInstance = (): AxiosInstance => {
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
-      // Handle 401/403 errors by clearing tokens and dispatching logout event
-      if ((error.response?.status === 401 || error.response?.status === 403) && typeof window !== 'undefined') {
+      // Handle 401 (Unauthorized) by clearing tokens and dispatching logout event
+      const status = error.response?.status;
+      if (status === 401 && typeof window !== 'undefined') {
         localStorage.removeItem('auth_tokens');
         
         // Dispatch auth logout event for graceful handling
-        window.dispatchEvent(new CustomEvent('auth:logout'));
+        window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'unauthorized' } }));
         
         console.warn('Authentication failed - tokens cleared and logout event dispatched');
         

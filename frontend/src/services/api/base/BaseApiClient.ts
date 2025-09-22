@@ -141,14 +141,22 @@ export abstract class BaseApiClient {
       
       return response.data;
     } catch (error: any) {
-      // Handle auth errors (401/403) - these are now rejected by the interceptor
-      if (error.response?.status === 401 || error.response?.status === 403) {
+      // Handle 401 (Unauthorized) - tokens cleared by global interceptor
+      if (error.response?.status === 401) {
         // Auth error was handled by global interceptor (tokens cleared, logout event dispatched)
         // Throw a proper error to maintain type safety
         const authError = new Error('Authentication failed');
         (authError as any).name = 'AuthenticationError';
-        (authError as any).status = error.response.status;
+        (authError as any).status = 401;
         throw authError;
+      }
+      
+      // Handle 403 (Forbidden) - user lacks permission but is still authenticated
+      if (error.response?.status === 403) {
+        const forbiddenError = new Error('Access forbidden - insufficient permissions');
+        (forbiddenError as any).name = 'ForbiddenError';
+        (forbiddenError as any).status = 403;
+        throw forbiddenError;
       }
       
       // Re-throw other errors as-is
