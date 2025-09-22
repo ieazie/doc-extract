@@ -68,10 +68,16 @@ mockAxiosInstance.interceptors.response.use = jest.fn();
 mockAxiosInstance.interceptors.response.eject = jest.fn();
 
 // Very light router for common endpoints used below
-mockAxiosInstance.request.mockImplementation(({ method, url, data }) => {
+mockAxiosInstance.request.mockImplementation(({ method, url, data }: { method?: string; url?: string; data?: any }) => {
   // Auth
   if (method?.toLowerCase() === 'post' && url === '/api/auth/login') {
     return Promise.resolve({ data: { access_token: 'mock-token', user: { id: 'user-1', email: 'test@example.com', role: 'admin' } } });
+  }
+  if (method?.toLowerCase() === 'post' && url === '/api/auth/refresh') {
+    return Promise.resolve({ data: { access_token: 'new-mock-token', user: { id: 'user-1', email: 'test@example.com', role: 'admin' } } });
+  }
+  if (method?.toLowerCase() === 'post' && url === '/api/auth/logout') {
+    return Promise.resolve({ data: { message: 'Successfully logged out' } });
   }
   if (method?.toLowerCase() === 'get' && url === '/api/auth/me') {
     return Promise.resolve({ data: { id: 'user-1', email: 'test@example.com', role: 'admin' } });
@@ -86,13 +92,13 @@ mockAxiosInstance.request.mockImplementation(({ method, url, data }) => {
   if (method?.toLowerCase() === 'post' && url === '/api/documents/upload') {
     return Promise.resolve({ data: { document_id: 'doc-1', status: 'uploaded' } });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/documents\/doc-1$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/documents\/doc-1$/.test(url)) {
     return Promise.resolve({ data: { id: 'doc-1', original_filename: 'test.pdf' } });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/documents\/doc-1\/content$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/documents\/doc-1\/content$/.test(url)) {
     return Promise.resolve({ data: { content: '...', metadata: {} } });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/documents\/non-existent-id\/content$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/documents\/non-existent-id\/content$/.test(url)) {
     // Simulate what the BaseApiClient interceptor would do for 404 errors
     // Instead of rejecting, return a resolved promise with isNotFoundError flag
     return Promise.resolve({
@@ -104,37 +110,37 @@ mockAxiosInstance.request.mockImplementation(({ method, url, data }) => {
       isNotFoundError: true
     });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/documents\/preview\/doc-1$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/documents\/preview\/doc-1$/.test(url)) {
     return Promise.resolve({ data: { has_preview: true, filename: 'test.pdf' } });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/documents\/doc-1\/tracking$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/documents\/doc-1\/tracking$/.test(url)) {
     return Promise.resolve({ data: { items: [], total: 0 } });
   }
   // Templates
   if (method?.toLowerCase() === 'post' && url === '/api/templates') {
     return Promise.resolve({ data: { id: 'tpl-1', name: JSON.parse(JSON.stringify(data)).name || 'Test Template' } });
   }
-  if (method?.toLowerCase() === 'post' && /^\/api\/templates\/tpl-1\/test$/.test(url)) {
+  if (method?.toLowerCase() === 'post' && url && /^\/api\/templates\/tpl-1\/test$/.test(url)) {
     return Promise.resolve({ data: { status: 'ok', extracted_data: {} } });
   }
   // Extractions
   if (method?.toLowerCase() === 'post' && url === '/api/extractions') {
     return Promise.resolve({ data: { id: 'ext-1', status: 'created', document_id: 'doc-1', template_id: 'tpl-1' } });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/extractions\/ext-1$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/extractions\/ext-1$/.test(url)) {
     return Promise.resolve({ data: { id: 'ext-1', document_id: 'doc-1', template_id: 'tpl-1' } });
   }
   // Categories
   if (method?.toLowerCase() === 'post' && url === '/api/categories') {
     return Promise.resolve({ data: { id: 'cat-1', name: JSON.parse(JSON.stringify(data)).name || 'Test Category' } });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/categories\/cat-1\/documents$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/categories\/cat-1\/documents$/.test(url)) {
     return Promise.resolve({ data: { category: { id: 'cat-1' }, documents: [] } });
   }
   if (method?.toLowerCase() === 'get' && url === '/api/categories/usage-stats') {
     return Promise.resolve({ data: { category_stats: [], total_categories: 1 } });
   }
-  if (method?.toLowerCase() === 'put' && /^\/api\/categories\/cat-1$/.test(url)) {
+  if (method?.toLowerCase() === 'put' && url && /^\/api\/categories\/cat-1$/.test(url)) {
     return Promise.resolve({ data: { id: 'cat-1', name: 'Updated Test Category' } });
   }
   // Jobs
@@ -142,13 +148,13 @@ mockAxiosInstance.request.mockImplementation(({ method, url, data }) => {
     const body = JSON.parse(JSON.stringify(data));
     return Promise.resolve({ data: { id: 'job-1', name: body.name, category_id: body.execution_config?.category_id, template_id: body.execution_config?.template_id } });
   }
-  if (method?.toLowerCase() === 'post' && /^\/api\/jobs\/job-1\/execute$/.test(url)) {
+  if (method?.toLowerCase() === 'post' && url && /^\/api\/jobs\/job-1\/execute$/.test(url)) {
     return Promise.resolve({ data: { execution_id: 'exec-1', job_id: 'job-1' } });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/jobs\/job-1\/history$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/jobs\/job-1\/history$/.test(url)) {
     return Promise.resolve({ data: { executions: [], total: 0 } });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/jobs\/job-1\/statistics$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/jobs\/job-1\/statistics$/.test(url)) {
     return Promise.resolve({ data: { total_executions: 1, success_rate: 1 } });
   }
   // Language
@@ -158,7 +164,7 @@ mockAxiosInstance.request.mockImplementation(({ method, url, data }) => {
   if (method?.toLowerCase() === 'get' && url === '/api/language/supported') {
     return Promise.resolve({ data: ['en','es'] });
   }
-  if (method?.toLowerCase() === 'get' && /^\/api\/language\/tenant\/.+\/config$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/language\/tenant\/.+\/config$/.test(url)) {
     return Promise.resolve({ data: { supported_languages: ['en'], default_language: 'en' } });
   }
   if (method?.toLowerCase() === 'post' && url === '/api/language/validate') {
@@ -320,6 +326,31 @@ describe('Domain Services Integration Tests', () => {
       const permissions = await authService.getUserPermissions();
       expect(permissions).toHaveProperty('permissions');
       expect(permissions).toHaveProperty('role');
+    });
+
+    it('should handle token refresh workflow', async () => {
+      // Test refresh token functionality
+      const refreshResponse = await authService.refreshToken();
+      expect(refreshResponse).toHaveProperty('access_token');
+      expect(refreshResponse).toHaveProperty('user');
+      expect(refreshResponse.access_token).toBeDefined();
+      expect(refreshResponse.user).toBeDefined();
+    });
+
+    it('should handle logout workflow', async () => {
+      // Test logout functionality
+      await expect(authService.logout()).resolves.not.toThrow();
+    });
+
+    it('should handle authentication errors gracefully', async () => {
+      // Mock authentication error
+      mockAxiosInstance.request.mockImplementationOnce(() => 
+        Promise.reject({ response: { status: 401, data: { detail: 'Unauthorized' } } })
+      );
+
+      // Test that authentication errors are handled gracefully
+      const currentUser = await authService.getCurrentUser();
+      expect(currentUser).toBeNull();
     });
   });
 
@@ -586,7 +617,7 @@ describe('Domain Services Integration Tests', () => {
       // Mock an expired token response
       const originalMockImplementation = mockAxiosInstance.request.getMockImplementation();
       
-      mockAxiosInstance.request.mockImplementation(({ method, url, data }) => {
+      mockAxiosInstance.request.mockImplementation(({ method, url, data }: { method?: string; url?: string; data?: any }) => {
         // Simulate expired token for any authenticated request
         if (method?.toLowerCase() === 'get' && url === '/api/auth/me') {
           // Simulate what the BaseApiClient interceptor would do for 401 errors
@@ -613,12 +644,13 @@ describe('Domain Services Integration Tests', () => {
         // The user should be null (indicating no authenticated user)
         expect(user).toBeNull();
         
-      } catch (error) {
+      } catch (error: any) {
         // If an exception is thrown, that's the problem we're trying to fix
         throw new Error(`Authentication error should not throw exception, but got: ${error.message}`);
       } finally {
         // Restore original mock
         mockAxiosInstance.request.mockImplementation(originalMockImplementation);
+        
       }
     });
 
@@ -637,7 +669,7 @@ describe('Domain Services Integration Tests', () => {
       const template = await templateService.createTemplate({
         name: 'Test Template',
         document_type_id: 'test-type',
-        schema: { test: { type: 'text' } },
+        schema: { test: { name: 'test', type: 'text', required: true } },
         prompt_config: {
           system_prompt: 'Test system prompt',
           instructions: 'Test instructions',

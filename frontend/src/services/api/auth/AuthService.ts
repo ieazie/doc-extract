@@ -30,6 +30,14 @@ export class AuthService extends BaseApiClient {
     return this.post<LoginResponse>('/api/auth/login', credentials);
   }
 
+  async refreshToken(): Promise<LoginResponse> {
+    return this.post<LoginResponse>('/api/auth/refresh');
+  }
+
+  async logout(): Promise<void> {
+    await this.post<void>('/api/auth/logout');
+  }
+
   async getCurrentUser(): Promise<User | null> {
     try {
       return await this.get<User>('/api/auth/me');
@@ -80,13 +88,6 @@ export class AuthService extends BaseApiClient {
   }
 
   // Additional Auth Methods (if needed)
-  async logout(): Promise<void> {
-    await this.post<void>('/api/auth/logout');
-  }
-
-  async refreshToken(): Promise<LoginResponse> {
-    return this.post<LoginResponse>('/api/auth/refresh');
-  }
 
   async resetPassword(email: string): Promise<{ message: string }> {
     return this.post<{ message: string }>('/api/auth/reset-password', { email });
