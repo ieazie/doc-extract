@@ -25,8 +25,13 @@ export abstract class BaseApiClient {
     // Request interceptor for auth token
     this.client.interceptors.request.use(
       (config) => {
-        if (this.authToken) {
-          config.headers.Authorization = `Bearer ${this.authToken}`;
+        const defaults = (this.client.defaults.headers as any);
+        const auth = defaults?.common?.Authorization;
+        if (auth && !(config.headers && ('Authorization' in config.headers))) {
+          if (!config.headers) {
+            config.headers = {} as any;
+          }
+          config.headers.Authorization = auth;
         }
         
         // Add request metadata (extend config with custom properties)
@@ -128,15 +133,21 @@ export abstract class BaseApiClient {
       if ((response as any).isAuthError) {
         // Auth error was handled gracefully by global interceptor
         // The AuthContext will handle the logout event and redirect to login
-        // Return null to indicate no data available due to auth error
-        return null as T;
+        // Throw a proper error to maintain type safety
+        const authError = new Error('Authentication failed');
+        (authError as any).name = 'AuthenticationError';
+        (authError as any).status = 401;
+        throw authError;
       }
       
       // Check if this is a 404 error response (from global interceptor)
       if ((response as any).isNotFoundError) {
         // 404 error was handled gracefully by global interceptor
-        // Services can handle this by returning null or appropriate defaults
-        return null as T;
+        // For backward compatibility, throw an error, but services can catch and handle gracefully
+        const notFoundError = new Error('Resource not found');
+        (notFoundError as any).name = 'NotFoundError';
+        (notFoundError as any).status = 404;
+        throw notFoundError;
       }
       
       return response.data;
@@ -367,6 +378,19 @@ export abstract class BaseApiClient {
    */
   setAuthToken(token: string | null): void {
     this.authToken = token;
+    const defaults = (this.client.defaults.headers as any);
+    if (token) {
+      if (defaults?.common) {
+        defaults.common['Authorization'] = `Bearer ${token}`;
+      } else {
+        (this.client.defaults.headers as any) = {
+          ...(this.client.defaults.headers || {}),
+          common: { Authorization: `Bearer ${token}` }
+        };
+      }
+    } else if (defaults?.common) {
+      delete defaults.common['Authorization'];
+    }
   }
 
   // Common HTTP methods

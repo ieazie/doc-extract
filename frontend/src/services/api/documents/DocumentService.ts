@@ -134,7 +134,7 @@ export class DocumentService extends BaseApiClient {
       return await this.get<DocumentContent>(`/api/documents/${documentId}/content`);
     } catch (error: any) {
       // Handle 404 gracefully - document content might not exist yet
-      if (error instanceof NotFoundError || error?.response?.status === 404) {
+      if (error instanceof NotFoundError || error?.response?.status === 404 || error?.name === 'NotFoundError') {
         return null;
       }
       // Re-throw other errors
