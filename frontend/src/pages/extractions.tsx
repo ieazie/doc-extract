@@ -17,7 +17,7 @@ import {
   Zap
 } from 'lucide-react';
 
-import { apiClient } from '../services/api';
+import { ExtractionService, serviceFactory } from '../services/api/index';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { SuccessMessage } from '../components/common/SuccessMessage';
@@ -161,7 +161,8 @@ const ExtractionsPage: React.FC = () => {
       setError(null);
       
       try {
-        const data = await apiClient.getExtractions(buildApiParams(filters));
+        const extractionService = serviceFactory.get<ExtractionService>('extractions');
+        const data = await extractionService.getExtractions(buildApiParams(filters));
         setExtractionsData(data);
       } catch (err) {
         setError('Failed to load extractions');
@@ -178,9 +179,10 @@ const ExtractionsPage: React.FC = () => {
   // Delete extraction function
   const deleteExtraction = async (extractionId: string) => {
     try {
-      await apiClient.deleteExtraction(extractionId);
+      const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      await extractionService.deleteExtraction(extractionId);
       // Refresh the data after successful deletion
-      const data = await apiClient.getExtractions(buildApiParams(filters));
+      const data = await extractionService.getExtractions(buildApiParams(filters));
       setExtractionsData(data);
     } catch (err) {
       console.error('Error deleting extraction:', err);
@@ -496,7 +498,8 @@ const ExtractionsPage: React.FC = () => {
         </PageTitle>
         <HeaderActions>
           <RefreshButton onClick={async () => {
-            const data = await apiClient.getExtractions(buildApiParams(filters));
+            const extractionService = serviceFactory.get<ExtractionService>('extractions');
+        const data = await extractionService.getExtractions(buildApiParams(filters));
             setExtractionsData(data);
           }} disabled={isLoading}>
             <RefreshCw size={16} />

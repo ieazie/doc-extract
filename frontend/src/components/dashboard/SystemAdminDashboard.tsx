@@ -304,7 +304,7 @@ const SystemAdminDashboard: React.FC = () => {
       <DashboardContainer>
         <ContentCard>
           <h2>Access Denied</h2>
-          <p>You don't have permission to access the System Admin Dashboard.</p>
+          <p>You don&apos;t have permission to access the System Admin Dashboard.</p>
         </ContentCard>
       </DashboardContainer>
     );

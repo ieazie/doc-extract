@@ -14,7 +14,7 @@ import {
   XCircle
 } from 'lucide-react';
 
-import { apiClient } from '@/services/api';
+import { AuthService, serviceFactory, User } from '@/services/api/index';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -23,19 +23,7 @@ import { SuccessMessage } from '@/components/common/SuccessMessage';
 import { Table, ColumnDefinition } from '@/components/table/Table';
 import { ActionButton, ActionGroup } from '@/components/table/Table.styled';
 
-// Types
-interface User {
-  id: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  role: string;
-  status: string;
-  tenant_id: string;
-  last_login?: string | null;
-  created_at: string;
-  updated_at: string;
-}
+// Types - User interface is imported from services/api
 
 interface CreateUserData {
   email: string;
@@ -279,30 +267,27 @@ const UsersPage: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Check if user has permission to access user management
-  if (!hasPermission('users:read')) {
-    return (
-      <PageContainer>
-        <PageHeader>
-          <PageTitle>Access Denied</PageTitle>
-        </PageHeader>
-        <ErrorMessage message="You don't have permission to access user management." />
-      </PageContainer>
-    );
-  }
+  // Check permission without early return to avoid conditional hooks
+  const canReadUsers = hasPermission('users:read');
 
   // Fetch users
   const { data: users, isLoading, error } = useQuery<User[]>(
     'users',
-    () => apiClient.getUsers(),
+    () => {
+      const authService = serviceFactory.get<AuthService>('auth');
+      return authService.getUsers();
+    },
     {
-      enabled: !!currentUser,
+      enabled: !!currentUser && canReadUsers,
     }
   );
 
   // Create user mutation
   const createUserMutation = useMutation(
-    (userData: CreateUserData) => apiClient.createUser(userData),
+    (userData: CreateUserData) => {
+      const authService = serviceFactory.get<AuthService>('auth');
+      return authService.createUser(userData);
+    },
     {
       onSuccess: () => {
         queryClient.invalidateQueries('users');
@@ -317,8 +302,10 @@ const UsersPage: React.FC = () => {
 
   // Update user mutation
   const updateUserMutation = useMutation(
-    ({ userId, userData }: { userId: string; userData: UpdateUserData }) =>
-      apiClient.updateUser(userId, userData),
+    ({ userId, userData }: { userId: string; userData: UpdateUserData }) => {
+      const authService = serviceFactory.get<AuthService>('auth');
+      return authService.updateUser(userId, userData);
+    },
     {
       onSuccess: () => {
         queryClient.invalidateQueries('users');
@@ -515,6 +502,18 @@ const UsersPage: React.FC = () => {
     );
   }
 
+  // Check permission after all hooks and render access denied if needed
+  if (!canReadUsers) {
+    return (
+      <PageContainer>
+        <PageHeader>
+          <PageTitle>Access Denied</PageTitle>
+        </PageHeader>
+        <ErrorMessage message="You don't have permission to access user management." />
+      </PageContainer>
+    );
+  }
+
   return (
     <PageContainer>
         <PageHeader>
@@ -682,7 +681,7 @@ const UsersPage: React.FC = () => {
                     name="role"
                     defaultValue={editingUser.role}
                   >
-                    <option value="system_admin">System Admin</option>
+                    {isSystemAdmin() && <option value="system_admin">System Admin</option>}
                     <option value="tenant_admin">Tenant Admin</option>
                     <option value="user">User</option>
                     <option value="viewer">Viewer</option>

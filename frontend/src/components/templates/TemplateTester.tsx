@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useMutation } from 'react-query';
-import { apiClient } from '../../services/api';
+import { TemplateService, DocumentService, serviceFactory } from '../../services/api/index';
 
 interface TemplateTesterProps {
   templateId: string;
@@ -250,7 +250,10 @@ const TemplateTester: React.FC<TemplateTesterProps> = ({ templateId, templateNam
   const [error, setError] = useState<string | null>(null);
 
   const testMutation = useMutation({
-    mutationFn: (documentText: string) => apiClient.testTemplate(templateId, documentText),
+    mutationFn: (documentText: string) => {
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      return templateService.testTemplate(templateId, documentText);
+    },
     onSuccess: (data) => {
       setTestResults(data);
       setError(null);

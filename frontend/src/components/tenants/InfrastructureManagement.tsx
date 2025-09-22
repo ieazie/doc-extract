@@ -15,15 +15,16 @@ import {
   EyeOff
 } from 'lucide-react';
 import { 
-  apiClient, 
+  TenantService, 
+  serviceFactory,
   InfrastructureStatus, 
   InfrastructureConfig, 
-  EnvironmentSecrets,
+  EnvironmentSecret,
   TenantEnvironmentInfo,
   StorageConfig,
   CacheConfig,
   MessageQueueConfig
-} from '@/services/api';
+} from '@/services/api/index';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
@@ -266,10 +267,24 @@ interface InfrastructureManagementProps {
 }
 
 const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ tenantInfo }) => {
+  // Helper function to map service status to StatusCard status
+  const mapServiceStatus = (status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown'): 'healthy' | 'unhealthy' | 'unknown' => {
+    switch (status) {
+      case 'healthy':
+        return 'healthy';
+      case 'degraded':
+      case 'unhealthy':
+        return 'unhealthy';
+      case 'unknown':
+        return 'unknown';
+      default:
+        return 'unknown';
+    }
+  };
   const [currentEnvironment, setCurrentEnvironment] = useState<string>('development');
   const [infrastructureStatus, setInfrastructureStatus] = useState<InfrastructureStatus | null>(null);
   const [infrastructureConfig, setInfrastructureConfig] = useState<InfrastructureConfig | null>(null);
-  const [environmentSecrets, setEnvironmentSecrets] = useState<EnvironmentSecrets>({});
+  const [environmentSecrets, setEnvironmentSecrets] = useState<EnvironmentSecret[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -286,19 +301,35 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
     setLoading(true);
     setError(null);
     try {
-      console.log('Loading infrastructure data for:', tenantInfo.slug, currentEnvironment);
-      
-      const [status, config, secrets] = await Promise.all([
-        apiClient.getInfrastructureStatus(tenantInfo.slug, currentEnvironment),
-        apiClient.getInfrastructureConfig(tenantInfo.slug, currentEnvironment),
-        apiClient.getEnvironmentSecrets(currentEnvironment)
-      ]);
+      // Try to load each piece of data individually to better identify failures
+      try {
+        const tenantService = serviceFactory.get<TenantService>('tenants');
+        const status = await tenantService.getInfrastructureStatus(tenantInfo.slug, currentEnvironment);
+        setInfrastructureStatus(status);
+      } catch (statusErr: any) {
+        console.error('Failed to load infrastructure status:', statusErr);
+        // Continue with other data even if status fails
+      }
 
-      console.log('Infrastructure data loaded:', { status, config, secrets });
+      try {
+        const tenantService = serviceFactory.get<TenantService>('tenants');
+        const config = await tenantService.getInfrastructureConfig(tenantInfo.slug, currentEnvironment);
+        setInfrastructureConfig(config);
+      } catch (configErr: any) {
+        console.error('Failed to load infrastructure config:', configErr);
+        // Continue with other data even if config fails
+      }
+
+      try {
+        const tenantService = serviceFactory.get<TenantService>('tenants');
+        const secrets = await tenantService.getEnvironmentSecrets(currentEnvironment);
+        setEnvironmentSecrets(secrets || []);
+      } catch (secretsErr: any) {
+        console.error('Failed to load environment secrets:', secretsErr);
+        // Continue even if secrets fail
+        setEnvironmentSecrets([]);
+      }
       
-      setInfrastructureStatus(status);
-      setInfrastructureConfig(config);
-      setEnvironmentSecrets(secrets);
     } catch (err: any) {
       console.error('Failed to load infrastructure data:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to load infrastructure data');
@@ -323,7 +354,8 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
       setLoading(true);
       setError(null);
       
-      await apiClient.updateEnvironmentConfig(configType, currentEnvironment, values);
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      await tenantService.updateEnvironmentConfig(currentEnvironment, values, configType);
       
       setSuccess(`${configType} configuration updated successfully`);
       setTimeout(() => setSuccess(null), 3000);
@@ -351,7 +383,11 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
       setLoading(true);
       setError(null);
       
-      await apiClient.updateEnvironmentSecret(currentEnvironment, secretType, value);
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      await tenantService.updateEnvironmentSecret(currentEnvironment, {
+        secret_name: secretType,
+        secret_value: value
+      });
       
       setSuccess(`${secretType} secret updated successfully`);
       setTimeout(() => setSuccess(null), 3000);
@@ -614,6 +650,36 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
         </div>
       )}
 
+      {!loading && !infrastructureStatus && !infrastructureConfig && (
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          padding: '3rem',
+          textAlign: 'center',
+          color: '#6b7280'
+        }}>
+          <Server size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+          <h3 style={{ margin: '0 0 0.5rem 0', color: '#374151' }}>No Infrastructure Data</h3>
+          <p style={{ margin: '0 0 1rem 0' }}>
+            Infrastructure data could not be loaded. This might be because:
+          </p>
+          <ul style={{ textAlign: 'left', margin: '0 0 1rem 0' }}>
+            <li>The backend infrastructure endpoints are not implemented</li>
+            <li>The tenant or environment does not exist</li>
+            <li>There's a network connectivity issue</li>
+          </ul>
+          <Button
+            variant="outline"
+            onClick={refreshData}
+            disabled={loading}
+          >
+            <RefreshCw size={16} />
+            Try Again
+          </Button>
+        </div>
+      )}
+
       {/* Infrastructure Status */}
       {infrastructureStatus && (
         <>
@@ -627,7 +693,7 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
             />
           </div>
           <StatusGrid>
-            <StatusCard status={getStatusType(infrastructureStatus.storage.configured, infrastructureStatus.storage.healthy)}>
+            <StatusCard status={mapServiceStatus(infrastructureStatus.storage?.healthy ? 'healthy' : 'unhealthy')}>
               <StatusHeader>
                 <ServiceInfo>
                   <ServiceIcon>
@@ -638,14 +704,14 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
                     <ServiceDescription>Document and file storage</ServiceDescription>
                   </ServiceDetails>
                 </ServiceInfo>
-                <StatusIndicator status={getStatusType(infrastructureStatus.storage.configured, infrastructureStatus.storage.healthy)}>
-                  {getStatusIcon(getStatusType(infrastructureStatus.storage.configured, infrastructureStatus.storage.healthy))}
-                  {getStatusText(infrastructureStatus.storage.configured, infrastructureStatus.storage.healthy)}
+                <StatusIndicator status={mapServiceStatus(infrastructureStatus.storage?.healthy ? 'healthy' : 'unhealthy')}>
+                  {getStatusIcon(mapServiceStatus(infrastructureStatus.storage?.healthy ? 'healthy' : 'unhealthy'))}
+                  {infrastructureStatus.storage?.healthy ? 'healthy' : 'unhealthy'}
                 </StatusIndicator>
               </StatusHeader>
             </StatusCard>
 
-            <StatusCard status={getStatusType(infrastructureStatus.cache.configured, infrastructureStatus.cache.healthy)}>
+            <StatusCard status={mapServiceStatus(infrastructureStatus.cache?.healthy ? 'healthy' : 'unhealthy')}>
               <StatusHeader>
                 <ServiceInfo>
                   <ServiceIcon>
@@ -656,14 +722,14 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
                     <ServiceDescription>Redis caching layer</ServiceDescription>
                   </ServiceDetails>
                 </ServiceInfo>
-                <StatusIndicator status={getStatusType(infrastructureStatus.cache.configured, infrastructureStatus.cache.healthy)}>
-                  {getStatusIcon(getStatusType(infrastructureStatus.cache.configured, infrastructureStatus.cache.healthy))}
-                  {getStatusText(infrastructureStatus.cache.configured, infrastructureStatus.cache.healthy)}
+                <StatusIndicator status={mapServiceStatus(infrastructureStatus.cache?.healthy ? 'healthy' : 'unhealthy')}>
+                  {getStatusIcon(mapServiceStatus(infrastructureStatus.cache?.healthy ? 'healthy' : 'unhealthy'))}
+                  {infrastructureStatus.cache?.healthy ? 'healthy' : 'unhealthy'}
                 </StatusIndicator>
               </StatusHeader>
             </StatusCard>
 
-            <StatusCard status={getStatusType(infrastructureStatus.queue.configured, infrastructureStatus.queue.healthy)}>
+            <StatusCard status={mapServiceStatus(infrastructureStatus.queue?.healthy ? 'healthy' : 'unhealthy')}>
               <StatusHeader>
                 <ServiceInfo>
                   <ServiceIcon>
@@ -674,14 +740,14 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
                     <ServiceDescription>Background job processing</ServiceDescription>
                   </ServiceDetails>
                 </ServiceInfo>
-                <StatusIndicator status={getStatusType(infrastructureStatus.queue.configured, infrastructureStatus.queue.healthy)}>
-                  {getStatusIcon(getStatusType(infrastructureStatus.queue.configured, infrastructureStatus.queue.healthy))}
-                  {getStatusText(infrastructureStatus.queue.configured, infrastructureStatus.queue.healthy)}
+                <StatusIndicator status={mapServiceStatus(infrastructureStatus.queue?.healthy ? 'healthy' : 'unhealthy')}>
+                  {getStatusIcon(mapServiceStatus(infrastructureStatus.queue?.healthy ? 'healthy' : 'unhealthy'))}
+                  {infrastructureStatus.queue?.healthy ? 'healthy' : 'unhealthy'}
                 </StatusIndicator>
               </StatusHeader>
             </StatusCard>
 
-            <StatusCard status={getStatusType(infrastructureStatus.llm.configured, infrastructureStatus.llm.healthy)}>
+            <StatusCard status={mapServiceStatus(infrastructureStatus.llm?.healthy ? 'healthy' : 'unhealthy')}>
               <StatusHeader>
                 <ServiceInfo>
                   <ServiceIcon>
@@ -692,9 +758,9 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
                     <ServiceDescription>AI model integration</ServiceDescription>
                   </ServiceDetails>
                 </ServiceInfo>
-                <StatusIndicator status={getStatusType(infrastructureStatus.llm.configured, infrastructureStatus.llm.healthy)}>
-                  {getStatusIcon(getStatusType(infrastructureStatus.llm.configured, infrastructureStatus.llm.healthy))}
-                  {getStatusText(infrastructureStatus.llm.configured, infrastructureStatus.llm.healthy)}
+                <StatusIndicator status={mapServiceStatus(infrastructureStatus.llm?.healthy ? 'healthy' : 'unhealthy')}>
+                  {getStatusIcon(mapServiceStatus(infrastructureStatus.llm?.healthy ? 'healthy' : 'unhealthy'))}
+                  {infrastructureStatus.llm?.healthy ? 'healthy' : 'unhealthy'}
                 </StatusIndicator>
               </StatusHeader>
             </StatusCard>
@@ -755,7 +821,7 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
       )}
 
       {/* Environment Secrets */}
-      {Object.keys(environmentSecrets).length > 0 && (
+      {environmentSecrets && environmentSecrets.length > 0 && (
         <ConfigSection>
           <ConfigHeader>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
@@ -773,7 +839,7 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
           </ConfigHeader>
 
           <ConfigGrid>
-            {Object.entries(environmentSecrets).map(([key, value]) => {
+            {environmentSecrets.map((secret) => {
               const secretDescriptions: Record<string, string> = {
                 'storage_access_key': 'Access key for storage provider (S3/MinIO)',
                 'storage_secret_key': 'Secret key for storage provider (S3/MinIO)',
@@ -793,18 +859,18 @@ const InfrastructureManagement: React.FC<InfrastructureManagementProps> = ({ ten
                   type: 'password' as const,
                   value: '',
                   required: true,
-                  description: secretDescriptions[key] || 'Secret value for authentication',
+                  description: secretDescriptions[secret.secret_name] || 'Secret value for authentication',
                   placeholder: 'Enter new secret value'
                 }
               ];
 
               return (
                 <EditableConfigCard
-                  key={key}
-                  title={key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  description={secretDescriptions[key] || 'Secret value for authentication'}
+                  key={secret.id}
+                  title={secret.secret_name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  description={secretDescriptions[secret.secret_name] || 'Secret value for authentication'}
                   fields={createSecretFields()}
-                  onSave={(values) => saveSecret(key, values.value)}
+                  onSave={(values) => saveSecret(secret.secret_name, values.value)}
                   loading={loading}
                 />
               );

@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import styled from 'styled-components';
 import { Plus, FileText, Eye } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { apiClient } from '../services/api';
+import { TemplateService, serviceFactory } from '../services/api/index';
 import { Table, TableFilters, ColumnDefinition, FilterDefinition, PaginationConfig } from '../components/table';
 import SchemaModal from '../components/templates/SchemaModal';
 import ContextMenu from '../components/common/ContextMenu';
@@ -86,21 +86,27 @@ const TemplatesPage: React.FC = () => {
   // Fetch templates
   const { data: templatesData, isLoading, error } = useQuery({
     queryKey: ['templates', filters.page, filters.per_page, filters.search, filters.documentType, filters.status],
-    queryFn: () => apiClient.getTemplates(
-      filters.page, 
-      filters.per_page, 
-      filters.search || undefined, 
-      filters.documentType || undefined, 
-      undefined, // isActive - not used for now
-      filters.status || undefined,
-      'created_at', // sortBy - default to created_at
-      'desc' // sortOrder - default to desc
-    ),
+    queryFn: () => {
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      return templateService.getTemplates({
+        page: filters.page, 
+        per_page: filters.per_page, 
+        search: filters.search || undefined, 
+        document_type_id: filters.documentType || undefined, 
+        is_active: undefined, // not used for now
+        status: filters.status || undefined,
+        sort_by: 'created_at', // default to created_at
+        sort_order: 'desc' // default to desc
+      });
+    },
   });
 
   // Delete template mutation
   const deleteMutation = useMutation({
-    mutationFn: (templateId: string) => apiClient.deleteTemplate(templateId),
+    mutationFn: (templateId: string) => {
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      return templateService.deleteTemplate(templateId);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['templates'] });
     },

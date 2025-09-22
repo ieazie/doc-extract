@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Bell, Globe, Shield, ChevronDown, Users, Settings, ExternalLink, User, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiClient } from '@/services/api';
+import { AuthService, TenantService, serviceFactory } from '@/services/api/index';
 
 const HeaderContainer = styled.header`
   position: fixed;
@@ -375,14 +375,17 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
         let tenants;
         if (user.role === 'system_admin') {
           // System admin can see all tenants
-          tenants = await apiClient.getTenants();
+          const tenantService = serviceFactory.get<TenantService>('tenants');
+          tenants = await tenantService.getTenants();
         } else {
           // Regular users see only their assigned tenants
-          tenants = await apiClient.getUserTenants();
+          const authService = serviceFactory.get<AuthService>('auth');
+          tenants = await authService.getUserTenants();
         }
-        setAvailableTenants(tenants);
+        setAvailableTenants(tenants || []);
       } catch (error) {
         console.error('Failed to load tenants:', error);
+        setAvailableTenants([]);
       } finally {
         setIsLoadingTenants(false);
       }
@@ -450,7 +453,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
         <Separator />
         
         {/* Tenant Switcher - moved to left side */}
-        {tenant && availableTenants.length > 0 && (
+        {tenant && availableTenants && availableTenants.length > 0 && (
           <TenantSwitcher data-tenant-switcher>
             <TenantButton onClick={toggleDropdown} disabled={isSwitching}>
               <TenantInfo>
@@ -472,7 +475,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
             </TenantButton>
 
             <TenantDropdown $isOpen={isDropdownOpen}>
-              {availableTenants.map((t) => (
+              {availableTenants && availableTenants.map((t) => (
                 <DropdownItem
                   key={t.id}
                   $isActive={t.id === tenant.id}

@@ -3,7 +3,7 @@
  */
 import React, { useState, useRef, useCallback } from 'react';
 import styled from 'styled-components';
-import { apiClient, DocumentUploadResponse, Category } from '../../services/api';
+import { DocumentService, serviceFactory, DocumentUploadResponse, Category, formatFileSize } from '../../services/api/index';
 
 const UploadContainer = styled.div`
   max-width: 800px;
@@ -324,7 +324,8 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
         .map(tag => tag.trim())
         .filter(tag => tag.length > 0);
 
-      const result = await apiClient.uploadDocument(selectedFile, {
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      const result = await documentService.uploadDocument(selectedFile, {
         category_id: selectedCategory || undefined,
         tags: tagsArray.length > 0 ? tagsArray : undefined,
         onUploadProgress: setUploadProgress
@@ -353,8 +354,8 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
   };
 
   // Format file size
-  const formatFileSize = (bytes: number): string => {
-    return apiClient.formatFileSize(bytes);
+  const formatFileSizeLocal = (bytes: number): string => {
+    return formatFileSize(bytes);
   };
 
   return (
@@ -401,7 +402,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
           <FileInfo>
             <FileName>{selectedFile.name}</FileName>
             <FileDetails>
-              {formatFileSize(selectedFile.size)} • {selectedFile.type}
+              {formatFileSizeLocal(selectedFile.size)} • {selectedFile.type}
             </FileDetails>
           </FileInfo>
         )}

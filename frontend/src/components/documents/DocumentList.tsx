@@ -2,7 +2,8 @@
  * Simple document list component
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { apiClient, Document, DocumentListResponse, Category } from '../../services/api';
+import { DocumentService, CategoryService, serviceFactory, Document, DocumentListResponse, Category } from '../../services/api/index';
+import { formatFileSize, formatDate } from '../../utils/apiUtils';
 import {
   Container,
   Header,
@@ -51,6 +52,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
     setError('');
 
     try {
+      const documentService = serviceFactory.get<DocumentService>('documents');
       const params: any = {
         page: 1,
         per_page: 20,
@@ -62,7 +64,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         params.search = searchTerm.trim();
       }
 
-      const response = await apiClient.getDocuments(params);
+      const response = await documentService.getDocuments({ page: params.page, per_page: params.per_page, search: params.search, sort_by: params.sort_by, sort_order: params.sort_order });
       setDocuments(response.documents);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load documents');
@@ -83,7 +85,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 
   const handleDocumentDownload = async (documentId: string) => {
     try {
-      const url = await apiClient.getDocumentDownloadUrl(documentId);
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      const url = await documentService.getDocumentDownloadUrl(documentId);
       window.open(url, '_blank');
     } catch (err) {
       console.error('Download failed:', err);
@@ -96,7 +99,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
     }
 
     try {
-      await apiClient.deleteDocument(documentId);
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      await documentService.deleteDocument(documentId);
       onDocumentDelete?.(documentId);
       loadDocuments();
     } catch (err) {
@@ -160,8 +164,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
               </DocumentHeader>
 
               <DocumentMeta>
-                <div>Size: {apiClient.formatFileSize(document.file_size)}</div>
-                <div>Uploaded: {apiClient.formatDate(document.created_at)}</div>
+                <div>Size: {formatFileSize(document.file_size)}</div>
+                <div>Uploaded: {formatDate(document.created_at)}</div>
                 <div>Type: {document.document_type || 'Unknown'}</div>
                 {document.detected_language && (
                   <div>

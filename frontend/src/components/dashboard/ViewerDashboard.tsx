@@ -11,7 +11,7 @@ import {
   Lock
 } from 'lucide-react';
 
-import { apiClient, ProcessingStats, Category, DocumentListResponse } from '../../services/api';
+import { DocumentService, CategoryService, serviceFactory, ProcessingStats, Category, DocumentListResponse } from '../../services/api/index';
 import { useAuth } from '../../contexts/AuthContext';
 import DocumentList from '../documents/DocumentList';
 
@@ -240,16 +240,20 @@ export const ViewerDashboard: React.FC = () => {
     try {
       await new Promise(resolve => setTimeout(resolve, 100));
       
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      const categoryService = serviceFactory.get<CategoryService>('categories');
+
       const [statsData, categoriesData, documentsData] = await Promise.all([
-        apiClient.getProcessingStats().catch((error) => {
+        // Get accurate processing stats from dedicated endpoint
+        documentService.getProcessingStats().catch((error) => {
           console.error('Failed to load processing stats:', error);
           return null;
         }),
-        apiClient.getCategories().catch((error) => {
+        categoryService.getCategories().catch((error) => {
           console.error('Failed to load categories:', error);
           return { categories: [], total: 0 };
         }),
-        apiClient.getDocuments(1, 5, undefined, undefined, undefined, undefined, undefined, undefined, 'created_at', 'desc').catch((error) => {
+        documentService.getDocuments({ page: 1, per_page: 5, sort_by: 'created_at', sort_order: 'desc' }).catch((error) => {
           console.error('Failed to load documents:', error);
           return null;
         })

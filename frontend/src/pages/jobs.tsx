@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import { JobList, JobModal, JobDetails } from '@/components/jobs';
-import { ExtractionJob } from '@/services/api';
+import { Job } from '@/services/api/index';
 import { SuccessMessage } from '@/components/common/SuccessMessage';
 
 type ViewMode = 'list' | 'details' | 'create' | 'edit';
@@ -13,7 +13,7 @@ type ViewMode = 'list' | 'details' | 'create' | 'edit';
 const JobsPage: React.FC = () => {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [selectedJob, setSelectedJob] = useState<ExtractionJob | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleJobCreate = () => {
@@ -21,23 +21,23 @@ const JobsPage: React.FC = () => {
     setViewMode('create');
   };
 
-  const handleJobEdit = (job: ExtractionJob) => {
+  const handleJobEdit = (job: Job) => {
     setSelectedJob(job);
     setViewMode('edit');
   };
 
-  const handleJobDetails = (job: ExtractionJob) => {
+  const handleJobDetails = (job: Job) => {
     setSelectedJob(job);
     setViewMode('details');
   };
 
-  const handleJobExecute = (job: ExtractionJob) => {
+  const handleJobExecute = (job: Job) => {
     setSuccessMessage(`Job "${job.name}" execution started successfully!`);
     // Auto-hide success message after 5 seconds
     setTimeout(() => setSuccessMessage(null), 5000);
   };
 
-  const handleJobSave = (job: ExtractionJob) => {
+  const handleJobSave = (job: Job) => {
     if (viewMode === 'create') {
       setSuccessMessage(`Job "${job.name}" created successfully!`);
     } else {
@@ -52,7 +52,7 @@ const JobsPage: React.FC = () => {
     setSelectedJob(null);
   };
 
-  const handleJobDelete = async (job: ExtractionJob) => {
+  const handleJobDelete = async (job: Job) => {
     setSuccessMessage(`Job "${job.name}" deleted successfully!`);
     // Auto-hide success message after 5 seconds
     setTimeout(() => setSuccessMessage(null), 5000);

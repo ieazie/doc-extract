@@ -24,7 +24,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import Table, { ColumnDefinition } from '@/components/table/Table';
-import { apiClient, ExtractionJob, JobStatistics, DocumentExtractionTracking } from '@/services/api';
+import { JobService, serviceFactory, Job, JobStatistics, JobExecution, formatDate } from '@/services/api/index';
 import styled from 'styled-components';
 
 // Professional Styled Components
@@ -234,7 +234,7 @@ const InfoValue = styled.span`
   font-weight: 500;
 `;
 
-const ScheduleBadge = styled.span<{ type: 'immediate' | 'scheduled' | 'recurring' }>`
+const ScheduleBadge = styled.span<{ type: 'immediate' | 'scheduled' | 'recurring' | 'manual' }>`
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -327,8 +327,8 @@ const ErrorState = styled.div`
 interface JobDetailsProps {
   jobId: string;
   onBack: () => void;
-  onEdit: (job: ExtractionJob) => void;
-  onDelete: (job: ExtractionJob) => void;
+  onEdit: (job: Job) => void;
+  onDelete: (job: Job) => void;
 }
 
 export const JobDetails: React.FC<JobDetailsProps> = ({
@@ -337,9 +337,9 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
   onEdit,
   onDelete
 }) => {
-  const [job, setJob] = useState<ExtractionJob | null>(null);
+  const [job, setJob] = useState<Job | null>(null);
   const [statistics, setStatistics] = useState<JobStatistics | null>(null);
-  const [history, setHistory] = useState<DocumentExtractionTracking[]>([]);
+  const [history, setHistory] = useState<JobExecution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -353,14 +353,26 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
       setError(null);
 
       const [jobData, statsData, historyData] = await Promise.all([
-        apiClient.getJob(jobId),
-        apiClient.getJobStatistics(jobId),
-        apiClient.getJobHistory(jobId, 1, 50)
+        (async () => {
+          const jobService = serviceFactory.get<JobService>('jobs');
+          return jobService.getJob(jobId);
+        })(),
+        (async () => {
+          const jobService = serviceFactory.get<JobService>('jobs');
+          return jobService.getJobStatistics(jobId);
+        })(),
+        (async () => {
+          const jobService = serviceFactory.get<JobService>('jobs');
+          return jobService.getJobExecutions({ job_id: jobId, page: 1, per_page: 50 });
+        })()
       ]);
 
       setJob(jobData);
       setStatistics(statsData);
-      setHistory(historyData.tracking);
+      console.log('JobDetails - historyData:', historyData);
+      // Backend returns: { job_id, total_count, returned_count, offset, limit, executions }
+      // Frontend expects: { executions, total, page, per_page, total_pages }
+      setHistory(historyData?.executions || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load job details');
     } finally {
@@ -372,7 +384,8 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
     if (!job) return;
 
     try {
-      await apiClient.executeJob(job.id, 'manual');
+      const jobService = serviceFactory.get<JobService>('jobs');
+      await jobService.executeJob(job.id, { triggered_by: 'manual' });
       // Reload data to update statistics
       loadJobDetails();
     } catch (err) {
@@ -384,7 +397,8 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
     if (!job) return;
 
     try {
-      const updatedJob = await apiClient.updateJob(job.id, { is_active: !job.is_active });
+      const jobService = serviceFactory.get<JobService>('jobs');
+      const updatedJob = await jobService.updateJob(job.id, { is_active: !job.is_active });
       setJob(updatedJob);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update job');
@@ -506,8 +520,8 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
           <ScheduleInfo>
             {getScheduleIcon(job.schedule_type)}
             {job.schedule_type.charAt(0).toUpperCase() + job.schedule_type.slice(1)} Job
-            {job.schedule_type === 'recurring' && job.schedule_config?.cron && (
-              <> • {job.schedule_config.cron}</>
+            {job.schedule_type === 'recurring' && job.schedule_config?.cron_expression && (
+              <> • {job.schedule_config.cron_expression}</>
             )}
           </ScheduleInfo>
         </JobStatus>
@@ -570,34 +584,12 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
               </ScheduleBadge>
             </InfoRow>
             <InfoRow>
-              <InfoLabel>Priority</InfoLabel>
-              <InfoValue>{job.priority}/10</InfoValue>
+              <InfoLabel>Job Type</InfoLabel>
+              <InfoValue>{job.job_type}</InfoValue>
             </InfoRow>
             <InfoRow>
-              <InfoLabel>Max Concurrency</InfoLabel>
-              <InfoValue>{job.max_concurrency}</InfoValue>
-            </InfoRow>
-            <InfoRow>
-              <InfoLabel>Category</InfoLabel>
-              <InfoValue>
-                {job.category ? (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div
-                      style={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: '50%',
-                        backgroundColor: job.category.color
-                      }}
-                    />
-                    {job.category.name}
-                  </span>
-                ) : 'Unknown'}
-              </InfoValue>
-            </InfoRow>
-            <InfoRow>
-              <InfoLabel>Template</InfoLabel>
-              <InfoValue>{job.template?.name || 'Unknown'}</InfoValue>
+              <InfoLabel>Created By</InfoLabel>
+              <InfoValue>{job.created_by}</InfoValue>
             </InfoRow>
           </InfoGrid>
         </InfoCard>
@@ -612,34 +604,34 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
             <InfoRow>
               <InfoLabel>Last Run</InfoLabel>
               <InfoValue>
-                {job.last_run_at ? apiClient.formatDate(job.last_run_at) : 'Never'}
+                {job.last_run_at ? formatDate(job.last_run_at) : 'Never'}
               </InfoValue>
             </InfoRow>
             <InfoRow>
               <InfoLabel>Next Run</InfoLabel>
               <InfoValue>
-                {job.next_run_at ? apiClient.formatDate(job.next_run_at) : 'Not scheduled'}
+                {job.next_run_at ? formatDate(job.next_run_at) : 'Not scheduled'}
               </InfoValue>
             </InfoRow>
             <InfoRow>
               <InfoLabel>Created</InfoLabel>
-              <InfoValue>{apiClient.formatDate(job.created_at)}</InfoValue>
+              <InfoValue>{formatDate(job.created_at)}</InfoValue>
             </InfoRow>
             <InfoRow>
               <InfoLabel>Updated</InfoLabel>
-              <InfoValue>{apiClient.formatDate(job.updated_at)}</InfoValue>
+              <InfoValue>{formatDate(job.updated_at)}</InfoValue>
             </InfoRow>
-            {job.run_at && (
+            {job.next_run_at && (
               <InfoRow>
-                <InfoLabel>Scheduled Time</InfoLabel>
-                <InfoValue>{apiClient.formatDate(job.run_at)}</InfoValue>
+                <InfoLabel>Next Run</InfoLabel>
+                <InfoValue>{formatDate(job.next_run_at)}</InfoValue>
               </InfoRow>
             )}
-            {job.schedule_config?.cron && (
+            {job.schedule_config?.cron_expression && (
               <InfoRow>
                 <InfoLabel>Cron Expression</InfoLabel>
                 <InfoValue style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                  {job.schedule_config.cron}
+                  {job.schedule_config.cron_expression}
                 </InfoValue>
               </InfoRow>
             )}
@@ -680,13 +672,13 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
               {
                 key: 'document',
                 label: 'Document',
-                render: (value, row: DocumentExtractionTracking) => 
-                  row.document?.original_filename || 'Unknown Document'
+                 render: (value, row: JobExecution) =>
+                   row.id || 'Unknown Execution'
               },
               {
                 key: 'status',
                 label: 'Status',
-                render: (value, row: DocumentExtractionTracking) => (
+                render: (value, row: JobExecution) => (
                   <StatusIcon status={row.status}>
                     {getStatusIcon(row.status)}
                     {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
@@ -696,31 +688,31 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
               {
                 key: 'triggered_by',
                 label: 'Triggered By',
-                render: (value, row: DocumentExtractionTracking) => 
+                render: (value, row: JobExecution) => 
                   row.triggered_by.charAt(0).toUpperCase() + row.triggered_by.slice(1)
               },
               {
                 key: 'queued_at',
                 label: 'Queued At',
-                render: (value, row: DocumentExtractionTracking) => 
-                  apiClient.formatDate(row.queued_at)
+                render: (value, row: JobExecution) => 
+                   formatDate(row.created_at)
               },
               {
                 key: 'completed_at',
                 label: 'Completed At',
-                render: (value, row: DocumentExtractionTracking) => 
-                  row.completed_at ? apiClient.formatDate(row.completed_at) : '-'
+                render: (value, row: JobExecution) => 
+                  row.completed_at ? formatDate(row.completed_at) : '-'
               },
               {
                 key: 'processing_time_ms',
                 label: 'Processing Time',
-                render: (value, row: DocumentExtractionTracking) => 
-                  row.processing_time_ms ? `${row.processing_time_ms}ms` : '-'
+                render: (value, row: JobExecution) => 
+                   row.duration_ms ? `${row.duration_ms}ms` : '-'
               },
               {
                 key: 'retry_count',
                 label: 'Retries',
-                render: (value, row: DocumentExtractionTracking) => row.retry_count
+                render: (value, row: JobExecution) => row.retry_count
               }
             ]}
             emptyState={{

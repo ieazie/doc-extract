@@ -12,7 +12,17 @@ import {
   Cpu
 } from 'lucide-react';
 
-import { apiClient, ProcessingStats, Category, DocumentListResponse, HealthStatus, User } from '../../services/api';
+import { 
+  AuthService, 
+  DocumentService, 
+  HealthService, 
+  serviceFactory, 
+  Category, 
+  DocumentListResponse, 
+  HealthStatus, 
+  User,
+  ProcessingStats
+} from '../../services/api/index';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Styled Components
@@ -213,7 +223,7 @@ export const AdminDashboard: React.FC = () => {
   const { user: currentUser } = useAuth();
   const [stats, setStats] = useState<ProcessingStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [health, setHealth] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Load admin dashboard data
@@ -223,16 +233,21 @@ export const AdminDashboard: React.FC = () => {
     try {
       await new Promise(resolve => setTimeout(resolve, 100));
       
+      const documentService = serviceFactory.get<DocumentService>('documents');
+      const authService = serviceFactory.get<AuthService>('auth');
+      const healthService = serviceFactory.get<HealthService>('health');
+
       const [statsData, usersData, healthData] = await Promise.all([
-        apiClient.getProcessingStats().catch((error) => {
+        // Get accurate processing stats from dedicated endpoint
+        documentService.getProcessingStats().catch((error) => {
           console.error('Failed to load processing stats:', error);
           return null;
         }),
-        apiClient.getUsers().catch((error) => {
+        authService.getUsers().catch((error) => {
           console.error('Failed to load users:', error);
           return [];
         }),
-        apiClient.getDetailedHealth().catch((error) => {
+        healthService.getDetailedHealth().catch((error) => {
           console.error('Failed to load health data:', error);
           return null;
         })

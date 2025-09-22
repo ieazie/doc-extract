@@ -7,7 +7,7 @@ import { useRouter } from 'next/router';
 import { Plus, Play, Pause, Edit, Trash2, Clock, BarChart3, Eye } from 'lucide-react';
 import { Table, TableFilters, ColumnDefinition, FilterDefinition, PaginationConfig } from '@/components/table';
 import { Button } from '@/components/ui/Button';
-import { apiClient, ExtractionJob, Category } from '@/services/api';
+import { JobService, CategoryService, TemplateService, serviceFactory, Job, Category } from '@/services/api/index';
 import styled from 'styled-components';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -154,9 +154,9 @@ const StatItem = styled.span`
 
 interface JobListProps {
   onJobCreate?: () => void;
-  onJobEdit?: (job: ExtractionJob) => void;
-  onJobExecute?: (job: ExtractionJob) => void;
-  onJobDetails?: (job: ExtractionJob) => void;
+  onJobEdit?: (job: Job) => void;
+  onJobExecute?: (job: Job) => void;
+  onJobDetails?: (job: Job) => void;
 }
 
 export const JobList: React.FC<JobListProps> = ({
@@ -167,7 +167,7 @@ export const JobList: React.FC<JobListProps> = ({
 }) => {
   const router = useRouter();
   const { user, hasPermission } = useAuth();
-  const [jobs, setJobs] = useState<ExtractionJob[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -234,17 +234,18 @@ export const JobList: React.FC<JobListProps> = ({
         apiParams.sortOrder = mergedParams.sort_order;
       }
       
-      const response = await apiClient.getJobs(
-        apiParams.page,
-        apiParams.perPage,
-        apiParams.search,
-        apiParams.categoryId,
-        apiParams.templateId,
-        apiParams.scheduleType,
-        apiParams.isActive,
-        apiParams.sortBy,
-        apiParams.sortOrder
-      );
+      const jobService = serviceFactory.get<JobService>('jobs');
+      const response = await jobService.getJobs({
+        page: apiParams.page,
+        per_page: apiParams.perPage,
+        search: apiParams.search,
+        category_id: apiParams.categoryId,
+        template_id: apiParams.templateId,
+        is_active: apiParams.isActive,
+        schedule_type: apiParams.scheduleType,
+        sort_by: apiParams.sortBy,
+        sort_order: apiParams.sortOrder
+      });
       
       setJobs(response.jobs);
       setPagination({
@@ -262,7 +263,8 @@ export const JobList: React.FC<JobListProps> = ({
 
   const loadCategories = async () => {
     try {
-      const response = await apiClient.getCategories();
+      const categoryService = serviceFactory.get<CategoryService>('categories');
+      const response = await categoryService.getCategories();
       setCategories(response.categories);
     } catch (err) {
       console.error('Failed to load categories:', err);
@@ -271,16 +273,18 @@ export const JobList: React.FC<JobListProps> = ({
 
   const loadTemplates = async () => {
     try {
-      const response = await apiClient.getTemplates(1, 100);
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      const response = await templateService.getTemplates({ page: 1, per_page: 100 });
       setTemplates(response.templates);
     } catch (err) {
       console.error('Failed to load templates:', err);
     }
   };
 
-  const handleExecuteJob = async (job: ExtractionJob) => {
+  const handleExecuteJob = async (job: Job) => {
     try {
-      await apiClient.executeJob(job.id, 'manual');
+      const jobService = serviceFactory.get<JobService>('jobs');
+      await jobService.executeJob(job.id, { triggered_by: 'manual' });
       if (onJobExecute) {
         onJobExecute(job);
       }
@@ -291,22 +295,24 @@ export const JobList: React.FC<JobListProps> = ({
     }
   };
 
-  const handleDeleteJob = async (job: ExtractionJob) => {
+  const handleDeleteJob = async (job: Job) => {
     if (!confirm(`Are you sure you want to delete job "${job.name}"?`)) {
       return;
     }
 
     try {
-      await apiClient.deleteJob(job.id);
+      const jobService = serviceFactory.get<JobService>('jobs');
+      await jobService.deleteJob(job.id);
       loadJobs();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete job');
     }
   };
 
-  const handleToggleJob = async (job: ExtractionJob) => {
+  const handleToggleJob = async (job: Job) => {
     try {
-      await apiClient.updateJob(job.id, { is_active: !job.is_active });
+      const jobService = serviceFactory.get<JobService>('jobs');
+      await jobService.updateJob(job.id, { is_active: !job.is_active });
       loadJobs();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update job');
@@ -335,7 +341,7 @@ export const JobList: React.FC<JobListProps> = ({
   };
 
   // Column definitions
-  const columns: ColumnDefinition<ExtractionJob>[] = [
+  const columns: ColumnDefinition<Job>[] = [
     {
       key: 'name',
       label: 'Job Name',
@@ -360,21 +366,9 @@ export const JobList: React.FC<JobListProps> = ({
       width: '100px',
       render: (value, job) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {job.category && (
-            <>
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  backgroundColor: job.category.color
-                }}
-              />
-              <span style={{ fontSize: '11px', fontWeight: 500, color: '#374151' }}>
-                {job.category.name}
-              </span>
-            </>
-          )}
+          <span style={{ fontSize: '11px', fontWeight: 500, color: '#374151' }}>
+            {job.category?.name || job.execution_config?.category_id || '-'}
+          </span>
         </div>
       )
     },
@@ -384,7 +378,7 @@ export const JobList: React.FC<JobListProps> = ({
       width: '160px',
       render: (value, job) => (
         <div style={{ fontWeight: 500, color: '#374151', fontSize: '12px' }}>
-          {job.template?.name || 'Unknown Template'}
+          {job.template?.name || job.execution_config?.template_id || '-'}
         </div>
       )
     },
@@ -399,12 +393,12 @@ export const JobList: React.FC<JobListProps> = ({
       )
     },
     {
-      key: 'status',
+      key: 'is_active',
       label: 'Status',
       width: '80px',
       render: (value, job) => {
         const status = job.is_active ? 'active' : 'inactive';
-        return <StatusBadge status={status}>{status}</StatusBadge>;
+        return <StatusBadge status={status as 'active' | 'inactive' | 'running' | 'failed'}>{status}</StatusBadge>;
       }
     },
     {
@@ -412,9 +406,9 @@ export const JobList: React.FC<JobListProps> = ({
       label: 'Statistics',
       width: '140px',
       render: (value, job) => {
-        const total = job.total_executions;
-        const successful = job.successful_executions;
-        const failed = job.failed_executions;
+        const total = job.total_executions || 0;
+        const successful = job.successful_executions || 0;
+        const failed = job.failed_executions || 0;
         const successRate = total > 0 ? Math.round((successful / total) * 100) : 0;
         
         return (
@@ -513,23 +507,9 @@ export const JobList: React.FC<JobListProps> = ({
     {
       key: 'actions',
       label: 'Actions',
-      width: '180px',
+      width: '150px',
       render: (value, job) => (
         <div style={{ display: 'flex', gap: 6 }}>
-          <Button
-            size="small"
-            variant="outline"
-            onClick={() => handleExecuteJob(job)}
-            disabled={!job.is_active}
-            title={job.is_active ? "Execute job now" : "Job is inactive"}
-            style={{ 
-              padding: '6px',
-              borderColor: job.is_active ? '#3b82f6' : '#d1d5db',
-              color: job.is_active ? '#3b82f6' : '#9ca3af'
-            }}
-          >
-            <Play size={14} />
-          </Button>
           <Button
             size="small"
             variant="outline"
@@ -600,10 +580,11 @@ export const JobList: React.FC<JobListProps> = ({
       label: 'Category',
       type: 'select',
       options: [
-        { value: '', label: 'All Categories' },
+        { value: '', label: 'All Categories', key: 'all-categories' },
         ...categories.map(cat => ({
           value: cat.id,
-          label: cat.name
+          label: cat.name,
+          key: `category-${cat.id}`
         }))
       ]
     },
@@ -612,10 +593,11 @@ export const JobList: React.FC<JobListProps> = ({
       label: 'Template',
       type: 'select',
       options: [
-        { value: '', label: 'All Templates' },
+        { value: '', label: 'All Templates', key: 'all-templates' },
         ...templates.map(tpl => ({
           value: tpl.id,
-          label: tpl.name
+          label: tpl.name,
+          key: `template-${tpl.id}`
         }))
       ]
     },
@@ -624,10 +606,10 @@ export const JobList: React.FC<JobListProps> = ({
       label: 'Schedule Type',
       type: 'select',
       options: [
-        { value: '', label: 'All Types' },
-        { value: 'immediate', label: 'Immediate' },
-        { value: 'scheduled', label: 'Scheduled' },
-        { value: 'recurring', label: 'Recurring' }
+        { value: '', label: 'All Types', key: 'all-schedule-types' },
+        { value: 'immediate', label: 'Immediate', key: 'schedule-immediate' },
+        { value: 'scheduled', label: 'Scheduled', key: 'schedule-scheduled' },
+        { value: 'recurring', label: 'Recurring', key: 'schedule-recurring' }
       ]
     },
     {
@@ -635,9 +617,9 @@ export const JobList: React.FC<JobListProps> = ({
       label: 'Status',
       type: 'select',
       options: [
-        { value: '', label: 'All Status' },
-        { value: 'true', label: 'Active' },
-        { value: 'false', label: 'Inactive' }
+        { value: '', label: 'All Status', key: 'all-status' },
+        { value: 'true', label: 'Active', key: 'status-active' },
+        { value: 'false', label: 'Inactive', key: 'status-inactive' }
       ]
     }
   ];

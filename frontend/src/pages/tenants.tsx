@@ -13,7 +13,7 @@ import {
   MoreVertical
 } from 'lucide-react';
 
-import { apiClient } from '@/services/api';
+import { TenantService, serviceFactory } from '@/services/api/index';
 import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -37,8 +37,9 @@ interface Tenant {
 
 interface CreateTenantData {
   name: string;
+  slug: string;
   settings?: Record<string, any>;
-  environment?: string;
+  environment: string;
 }
 
 interface UpdateTenantData {
@@ -278,15 +279,21 @@ const TenantsPage: React.FC = () => {
   // Fetch tenants
   const { data: tenants, isLoading, error } = useQuery<Tenant[]>(
     'tenants',
-    () => apiClient.getTenants(),
+    () => {
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      return tenantService.getTenants();
+    },
     {
-      enabled: !!currentUser && currentUser.role === 'admin',
+      enabled: hasPermission('tenants:read_all'),
     }
   );
 
   // Create tenant mutation
   const createTenantMutation = useMutation(
-    (tenantData: CreateTenantData) => apiClient.createTenant(tenantData),
+    (tenantData: CreateTenantData) => {
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      return tenantService.createTenant(tenantData);
+    },
     {
       onSuccess: () => {
         queryClient.invalidateQueries('tenants');
@@ -301,8 +308,10 @@ const TenantsPage: React.FC = () => {
 
   // Update tenant mutation
   const updateTenantMutation = useMutation(
-    ({ tenantId, tenantData }: { tenantId: string; tenantData: UpdateTenantData }) =>
-      apiClient.updateTenant(tenantId, tenantData),
+    ({ tenantId, tenantData }: { tenantId: string; tenantData: UpdateTenantData }) => {
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      return tenantService.updateTenant(tenantId, tenantData);
+    },
     {
       onSuccess: () => {
         queryClient.invalidateQueries('tenants');
@@ -317,7 +326,10 @@ const TenantsPage: React.FC = () => {
 
   // Delete tenant mutation
   const deleteTenantMutation = useMutation(
-    (tenantId: string) => apiClient.deleteTenant(tenantId),
+    (tenantId: string) => {
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      return tenantService.deleteTenant(tenantId);
+    },
     {
       onSuccess: () => {
         queryClient.invalidateQueries('tenants');
@@ -335,6 +347,7 @@ const TenantsPage: React.FC = () => {
     const formData = new FormData(e.currentTarget);
     const tenantData: CreateTenantData = {
       name: formData.get('name') as string,
+      slug: (formData.get('name') as string).toLowerCase().replace(/\s+/g, '-'),
       environment: formData.get('environment') as string,
       settings: {
         max_documents: parseInt(formData.get('max_documents') as string) || 1000,
@@ -459,12 +472,14 @@ const TenantsPage: React.FC = () => {
       <ActionButton
         onClick={() => setSelectedTenant(tenant)}
         title="Manage tenant"
+        disabled={!hasPermission('tenants:update')}
       >
         <Settings size={16} />
       </ActionButton>
       <ActionButton
         onClick={() => handleDeleteTenant(tenant.id)}
         title="Delete tenant"
+        disabled={!hasPermission('tenants:delete')}
       >
         <Trash2 size={16} />
       </ActionButton>

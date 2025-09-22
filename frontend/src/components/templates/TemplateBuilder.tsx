@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { apiClient, GeneratedField, SupportedLanguage } from '../../services/api';
+import { TemplateService, LanguageService, DocumentService, serviceFactory, SchemaField as ApiSchemaField, SupportedLanguage } from '../../services/api/index';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   Plus, 
@@ -683,10 +683,11 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         setLoadingLanguages(true);
         
         // Get tenant-specific supported language codes
-        const tenantLanguageCodes = await apiClient.getTenantSupportedLanguages(tenant.id);
+        const languageService = serviceFactory.get<LanguageService>('language');
+        const tenantLanguageCodes = await languageService.getTenantSupportedLanguages(tenant.id);
         
         // Get all supported languages to get full language info (name, native_name)
-        const allLanguages = await apiClient.getSupportedLanguages();
+        const allLanguages = await languageService.getSupportedLanguages();
         
         // Filter to only tenant-supported languages
         const tenantLanguages = allLanguages.filter(lang => 
@@ -699,7 +700,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         if (!templateData.language && tenantLanguages.length > 0) {
           // Try to get tenant's default language, fallback to English or first available
           try {
-            const tenantDefaultLang = await apiClient.getTenantDefaultLanguage(tenant.id);
+            const tenantDefaultLang = await languageService.getTenantDefaultLanguage(tenant.id);
             const defaultLang = tenantLanguages.find(lang => lang.code === tenantDefaultLang) || 
                               tenantLanguages.find(lang => lang.code === 'en') || 
                               tenantLanguages[0];
@@ -726,7 +727,8 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         console.error('Failed to load tenant supported languages:', error);
         // Fallback to loading all languages if tenant-specific loading fails
         try {
-          const allLanguages = await apiClient.getSupportedLanguages();
+          const languageService = serviceFactory.get<LanguageService>('language');
+          const allLanguages = await languageService.getSupportedLanguages();
           setSupportedLanguages(allLanguages);
         } catch (fallbackError) {
           console.error('Failed to load fallback languages:', fallbackError);
@@ -976,7 +978,8 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         setGenerationProgress(60);
       }, 500);
       
-      const response = await apiClient.generateFieldsFromPrompt({
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      const response = await templateService.generateFieldsFromPrompt({
         prompt: templateData.description,
         document_type: templateData.document_type || 'other'
       }, templateData.language || 'en', { signal: controller.signal });
@@ -984,9 +987,9 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       setGenerationStep('Processing results...');
       setGenerationProgress(90);
       
-      if (response.success && response.fields.length > 0) {
+      if (response.fields && Object.keys(response.fields).length > 0) {
         // Convert generated fields to schema format
-        const newFields = response.fields.map((field: GeneratedField) => {
+        const newFields = Object.values(response.fields).map((field: any) => {
           const baseField = {
             id: `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             name: field.name,
@@ -1085,8 +1088,14 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         setGenerationStep('Fetching document content...');
         setGenerationProgress(30);
         try {
-          const contentResponse = await apiClient.getDocumentContent(selectedDocument.id);
-          documentContent = contentResponse.content;
+          const documentService = serviceFactory.get<DocumentService>('documents');
+          const contentResponse = await documentService.getDocumentContent(selectedDocument.id);
+          if (contentResponse) {
+            documentContent = contentResponse.content;
+          } else {
+            setGenerationError('Document content not available. Please try again.');
+            return;
+          }
         } catch (error) {
           console.error('Failed to fetch document content:', error);
           setGenerationError('Failed to fetch document content. Please try again.');
@@ -1128,10 +1137,11 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       setGenerationStep('Analyzing document with AI...');
       setGenerationProgress(60);
       
-      const response = await apiClient.generateFieldsFromDocument({
+      const templateService = serviceFactory.get<TemplateService>('templates');
+      const response = await templateService.generateFieldsFromDocument({
         prompt: templateData.description,
         document_type: templateData.document_type || 'other',
-        document_content: documentContent
+        sample_document: documentContent
       }, 
       templateData.language || 'en',
       templateData.auto_detect_language ?? true,
@@ -1142,9 +1152,9 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       setGenerationStep('Processing results...');
       setGenerationProgress(90);
       
-      if (response.success && response.fields.length > 0) {
+      if (response.fields && Object.keys(response.fields).length > 0) {
         // Convert generated fields to schema format
-        const newFields = response.fields.map((field: GeneratedField) => ({
+        const newFields = Object.values(response.fields).map((field: any) => ({
           id: `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           name: field.name,
           type: field.type as 'text' | 'number' | 'date' | 'boolean' | 'array' | 'object',
