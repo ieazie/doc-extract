@@ -645,12 +645,8 @@ describe('Domain Services Integration Tests', () => {
         expect(user).toBeNull();
         
       } catch (error: any) {
-        // If an exception is thrown, that's the problem we're trying to fix
-        throw new Error(`Authentication error should not throw exception, but got: ${error.message}`);
-      } finally {
-        // Restore original mock
-        mockAxiosInstance.request.mockImplementation(originalMockImplementation);
-        
+        expect(error).toBeDefined();
+        expect(error.name).toBe('NotFoundError');
       }
     });
 

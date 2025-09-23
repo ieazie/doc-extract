@@ -94,6 +94,35 @@ class User(Base):
         return f"<User(id={self.id}, email='{self.email}')>"
 
 
+class RefreshToken(Base):
+    """Refresh Token model for secure token family tracking"""
+    __tablename__ = "refresh_tokens"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    jti = Column(String(36), nullable=False, unique=True)  # JWT ID
+    family_id = Column(UUID(as_uuid=True), nullable=False, index=True)  # Token family ID
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash = Column(String(255), nullable=False)  # Hashed token for storage
+    is_active = Column(Boolean, default=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    used_at = Column(DateTime(timezone=True), nullable=True)  # When token was last used
+    revoked_at = Column(DateTime(timezone=True), nullable=True)  # When token was revoked
+    
+    # Relationships
+    user = relationship("User")
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_refresh_tokens_user_family', 'user_id', 'family_id'),
+        Index('idx_refresh_tokens_active_expires', 'is_active', 'expires_at'),
+        Index('idx_refresh_tokens_jti', 'jti'),
+    )
+    
+    def __repr__(self):
+        return f"<RefreshToken(id={self.id}, jti='{self.jti}', family_id={self.family_id}, active={self.is_active})>"
+
+
 class APIKey(Base):
     """API Key model for programmatic access"""
     __tablename__ = "api_keys"

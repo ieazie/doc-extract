@@ -107,8 +107,10 @@ describe('Error Handling Tests', () => {
       await testService.request({ method: 'GET', url: '/test' });
       fail('Expected promise to reject');
     } catch (error: any) {
-      expect(error.response.status).toBe(404);
-      expect(error.response.data.message).toBe('Not Found');
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toBe('Resource not found');
+      expect(error.name).toBe('NotFoundError');
+      expect(error.status).toBe(404);
     }
   });
 
@@ -126,8 +128,9 @@ describe('Error Handling Tests', () => {
       await testService.request({ method: 'GET', url: '/test' });
       fail('Expected promise to reject');
     } catch (error: any) {
-      expect(error.response.status).toBe(422);
-      expect(error.response.data.message).toBe('Validation failed');
+      expect(error).toBeDefined();
+      expect(error.response?.status).toBe(422);
+      expect(error.response?.data?.message).toBe('Validation failed');
     }
   });
 

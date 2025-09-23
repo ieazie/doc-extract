@@ -12,7 +12,7 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
-from ..models.database import User, Tenant, APIKey, SessionLocal, get_db
+from ..models.database import User, Tenant, APIKey, RefreshToken, SessionLocal, get_db
 from ..config import settings
 from ..schemas.auth import UserRole, UserStatus, TenantStatus, UserCreate, TenantCreate
 from fastapi import Depends, HTTPException, status
@@ -56,12 +56,46 @@ class AuthService:
         encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
         return encoded_jwt
     
-    def create_refresh_token(self, data: dict) -> str:
-        """Create a JWT refresh token"""
-        to_encode = data.copy()
+    def create_refresh_token(self, db: Session, user_id: UUID, family_id: Optional[UUID] = None) -> str:
+        """Create a JWT refresh token with family tracking"""
+        # Generate unique JTI (JWT ID)
+        jti = str(uuid4())
+        
+        # Create family ID if not provided (new login)
+        if family_id is None:
+            family_id = uuid4()
+        
+        # Calculate expiry
         expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-        to_encode.update({"exp": expire, "type": "refresh"})
+        
+        # Create JWT payload
+        to_encode = {
+            "sub": str(user_id),
+            "jti": jti,
+            "family_id": str(family_id),
+            "exp": expire,
+            "type": "refresh"
+        }
+        
+        # Create JWT token
         encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+        
+        # Hash the token for secure storage
+        token_hash = hashlib.sha256(encoded_jwt.encode()).hexdigest()
+        
+        # Store refresh token in database
+        refresh_token_record = RefreshToken(
+            jti=jti,
+            family_id=family_id,
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expire,
+            is_active=True
+        )
+        
+        db.add(refresh_token_record)
+        db.commit()
+        
         return encoded_jwt
     
     def verify_token(self, token: str, token_type: str = "access") -> Optional[dict]:
@@ -73,6 +107,99 @@ class AuthService:
             return payload
         except JWTError:
             return None
+    
+    def verify_refresh_token(self, db: Session, token: str) -> Optional[dict]:
+        """Verify refresh token with reuse detection and family tracking"""
+        try:
+            # First verify the JWT structure and signature
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            if payload.get("type") != "refresh":
+                return None
+            
+            jti = payload.get("jti")
+            family_id = payload.get("family_id")
+            user_id = payload.get("sub")
+            
+            if not all([jti, family_id, user_id]):
+                return None
+            
+            # Check if token exists in database and is active
+            refresh_token_record = db.query(RefreshToken).filter(
+                and_(
+                    RefreshToken.jti == jti,
+                    RefreshToken.is_active == True,
+                    RefreshToken.expires_at > datetime.utcnow()
+                )
+            ).first()
+            
+            if not refresh_token_record:
+                return None
+            
+            # Check if token has been used before (reuse detection)
+            if refresh_token_record.used_at is not None:
+                # Token reuse detected - revoke entire family
+                self._revoke_token_family(db, UUID(family_id))
+                logger.warning(f"Refresh token reuse detected for family {family_id} - family revoked")
+                return None
+            
+            # Update token usage timestamp
+            refresh_token_record.used_at = datetime.utcnow()
+            db.commit()
+            
+            return payload
+            
+        except (JWTError, ValueError, TypeError) as e:
+            logger.error(f"Refresh token verification failed: {e}")
+            return None
+    
+    def _revoke_token_family(self, db: Session, family_id: UUID):
+        """Revoke all tokens in a family (security measure for reuse detection)"""
+        try:
+            # Mark all tokens in the family as revoked
+            db.query(RefreshToken).filter(
+                RefreshToken.family_id == family_id
+            ).update({
+                "is_active": False,
+                "revoked_at": datetime.utcnow()
+            })
+            db.commit()
+            logger.info(f"Revoked token family {family_id}")
+        except Exception as e:
+            logger.error(f"Failed to revoke token family {family_id}: {e}")
+            db.rollback()
+    
+    def revoke_user_tokens(self, db: Session, user_id: UUID):
+        """Revoke all refresh tokens for a user (e.g., on logout)"""
+        try:
+            db.query(RefreshToken).filter(
+                RefreshToken.user_id == user_id
+            ).update({
+                "is_active": False,
+                "revoked_at": datetime.utcnow()
+            })
+            db.commit()
+            logger.info(f"Revoked all tokens for user {user_id}")
+        except Exception as e:
+            logger.error(f"Failed to revoke tokens for user {user_id}: {e}")
+            db.rollback()
+    
+    def cleanup_expired_tokens(self, db: Session):
+        """Clean up expired refresh tokens (should be run periodically)"""
+        try:
+            # Delete tokens that are expired and inactive
+            deleted_count = db.query(RefreshToken).filter(
+                and_(
+                    RefreshToken.expires_at < datetime.utcnow(),
+                    RefreshToken.is_active == False
+                )
+            ).delete()
+            db.commit()
+            logger.info(f"Cleaned up {deleted_count} expired refresh tokens")
+            return deleted_count
+        except Exception as e:
+            logger.error(f"Failed to cleanup expired tokens: {e}")
+            db.rollback()
+            return 0
     
     def authenticate_user(self, db: Session, email: str, password: str) -> Optional[User]:
         """Authenticate a user with email and password"""
