@@ -83,17 +83,14 @@ export abstract class BaseApiClient {
             });
           }
           
-          // Handle 404 errors gracefully - let services handle them
+          // Handle 404 errors - reject to maintain consistency with global interceptor
           if (error.response?.status === 404) {
-            // Don't throw exception for 404 errors - let services handle them gracefully
-            return Promise.resolve({
-              data: null,
-              status: 404,
-              statusText: 'Not Found',
-              headers: {},
-              config: error.config,
-              isNotFoundError: true
-            });
+            // Create a proper NotFoundError and reject the promise
+            const notFoundError = new Error('Resource not found');
+            (notFoundError as any).name = 'NotFoundError';
+            (notFoundError as any).status = 404;
+            (notFoundError as any).response = error.response;
+            return Promise.reject(notFoundError);
           }
           
           // For other errors, handle normally
@@ -128,17 +125,6 @@ export abstract class BaseApiClient {
   public async request<T>(config: AxiosRequestConfig): Promise<T> {
     try {
       const response: AxiosResponse<T> = await this.client.request(config);
-      
-      // Check if this is a 404 error response (from global interceptor)
-      if ((response as any).isNotFoundError) {
-        // 404 error was handled gracefully by global interceptor
-        // For backward compatibility, throw an error, but services can catch and handle gracefully
-        const notFoundError = new Error('Resource not found');
-        (notFoundError as any).name = 'NotFoundError';
-        (notFoundError as any).status = 404;
-        throw notFoundError;
-      }
-      
       return response.data;
     } catch (error: any) {
       // Handle 401 (Unauthorized) - tokens cleared by global interceptor
@@ -150,7 +136,7 @@ export abstract class BaseApiClient {
         (authError as any).status = 401;
         throw authError;
       }
-      
+
       // Handle 403 (Forbidden) - user lacks permission but is still authenticated
       if (error.response?.status === 403) {
         const forbiddenError = new Error('Access forbidden - insufficient permissions');
@@ -158,7 +144,16 @@ export abstract class BaseApiClient {
         (forbiddenError as any).status = 403;
         throw forbiddenError;
       }
-      
+
+      // Handle 404 (Not Found) - now consistently rejected by interceptors
+      if (error.name === 'NotFoundError' || error.response?.status === 404) {
+        const notFoundError = new Error('Resource not found');
+        (notFoundError as any).name = 'NotFoundError';
+        (notFoundError as any).status = 404;
+        (notFoundError as any).response = error.response;
+        throw notFoundError;
+      }
+
       // Re-throw other errors as-is
       throw error;
     }

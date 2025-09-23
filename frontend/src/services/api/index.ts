@@ -18,29 +18,12 @@ const createAxiosInstance = (): AxiosInstance => {
     baseURL: apiBaseUrl,
     timeout: 30000, // 30 seconds for file uploads
     headers: { Accept: 'application/json' },
+    withCredentials: true, // Enable cookie handling for refresh tokens
   });
 
-  // Add authentication interceptor
-  instance.interceptors.request.use(
-    (config) => {
-      // Add auth token if available
-      if (typeof window !== 'undefined') {
-        const authTokens = localStorage.getItem('auth_tokens');
-        if (authTokens) {
-          try {
-            const tokens = JSON.parse(authTokens);
-            if (tokens.access_token) {
-              config.headers.Authorization = `Bearer ${tokens.access_token}`;
-            }
-          } catch (error) {
-            console.error('Failed to parse auth tokens:', error);
-          }
-        }
-      }
-      return config;
-    },
-    (error) => Promise.reject(error)
-  );
+  // Note: Authentication tokens are now handled by BaseApiClient.setAuthToken()
+  // which sets them in the shared Axios defaults. The request interceptor
+  // in BaseApiClient will automatically add the Authorization header.
 
   // Add response interceptor for error handling
   instance.interceptors.response.use(
