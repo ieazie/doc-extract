@@ -25,13 +25,8 @@ export abstract class BaseApiClient {
     // Request interceptor for auth token
     this.client.interceptors.request.use(
       (config) => {
-        const defaults = (this.client.defaults.headers as any);
-        const auth = defaults?.common?.Authorization;
-        if (auth && !(config.headers && ('Authorization' in config.headers))) {
-          if (!config.headers) {
-            config.headers = {} as any;
-          }
-          config.headers.Authorization = auth;
+        if (this.authToken) {
+          config.headers.Authorization = `Bearer ${this.authToken}`;
         }
         
         // Add request metadata (extend config with custom properties)
@@ -63,37 +58,6 @@ export abstract class BaseApiClient {
       },
       (error) => {
         try {
-          // Handle authentication errors gracefully
-          if (error.response?.status === 401 || error.response?.status === 403) {
-            // Clear tokens and dispatch logout event
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('auth_tokens');
-              window.dispatchEvent(new CustomEvent('auth:logout'));
-              console.warn('Authentication failed - tokens cleared and logout event dispatched');
-            }
-            
-            // Don't throw exception for auth errors - return a resolved promise with error info
-            return Promise.resolve({
-              data: null,
-              status: error.response?.status || 401,
-              statusText: 'Authentication Required',
-              headers: {},
-              config: error.config,
-              isAuthError: true
-            });
-          }
-          
-          // Handle 404 errors - reject to maintain consistency with global interceptor
-          if (error.response?.status === 404) {
-            // Create a proper NotFoundError and reject the promise
-            const notFoundError = new Error('Resource not found');
-            (notFoundError as any).name = 'NotFoundError';
-            (notFoundError as any).status = 404;
-            (notFoundError as any).response = error.response;
-            return Promise.reject(notFoundError);
-          }
-          
-          // For other errors, handle normally
           const handledError = this.handleError(error);
           return Promise.reject(handledError);
         } catch (e) {
@@ -126,35 +90,9 @@ export abstract class BaseApiClient {
     try {
       const response: AxiosResponse<T> = await this.client.request(config);
       return response.data;
-    } catch (error: any) {
-      // Handle 401 (Unauthorized) - tokens cleared by global interceptor
-      if (error.response?.status === 401) {
-        // Auth error was handled by global interceptor (tokens cleared, logout event dispatched)
-        // Throw a proper error to maintain type safety
-        const authError = new Error('Authentication failed');
-        (authError as any).name = 'AuthenticationError';
-        (authError as any).status = 401;
-        throw authError;
-      }
-
-      // Handle 403 (Forbidden) - user lacks permission but is still authenticated
-      if (error.response?.status === 403) {
-        const forbiddenError = new Error('Access forbidden - insufficient permissions');
-        (forbiddenError as any).name = 'ForbiddenError';
-        (forbiddenError as any).status = 403;
-        throw forbiddenError;
-      }
-
-      // Handle 404 (Not Found) - now consistently rejected by interceptors
-      if (error.name === 'NotFoundError' || error.response?.status === 404) {
-        const notFoundError = new Error('Resource not found');
-        (notFoundError as any).name = 'NotFoundError';
-        (notFoundError as any).status = 404;
-        (notFoundError as any).response = error.response;
-        throw notFoundError;
-      }
-
-      // Re-throw other errors as-is
+    } catch (error) {
+      // Error is already handled by the response interceptor
+      // Just re-throw it as-is
       throw error;
     }
   }
@@ -379,19 +317,6 @@ export abstract class BaseApiClient {
    */
   setAuthToken(token: string | null): void {
     this.authToken = token;
-    const defaults = (this.client.defaults.headers as any);
-    if (token) {
-      if (defaults?.common) {
-        defaults.common['Authorization'] = `Bearer ${token}`;
-      } else {
-        (this.client.defaults.headers as any) = {
-          ...(this.client.defaults.headers || {}),
-          common: { Authorization: `Bearer ${token}` }
-        };
-      }
-    } else if (defaults?.common) {
-      delete defaults.common['Authorization'];
-    }
   }
 
   // Common HTTP methods

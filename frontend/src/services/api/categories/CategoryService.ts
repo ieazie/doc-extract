@@ -176,7 +176,9 @@ export class CategoryService extends BaseApiClient {
         document_count: number;
         size: number;
       }>;
-    }>(`/api/categories/${categoryId}/analytics`, dateRange);
+    }>(`/api/categories/${categoryId}/analytics`, {
+      params: dateRange
+    });
   }
 
   // Category Health
@@ -218,7 +220,7 @@ export class CategoryService extends BaseApiClient {
   }
 
   async getCategorySuggestions(query: string): Promise<string[]> {
-    return this.get<string[]>('/api/categories/suggestions', { q: query });
+    return this.get<string[]>(`/api/categories/suggestions?q=${encodeURIComponent(query)}`);
   }
 
   async duplicateCategory(categoryId: string, newName: string): Promise<Category> {

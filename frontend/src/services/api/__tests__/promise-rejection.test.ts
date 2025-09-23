@@ -48,7 +48,7 @@ describe('Promise Rejection Tests', () => {
     new TestService(mockAxiosInstance);
   });
 
-  it('should reject promises when response interceptor encounters 404 errors', async () => {
+  it('should reject promises when response interceptor encounters errors', async () => {
     // Verify that the response interceptor was set up
     expect(mockAxiosInstance.interceptors.response.use).toHaveBeenCalledTimes(1);
     
@@ -70,10 +70,16 @@ describe('Promise Rejection Tests', () => {
     // The result should be a Promise that rejects
     expect(result).toBeInstanceOf(Promise);
     
-    // Verify the promise rejects with a 404 error
-    await expect(result).rejects.toMatchObject({
-      response: { status: 404 }
-    });
+    // Verify the promise rejects with the handled error
+    try {
+      await result;
+      fail('Expected promise to reject');
+    } catch (error: any) {
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toBe('Not found');
+      expect(error.name).toBe('NotFoundError');
+      expect(error.status).toBe(404);
+    }
   });
 
   it('should handle network errors correctly', async () => {
