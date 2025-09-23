@@ -4,7 +4,7 @@ Authentication and authorization service
 import logging
 import secrets
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from uuid import UUID, uuid4
 from passlib.context import CryptContext
@@ -48,9 +48,9 @@ class AuthService:
         """Create a JWT access token"""
         to_encode = data.copy()
         if expires_delta:
-            expire = datetime.utcnow() + expires_delta
+            expire = datetime.now(timezone.utc) + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         
         to_encode.update({"exp": expire, "type": "access"})
         encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -66,7 +66,7 @@ class AuthService:
             family_id = uuid4()
         
         # Calculate expiry
-        expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         
         # Create JWT payload
         to_encode = {
@@ -123,14 +123,19 @@ class AuthService:
             if not all([jti, family_id, user_id]):
                 return None
             
-            # Check if token exists in database and is active
-            refresh_token_record = db.query(RefreshToken).filter(
-                and_(
-                    RefreshToken.jti == jti,
-                    RefreshToken.is_active == True,
-                    RefreshToken.expires_at > datetime.utcnow()
+            # Check if token exists in database and is active (with row lock to prevent race conditions)
+            refresh_token_record = (
+                db.query(RefreshToken)
+                .with_for_update()
+                .filter(
+                    and_(
+                        RefreshToken.jti == jti,
+                        RefreshToken.is_active.is_(True),
+                        RefreshToken.expires_at > datetime.now(timezone.utc),
+                    )
                 )
-            ).first()
+                .first()
+            )
             
             if not refresh_token_record:
                 return None
@@ -143,13 +148,13 @@ class AuthService:
                 return None
             
             # Update token usage timestamp
-            refresh_token_record.used_at = datetime.utcnow()
+            refresh_token_record.used_at = datetime.now(timezone.utc)
             db.commit()
             
             return payload
             
-        except (JWTError, ValueError, TypeError) as e:
-            logger.error(f"Refresh token verification failed: {e}")
+        except (JWTError, ValueError, TypeError):
+            logger.exception("Refresh token verification failed")
             return None
     
     def _revoke_token_family(self, db: Session, family_id: UUID):
@@ -160,7 +165,7 @@ class AuthService:
                 RefreshToken.family_id == family_id
             ).update({
                 "is_active": False,
-                "revoked_at": datetime.utcnow()
+                "revoked_at": datetime.now(timezone.utc)
             })
             db.commit()
             logger.info(f"Revoked token family {family_id}")
@@ -175,7 +180,7 @@ class AuthService:
                 RefreshToken.user_id == user_id
             ).update({
                 "is_active": False,
-                "revoked_at": datetime.utcnow()
+                "revoked_at": datetime.now(timezone.utc)
             })
             db.commit()
             logger.info(f"Revoked all tokens for user {user_id}")
@@ -189,7 +194,7 @@ class AuthService:
             # Delete tokens that are expired and inactive
             deleted_count = db.query(RefreshToken).filter(
                 and_(
-                    RefreshToken.expires_at < datetime.utcnow(),
+                    RefreshToken.expires_at < datetime.now(timezone.utc),
                     RefreshToken.is_active == False
                 )
             ).delete()
@@ -214,7 +219,7 @@ class AuthService:
             return None
         
         # Update last login
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
         db.commit()
         
         return user
@@ -410,7 +415,7 @@ class AuthService:
             return None
         
         # Update last used
-        api_key_record.last_used = datetime.utcnow()
+        api_key_record.last_used = datetime.now(timezone.utc)
         db.commit()
         
         # Get the user
