@@ -373,15 +373,15 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
       setIsLoadingTenants(true);
       try {
         let tenants;
-        if (user.role === 'system_admin') {
-          // System admin can see all tenants
-          const tenantService = serviceFactory.get<TenantService>('tenants');
-          tenants = await tenantService.getTenants();
-        } else {
-          // Regular users see only their assigned tenants
-          const authService = serviceFactory.get<AuthService>('auth');
-          tenants = await authService.getUserTenants();
-        }
+          if (user.role === 'system_admin') {
+            // System admin can see all tenants
+            const tenantService = serviceFactory.get<TenantService>('tenants');
+            tenants = await tenantService.getTenants();
+          } else {
+            // Regular users see only their assigned tenants
+            const authService = serviceFactory.get<AuthService>('auth');
+            tenants = await authService.getUserTenants();
+          }
         setAvailableTenants(tenants || []);
       } catch (error) {
         console.error('Failed to load tenants:', error);

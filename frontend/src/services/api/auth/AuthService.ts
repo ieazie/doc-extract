@@ -34,6 +34,28 @@ export class AuthService extends BaseApiClient {
     return this.post<LoginResponse>('/api/auth/refresh');
   }
 
+  async silentRefreshToken(): Promise<LoginResponse | null> {
+    try {
+      // Create a completely separate axios instance to bypass all interceptors
+      const axios = require('axios');
+      const tempClient = axios.create({
+        baseURL: this.client.defaults.baseURL,
+        timeout: 30000,
+        headers: { Accept: 'application/json' },
+        withCredentials: true
+      });
+      
+      const response = await tempClient.post('/api/auth/refresh');
+      return response.data;
+    } catch (error: any) {
+      // For silent refresh, we don't want to throw exceptions
+      if (error.response?.status === 401) {
+        return null; // No valid refresh token
+      }
+      throw error; // Re-throw other errors
+    }
+  }
+
   async logout(): Promise<void> {
     await this.post<void>('/api/auth/logout');
   }

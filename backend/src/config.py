@@ -109,5 +109,6 @@ def is_production() -> bool:
 def get_cors_origins() -> list:
     """Get CORS origins list"""
     if settings.debug:
-        return ["*"]  # Allow all origins in development
+        # Explicit origins for development - NO wildcard with credentials
+        return ["http://localhost:3000", "http://frontend:3000"]
     return settings.cors_origins

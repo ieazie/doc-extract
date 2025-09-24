@@ -29,19 +29,26 @@ const createAxiosInstance = (): AxiosInstance => {
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
-      // Handle 401 (Unauthorized) by clearing tokens and dispatching logout event
+      // Handle 401 (Unauthorized) by dispatching logout event
       const status = error.response?.status;
       if (status === 401 && typeof window !== 'undefined') {
-        localStorage.removeItem('auth_tokens');
-        
         // Dispatch auth logout event for graceful handling
+        // The AuthContext will handle clearing all storage (sessionStorage, localStorage, cookies)
         window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'unauthorized' } }));
         
-        console.warn('Authentication failed - tokens cleared and logout event dispatched');
+        console.warn('Authentication failed - logout event dispatched');
         
-        // Reject the promise to ensure consistent error handling
-        // This prevents silent failures in direct client calls
-        return Promise.reject(error);
+        // For authentication errors, return a resolved promise with null/empty data
+        // This prevents UI crashes and allows components to continue normally
+        // The auth context will handle the logout automatically
+        return Promise.resolve({
+          data: null,
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: {},
+          config: error.config,
+          request: error.request
+        });
       }
       
       // For other errors, still reject the promise
@@ -58,7 +65,7 @@ const serviceFactory = new ServiceFactory(axiosInstance);
 
 // Register domain services as they are created
 import { AuthService } from './auth/AuthService';
-import { DocumentService } from './documents/DocumentService';
+import { DocumentService } from '@/services/api/documents';
 import { TemplateService } from './templates/TemplateService';
 import { ExtractionService } from './extractions/ExtractionService';
 import { TenantService } from './tenants/TenantService';

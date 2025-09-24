@@ -28,14 +28,11 @@ export abstract class BaseApiClient {
         if (this.authToken) {
           config.headers.Authorization = `Bearer ${this.authToken}`;
         }
-        
-        // Add request metadata (extend config with custom properties)
         (config as any).metadata = {
           ...(config as any).metadata,
           timestamp: Date.now(),
           requestId: this.generateRequestId()
         };
-
         return config;
       },
       (error) => Promise.reject(error)
@@ -44,7 +41,6 @@ export abstract class BaseApiClient {
     // Response interceptor for error handling
     this.client.interceptors.response.use(
       (response) => {
-        // Add response metadata (extend response with custom properties)
         (response as any).metadata = {
           ...(response as any).metadata,
           responseTime: (() => {
@@ -53,7 +49,6 @@ export abstract class BaseApiClient {
           })(),
           requestId: (response.config as any).metadata?.requestId
         };
-
         return response;
       },
       (error) => {
@@ -62,7 +57,6 @@ export abstract class BaseApiClient {
           return Promise.reject(handledError);
         } catch (e) {
           console.error('Critical error in response interceptor:', e);
-          // Fallback: return a safe error
           try {
             const fallbackError = new Error('Request failed');
             (fallbackError as any).status = 500;
@@ -98,223 +92,54 @@ export abstract class BaseApiClient {
   }
 
   /**
-   * Handle API errors consistently
+   * Handle API errors consistently - simplified version
    */
   protected handleError(error: any): Error {
-    try {
-
-      // Defensive programming: ensure error is an object
-      if (!error || typeof error !== 'object') {
-        try {
-          return new Error('An unexpected error occurred');
-        } catch (e) {
-          return {
-            message: 'An unexpected error occurred',
-            name: 'Error',
-            stack: undefined
-          } as any;
-        }
-      }
-
-    if (error.response) {
-      // Server responded with error status
-      const { status, data } = error.response;
-      let message = data?.message || data?.detail || `Request failed with status ${status}`;
-
-      // Handle specific authentication error messages
-      if (message === 'Not authenticated' || message.includes('authentication')) {
-        message = 'Authentication required. Please log in.';
-      }
-
-      
-      // Ensure message is a valid string with ultra-robust validation
-      let safeMessage = 'Request failed';
-      try {
-        if (message && typeof message === 'string') {
-          const trimmed = message.trim();
-          if (trimmed.length > 0 && trimmed.length < 10000) {
-            safeMessage = trimmed;
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to process error message:', e);
-        safeMessage = 'Request failed';
-      }
-      
-      let apiError: Error;
-      try {
-        // Ultra-defensive programming: ensure safeMessage is a valid string
-        let finalMessage = 'Request failed';
-        
-        // Multiple layers of validation
-        try {
-          if (safeMessage && typeof safeMessage === 'string') {
-            const trimmed = safeMessage.trim();
-            if (trimmed.length > 0 && trimmed.length < 1000) {
-              // Additional validation: check for problematic characters
-              const cleanMessage = trimmed.replace(/[^\x20-\x7E]/g, ''); // Only printable ASCII
-              if (cleanMessage.length > 0) {
-                finalMessage = cleanMessage;
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to process safeMessage:', e, { safeMessage });
-          finalMessage = 'Request failed';
-        }
-        
-        // Final conversion with error handling
-        const validatedMessage = String(finalMessage);
-        
-        try {
-          apiError = new Error(validatedMessage);
-        } catch (errorCreationError) {
-          // Create a custom error object that behaves like an Error
-          apiError = {
-            message: validatedMessage,
-            name: 'Error',
-            stack: undefined,
-            toString: () => `Error: ${validatedMessage}`,
-            // Make it behave like an Error for instanceof checks
-            constructor: Error
-          } as any;
-        }
-        (apiError as any).status = status;
-        (apiError as any).data = data;
-        
-        // Set appropriate error name based on status code
-        if (status === 401) {
-          (apiError as any).name = 'AuthenticationError';
-        } else if (status === 403) {
-          (apiError as any).name = 'AuthorizationError';
-        } else if (status === 404) {
-          (apiError as any).name = 'NotFoundError';
-        } else if (status === 422) {
-          (apiError as any).name = 'ValidationError';
-        } else {
-          (apiError as any).name = 'ApiError';
-        }
-      } catch (e) {
-        console.error('Failed to create API error:', e);
-        try {
-          apiError = new Error('Request failed');
-          (apiError as any).status = status || 500;
-          (apiError as any).data = data;
-          (apiError as any).name = 'ApiError';
-        } catch (fallbackError) {
-          console.error('Critical: Even fallback error creation failed:', fallbackError);
-          apiError = {
-            message: 'Request failed',
-            name: 'ApiError',
-            stack: undefined
-          } as any;
-          (apiError as any).status = status || 500;
-          (apiError as any).data = data;
-        }
-      }
-
-      return apiError;
-    } else if (error.request) {
-      // Network error
-      let networkError: Error;
-      try {
-        networkError = new Error('Network error - please check your connection');
-        (networkError as any).name = 'NetworkError';
-      } catch (e) {
-        console.error('Failed to create network error:', e);
-        try {
-          networkError = new Error('Network error - please check your connection');
-          (networkError as any).name = 'NetworkError';
-        } catch (fallbackError) {
-          console.error('Critical: Even fallback network error creation failed:', fallbackError);
-          networkError = {
-            message: 'Network error - please check your connection',
-            name: 'NetworkError',
-            stack: undefined
-          } as any;
-        }
-      }
+    // Network error
+    if (error.request && !error.response) {
+      const networkError = new Error('Network error - please check your connection');
+      (networkError as any).name = 'NetworkError';
       return networkError;
-    } else {
-      // Other error - handle edge cases
-      let errorMessage = 'An unexpected error occurred';
-      
-      try {
-        if (error?.message && typeof error.message === 'string') {
-          errorMessage = error.message;
-        } else if (error?.toString && typeof error.toString === 'function') {
-          const stringified = error.toString();
-          // Ensure stringified is actually a string, not a Symbol or other type
-          if (stringified && typeof stringified === 'string' && stringified !== '[object Object]') {
-            errorMessage = stringified;
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to extract error message:', e);
-        errorMessage = 'An unexpected error occurred';
-      }
-      
-      
-      // Ensure we always return a valid Error object
-      try {
-        // Final safety check: ensure errorMessage is a valid string
-        let safeErrorMessage = 'An unexpected error occurred';
-        
-        if (typeof errorMessage === 'string') {
-          // Additional safety: ensure the string is not empty and doesn't contain problematic characters
-          const trimmed = errorMessage.trim();
-          if (trimmed.length > 0 && trimmed.length < 10000) { // Reasonable length limit
-            safeErrorMessage = trimmed;
-          }
-        }
-        
-        // Try to create the error with the safe message
-        // Use String() constructor to ensure we have a valid string
-        const finalMessage = String(safeErrorMessage);
-        return new Error(finalMessage);
-      } catch (e) {
-        console.error('Failed to create Error object:', e, { errorMessage });
-        // Last resort: create a completely safe error
-        try {
-          return new Error('An unexpected error occurred');
-        } catch (fallbackError) {
-          // If even this fails, return a plain object that can be used as an error
-          console.error('Critical: Even fallback error creation failed:', fallbackError);
-          return {
-            message: 'An unexpected error occurred',
-            name: 'Error',
-            stack: undefined
-          } as any;
-        }
-      }
     }
-    } catch (e) {
-      console.error('Critical error in handleError method:', e);
-      // Return a safe error object
-      try {
-        return new Error('An unexpected error occurred');
-      } catch (fallbackError) {
-        // If even creating an Error fails, return a plain object that can be used as an error
-        const plainError = {
-          message: 'An unexpected error occurred',
-          name: 'Error',
-          stack: undefined
-        };
-        return plainError as any;
+
+    // API error
+    if (error.response) {
+      const { status, data } = error.response;
+      const message = data?.message || data?.detail || `Request failed with status ${status}`;
+      const apiError = new Error(message);
+      
+      (apiError as any).status = status;
+      (apiError as any).data = data;
+
+      // Set error type based on status
+      switch (status) {
+        case 401:
+          (apiError as any).name = 'AuthenticationError';
+          break;
+        case 403:
+          (apiError as any).name = 'AuthorizationError';
+          break;
+        case 404:
+          (apiError as any).name = 'NotFoundError';
+          break;
+        case 422:
+          (apiError as any).name = 'ValidationError';
+          break;
+        default:
+          (apiError as any).name = 'ApiError';
       }
+      
+      return apiError;
     }
+
+    // Other error
+    return new Error(error.message || 'An unexpected error occurred');
   }
 
-  /**
-   * Generate unique request ID for tracking
-   */
   private generateRequestId(): string {
     return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  /**
-   * Set authentication token for all requests
-   */
   setAuthToken(token: string | null): void {
     this.authToken = token;
   }

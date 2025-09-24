@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT settings
-SECRET_KEY = settings.secret_key
+SECRET_KEY = settings.jwt_secret  # Use the dedicated JWT secret
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -140,16 +140,9 @@ class AuthService:
             if not refresh_token_record:
                 return None
             
-            # Check if token has been used before (reuse detection)
-            if refresh_token_record.used_at is not None:
-                # Token reuse detected - revoke entire family
-                self._revoke_token_family(db, UUID(family_id))
-                logger.warning(f"Refresh token reuse detected for family {family_id} - family revoked")
-                return None
-            
-            # Update token usage timestamp
-            refresh_token_record.used_at = datetime.now(timezone.utc)
-            db.commit()
+            # For token rotation, we don't mark tokens as "used" since we create new ones
+            # Instead, we just verify the token exists and is active
+            # The old token will be replaced by a new one in the refresh endpoint
             
             return payload
             

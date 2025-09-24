@@ -3,7 +3,7 @@ Authentication and authorization API endpoints
 """
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -41,8 +41,16 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Get user
-    user_id = UUID(payload.get("sub"))
+    # Get user with defensive UUID handling
+    try:
+        user_id = UUID(payload.get("sub"))  # type: ignore[arg-type]
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Invalid token format", 
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
     user = auth_service.get_user_by_id(db, user_id)
     if not user or user.status != UserStatus.ACTIVE:
         raise HTTPException(
@@ -164,9 +172,11 @@ async def register_user(
 @router.post("/login", response_model=TokenResponse)
 async def login_user(
     login_data: UserLogin,
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
-    """Authenticate user and return access token"""
+    """Authenticate user and return access token with refresh token"""
     try:
         # Authenticate user
         user = auth_service.authenticate_user(db, login_data.email, login_data.password)
@@ -180,6 +190,21 @@ async def login_user(
         # Create access token
         access_token = auth_service.create_access_token(
             data={"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None}
+        )
+        
+        # Create refresh token and store in database
+        refresh_token = auth_service.create_refresh_token(db, user.id)
+        
+        # Set refresh token as httpOnly cookie
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            max_age=7 * 24 * 60 * 60,  # 7 days
+            httponly=True,
+            secure=False,  # Allow HTTP in development
+            samesite="lax",  # Allow cross-site requests in development
+            path="/api/auth/refresh",
+            domain=None  # Allow cookies across localhost subdomains
         )
         
         return TokenResponse(
@@ -208,6 +233,127 @@ async def login_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed"
         )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db)
+):
+    """Refresh access token using httpOnly cookie with family tracking and reuse detection"""
+    try:
+        refresh_token = request.cookies.get("refresh_token")
+        if not refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Refresh token not found", 
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        payload = auth_service.verify_refresh_token(db, refresh_token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid or reused refresh token", 
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        sub = payload.get("sub")
+        family_id = payload.get("family_id")
+        try:
+            user_id = UUID(sub)  # type: ignore[arg-type]
+            family_uuid = UUID(family_id)  # type: ignore[arg-type]
+        except (TypeError, ValueError, AttributeError):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid refresh token", 
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        user = auth_service.get_user_by_id(db, user_id)
+        if not user or user.status != UserStatus.ACTIVE:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="User not found or inactive", 
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        # Invalidate the current refresh token before creating a new one
+        jti = payload.get("jti")
+        if jti:
+            # Mark the current token as inactive
+            from ..models.database import RefreshToken
+            db.query(RefreshToken).filter(RefreshToken.jti == jti).update({"is_active": False})
+            db.commit()
+        
+        access_token = auth_service.create_access_token(
+            {"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None}
+        )
+        new_refresh_token = auth_service.create_refresh_token(db=db, user_id=user_id, family_id=family_uuid)
+        
+        response.set_cookie(
+            key="refresh_token", 
+            value=new_refresh_token, 
+            max_age=7 * 24 * 60 * 60, 
+            httponly=True, 
+            secure=False,  # Allow HTTP in development
+            samesite="lax",  # Allow cross-site requests in development
+            path="/api/auth/refresh",
+            domain=None  # Allow cookies across localhost subdomains
+        )
+        
+        return TokenResponse(
+            access_token=access_token, 
+            token_type="bearer", 
+            expires_in=30 * 60, 
+            user=UserResponse(
+                id=user.id, 
+                email=user.email, 
+                first_name=user.first_name, 
+                last_name=user.last_name, 
+                role=user.role, 
+                status=user.status, 
+                tenant_id=user.tenant_id, 
+                last_login=user.last_login, 
+                created_at=user.created_at, 
+                updated_at=user.updated_at
+            )
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Token refresh failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="Token refresh failed"
+        ) from e
+
+
+@router.post("/logout")
+async def logout_user(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Logout user and revoke all refresh tokens"""
+    try:
+        # Revoke all refresh tokens for the user
+        auth_service.revoke_user_tokens(db, current_user.id)
+        
+        # Clear refresh token cookie
+        response.delete_cookie("refresh_token", path="/api/auth/refresh")
+        
+        return {"message": "Logged out successfully"}
+        
+    except Exception as e:
+        logger.exception("Logout failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="Logout failed"
+        ) from e
 
 
 @router.get("/me", response_model=UserResponse)

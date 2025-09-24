@@ -15,6 +15,9 @@ export interface Tenant {
   updated_at: string;
 }
 
+// Alias for backward compatibility
+export type ApiTenant = Tenant;
+
 export interface TenantCreateRequest {
   name: string;
   slug: string;
