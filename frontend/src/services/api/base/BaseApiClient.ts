@@ -85,9 +85,8 @@ export abstract class BaseApiClient {
       const response: AxiosResponse<T> = await this.client.request(config);
       return response.data;
     } catch (error) {
-      // Error is already handled by the response interceptor
-      // Just re-throw it as-is
-      throw error;
+      // Process error through handleError for consistent error objects
+      throw this.handleError(error);
     }
   }
 

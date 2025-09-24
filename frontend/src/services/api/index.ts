@@ -65,7 +65,7 @@ const serviceFactory = new ServiceFactory(axiosInstance);
 
 // Register domain services as they are created
 import { AuthService } from './auth/AuthService';
-import { DocumentService } from '@/services/api/documents';
+import { DocumentService } from './documents/DocumentService';
 import { TemplateService } from './templates/TemplateService';
 import { ExtractionService } from './extractions/ExtractionService';
 import { TenantService } from './tenants/TenantService';

@@ -88,9 +88,82 @@ class TenantRateLimitResponse(BaseModel):
         from_attributes = True
 
 
+class AuthenticationConfig(BaseModel):
+    """Tenant-specific authentication configuration"""
+    
+    # JWT Configuration
+    jwt_secret_key: str = Field(..., description="Unique JWT secret key for this tenant")
+    access_token_expire_minutes: int = Field(default=30, ge=1, le=1440, description="Access token expiry in minutes")
+    refresh_token_expire_days: int = Field(default=7, ge=1, le=30, description="Refresh token expiry in days")
+    
+    # Cookie Configuration
+    refresh_cookie_httponly: bool = Field(default=True, description="HttpOnly flag for refresh token cookie")
+    refresh_cookie_secure: bool = Field(default=True, description="Secure flag for refresh token cookie")
+    refresh_cookie_samesite: str = Field(default="strict", description="SameSite policy for refresh token cookie")
+    refresh_cookie_path: str = Field(default="/api/auth/refresh", description="Path for refresh token cookie")
+    refresh_cookie_domain: Optional[str] = Field(default=None, description="Domain for refresh token cookie")
+    
+    # Security Policies
+    max_login_attempts: int = Field(default=5, ge=1, le=20, description="Maximum login attempts before lockout")
+    lockout_duration_minutes: int = Field(default=15, ge=1, le=1440, description="Lockout duration in minutes")
+    password_min_length: int = Field(default=8, ge=6, le=128, description="Minimum password length")
+    require_2fa: bool = Field(default=False, description="Require two-factor authentication")
+    
+    # Session Management
+    session_timeout_minutes: int = Field(default=480, ge=1, le=1440, description="Session timeout in minutes")
+    concurrent_sessions_limit: int = Field(default=5, ge=1, le=50, description="Maximum concurrent sessions per user")
+
+
+class CORSConfig(BaseModel):
+    """Tenant-specific CORS configuration"""
+    
+    allowed_origins: List[str] = Field(default_factory=list, description="Allowed CORS origins")
+    allow_credentials: bool = Field(default=True, description="Allow credentials in CORS requests")
+    allowed_methods: List[str] = Field(
+        default=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        description="Allowed HTTP methods"
+    )
+    allowed_headers: List[str] = Field(
+        default=["*"],
+        description="Allowed request headers"
+    )
+    exposed_headers: List[str] = Field(
+        default_factory=list,
+        description="Headers exposed to the client"
+    )
+    max_age: int = Field(default=3600, ge=0, le=86400, description="Preflight cache duration in seconds")
+
+
+class SecurityConfig(BaseModel):
+    """Tenant-specific security configuration"""
+    
+    # CSRF Protection
+    csrf_protection_enabled: bool = Field(default=True, description="Enable CSRF protection")
+    csrf_token_header: str = Field(default="X-CSRF-Token", description="CSRF token header name")
+    
+    # Rate Limiting
+    rate_limiting_enabled: bool = Field(default=True, description="Enable rate limiting")
+    rate_limit_requests_per_minute: int = Field(default=60, ge=1, le=1000, description="Requests per minute limit")
+    rate_limit_burst_size: int = Field(default=100, ge=1, le=1000, description="Burst size for rate limiting")
+    
+    # Encryption
+    encryption_key: str = Field(..., description="Tenant-specific encryption key")
+    
+    # Security Headers
+    security_headers_enabled: bool = Field(default=True, description="Enable security headers")
+    content_security_policy: Optional[str] = Field(default=None, description="Content Security Policy")
+    strict_transport_security: bool = Field(default=True, description="Enable HSTS")
+    x_frame_options: str = Field(default="DENY", description="X-Frame-Options header value")
+    x_content_type_options: bool = Field(default=True, description="Enable X-Content-Type-Options")
+    referrer_policy: str = Field(default="strict-origin-when-cross-origin", description="Referrer Policy")
+
+
 class TenantConfigSummary(BaseModel):
     """Summary of tenant configuration"""
     tenant_id: UUID
     llm_config: Optional[Union[LLMConfig, TenantLLMConfigs]] = None
     rate_limits: Optional[RateLimitsConfig] = None
     rate_usage: Optional[Dict[str, int]] = None
+    auth_config: Optional[AuthenticationConfig] = None
+    cors_config: Optional[CORSConfig] = None
+    security_config: Optional[SecurityConfig] = None

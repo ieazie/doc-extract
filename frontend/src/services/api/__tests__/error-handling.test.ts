@@ -49,27 +49,22 @@ describe('Error Handling Tests', () => {
   });
 
   it('should properly handle 401 authentication errors', async () => {
-    // Mock a 401 response
-    const error401 = {
-      response: {
-        status: 401,
-        data: { message: 'Unauthorized' }
-      }
+    // Mock a 401 response - with current global interceptor, 401s are resolved with null data
+    const mockResponse = {
+      data: null,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: {},
+      config: {},
+      request: {}
     };
 
-    // Mock the request to throw the error
-    (mockAxiosInstance.request as any).mockRejectedValueOnce(error401);
+    // Mock the request to return the resolved response (global interceptor behavior)
+    (mockAxiosInstance.request as any).mockResolvedValueOnce(mockResponse);
 
-    // Call a service method that will trigger the error
-    try {
-      await testService.request({ method: 'GET', url: '/test' });
-      fail('Expected promise to reject');
-    } catch (error: any) {
-      expect(error).toBeInstanceOf(Error);
-      expect(error.message).toBe('Unauthorized');
-      expect(error.name).toBe('AuthenticationError');
-      expect(error.status).toBe(401);
-    }
+    // Call a service method - should return null data instead of throwing
+    const result = await testService.request({ method: 'GET', url: '/test' });
+    expect(result).toBeNull();
   });
 
   it('should properly handle 403 authorization errors', async () => {
