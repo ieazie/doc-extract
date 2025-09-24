@@ -172,9 +172,9 @@ class TenantConfigService:
         
         return AuthenticationConfig(**config.config_data)
     
-    def get_cors_config(self, tenant_id: UUID) -> Optional[CORSConfig]:
+    def get_cors_config(self, tenant_id: UUID, environment: Optional[str] = None) -> Optional[CORSConfig]:
         """Get CORS configuration for tenant"""
-        config = self.get_config(tenant_id, "cors")
+        config = self.get_config(tenant_id, "cors", environment)
         if not config:
             return None
         

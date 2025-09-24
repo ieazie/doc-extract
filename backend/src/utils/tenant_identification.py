@@ -115,7 +115,7 @@ class TenantIdentifier:
     @staticmethod
     def extract_tenant_from_subdomain(request: Request) -> Optional[str]:
         """
-        Extract tenant identifier from subdomain (future enhancement).
+        Extract tenant identifier from subdomain.
         
         Args:
             request: FastAPI request object
@@ -124,14 +124,78 @@ class TenantIdentifier:
             Tenant identifier from subdomain if found
         """
         host = request.headers.get("host", "")
-        if "." in host:
-            subdomain = host.split(".")[0]
-            # Filter out common subdomains
-            if subdomain not in ["www", "api", "app", "admin", "staging"]:
-                logger.debug(f"Tenant subdomain detected: {subdomain}")
-                return subdomain
+        
+        # Remove port if present (e.g., "subdomain.example.com:8000")
+        if ":" in host:
+            host = host.split(":")[0]
+        
+        # Split by dots to get domain parts
+        domain_parts = host.split(".")
+        
+        # Need at least 3 parts for a subdomain (subdomain.domain.com)
+        if len(domain_parts) < 3:
+            return None
+        
+        # First part is the subdomain
+        subdomain = domain_parts[0]
+        
+        # Filter out common non-tenant subdomains
+        skip_subdomains = ["www", "api", "app", "admin", "staging", "dev", "test", "m", "mobile"]
+        if subdomain.lower() not in skip_subdomains:
+            logger.debug(f"Tenant subdomain detected: {subdomain}")
+            return subdomain
         
         return None
+    
+    @staticmethod
+    def identify_from_subdomain(request: Request) -> Optional[UUID]:
+        """
+        Identify tenant from subdomain in the request host.
+        
+        This method extracts the subdomain from the request host header
+        and attempts to map it to a tenant ID. This is useful for
+        subdomain-based multi-tenancy (e.g., tenant1.example.com).
+        
+        Args:
+            request: FastAPI request object
+            
+        Returns:
+            Tenant UUID if found, None otherwise
+        """
+        
+        # Get subdomain using existing method
+        subdomain = TenantIdentifier.extract_tenant_from_subdomain(request)
+        if not subdomain:
+            return None
+        
+        # Map subdomain to tenant UUID by querying the database
+        try:
+            from ..models.database import get_db, Tenant
+            from sqlalchemy.orm import Session
+            
+            # Get database session
+            db = next(get_db())
+            
+            try:
+                # Look up tenant by slug (assuming subdomain matches tenant slug)
+                tenant = db.query(Tenant).filter(
+                    Tenant.slug == subdomain,
+                    Tenant.status == "active"  # Only active tenants
+                ).first()
+                
+                if tenant:
+                    logger.debug(f"Found tenant {tenant.id} for subdomain '{subdomain}'")
+                    return tenant.id
+                else:
+                    logger.debug(f"No tenant found for subdomain '{subdomain}'")
+                    return None
+                    
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error looking up tenant for subdomain '{subdomain}': {e}")
+            return None
     
     @staticmethod
     def get_tenant_context(request: Request) -> dict:

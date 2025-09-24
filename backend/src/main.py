@@ -8,7 +8,8 @@ import uvicorn
 import logging
 
 from .config import settings, get_cors_origins
-from .models.database import create_tables
+from .models.database import create_tables, get_db
+from .middleware import TenantAwareCORSMiddleware
 from .api import health
 from .api import auth
 from .api import documents
@@ -87,12 +88,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware
+# Add tenant-aware CORS middleware
+app.add_middleware(
+    TenantAwareCORSMiddleware,
+    db_session_factory=get_db
+)
+
+# Fallback CORS middleware for requests without tenant context
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
 
