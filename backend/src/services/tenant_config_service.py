@@ -291,17 +291,23 @@ class TenantConfigService:
                 'csrf_protection_enabled': False,
                 'rate_limiting_enabled': False,
                 'strict_transport_security': False,
+                'compromise_detection_enabled': False,
+                'auto_revoke_on_compromise': False,
             },
             'staging': {
                 'csrf_protection_enabled': True,
                 'rate_limiting_enabled': True,
                 'strict_transport_security': True,
+                'compromise_detection_enabled': True,
+                'auto_revoke_on_compromise': False,  # Manual review in staging
             },
             'production': {
                 'csrf_protection_enabled': True,
                 'rate_limiting_enabled': True,
                 'strict_transport_security': True,
                 'content_security_policy': "default-src 'self'; script-src 'self' 'unsafe-inline'",
+                'compromise_detection_enabled': True,
+                'auto_revoke_on_compromise': True,  # Auto-revoke in production
             }
         }
         

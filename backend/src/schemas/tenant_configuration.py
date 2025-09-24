@@ -155,6 +155,12 @@ class SecurityConfig(BaseModel):
     strict_transport_security: bool = Field(default=True, description="Enable HSTS")
     x_frame_options: str = Field(default="DENY", description="X-Frame-Options header value")
     x_content_type_options: bool = Field(default=True, description="Enable X-Content-Type-Options")
+    
+    # Compromise Detection
+    compromise_detection_enabled: bool = Field(default=False, description="Enable automatic compromise detection")
+    compromise_detection_threshold: int = Field(default=3, ge=1, le=10, description="Minimum suspicious indicators to trigger")
+    rapid_token_threshold: int = Field(default=10, ge=5, le=50, description="Max tokens in 5 minutes before flagging")
+    auto_revoke_on_compromise: bool = Field(default=False, description="Automatically revoke tokens on compromise detection")
     referrer_policy: str = Field(default="strict-origin-when-cross-origin", description="Referrer Policy")
 
 
