@@ -12,6 +12,7 @@ export class ServiceFactory {
   private services: ServiceRegistry = {};
   private axiosInstance: AxiosInstance;
   private initialized: boolean = false;
+  private currentTenantId: string | null = null; // Track current tenant
 
   constructor(axiosInstance: AxiosInstance) {
     this.axiosInstance = axiosInstance;
@@ -58,6 +59,25 @@ export class ServiceFactory {
         service.setAuthToken(token);
       }
     });
+  }
+
+  /**
+   * Set tenant ID for all services that support it
+   */
+  setTenantId(tenantId: string | null): void {
+    this.currentTenantId = tenantId;
+    Object.values(this.services).forEach(service => {
+      if (service && typeof service.setTenantId === 'function') {
+        service.setTenantId(tenantId);
+      }
+    });
+  }
+
+  /**
+   * Get current tenant ID
+   */
+  getCurrentTenantId(): string | null {
+    return this.currentTenantId;
   }
 
   /**

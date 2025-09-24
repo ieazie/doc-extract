@@ -7,6 +7,7 @@ import { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'ax
 export abstract class BaseApiClient {
   protected client: AxiosInstance;
   protected authToken: string | null = null;
+  protected tenantId: string | null = null; // Add tenant tracking
 
   constructor(client: AxiosInstance) {
     this.client = client;
@@ -22,11 +23,14 @@ export abstract class BaseApiClient {
    * Set up request and response interceptors
    */
   protected setupInterceptors(): void {
-    // Request interceptor for auth token
+    // Request interceptor for auth token and tenant ID
     this.client.interceptors.request.use(
       (config) => {
         if (this.authToken) {
           config.headers.Authorization = `Bearer ${this.authToken}`;
+        }
+        if (this.tenantId) {
+          config.headers['X-Tenant-ID'] = this.tenantId;
         }
         (config as any).metadata = {
           ...(config as any).metadata,
@@ -141,6 +145,10 @@ export abstract class BaseApiClient {
 
   setAuthToken(token: string | null): void {
     this.authToken = token;
+  }
+
+  setTenantId(tenantId: string | null): void {
+    this.tenantId = tenantId;
   }
 
   // Common HTTP methods

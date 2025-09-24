@@ -105,6 +105,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.user) {
         setUser(response.user);
         localStorage.setItem('auth_user', JSON.stringify(response.user));
+        
+        // Update tenant ID in service factory if user has a tenant
+        if (response.user.tenant_id) {
+          serviceFactory.setTenantId(response.user.tenant_id);
+        }
       }
       
     } catch (error) {
@@ -121,6 +126,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setAccessToken(null);
     setStoredAccessToken(null);
     serviceFactory.setAuthToken(null);
+    serviceFactory.setTenantId(null);
     localStorage.removeItem('auth_user');
     localStorage.removeItem('auth_tenant');
   };
@@ -144,6 +150,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setTenant(parsedTenant);
             setAccessToken(storedAccessToken);
             serviceFactory.setAuthToken(storedAccessToken);
+            
+            // Restore tenant ID in service factory
+            if (parsedUser.tenant_id) {
+              serviceFactory.setTenantId(parsedUser.tenant_id);
+            }
           } else {
             // No stored access token, try to refresh silently
             const authService = serviceFactory.get<AuthService>('auth');
@@ -160,6 +171,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               // Update user data if provided
               if (refreshResult.user) {
                 localStorage.setItem('auth_user', JSON.stringify(refreshResult.user));
+                
+                // Update tenant ID in service factory
+                if (refreshResult.user.tenant_id) {
+                  serviceFactory.setTenantId(refreshResult.user.tenant_id);
+                }
+              } else if (parsedUser.tenant_id) {
+                // Use stored tenant ID if refresh didn't return user data
+                serviceFactory.setTenantId(parsedUser.tenant_id);
               }
             } else {
               // No valid refresh token, clear auth data
@@ -218,6 +237,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setStoredAccessToken(response.access_token);
       serviceFactory.setAuthToken(response.access_token);
       
+      // Set tenant ID in service factory if user has a tenant
+      if (response.user.tenant_id) {
+        serviceFactory.setTenantId(response.user.tenant_id);
+      }
+      
       // Store user data
       setUser(response.user);
       
@@ -260,6 +284,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const authService = serviceFactory.get<AuthService>('auth');
       await authService.switchTenant(tenantId);
+      
+      // Update tenant ID in service factory immediately
+      serviceFactory.setTenantId(tenantId);
       
       // Refresh user and tenant data
       const [userData, tenantData] = await Promise.all([
