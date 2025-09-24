@@ -332,6 +332,29 @@ const TenantConfigPage: React.FC = () => {
       const tenantService = serviceFactory.get<TenantService>('tenants');
       const summary = await tenantService.getTenantConfigSummary();
       
+      // Check if summary is null (happens when session expires)
+      if (!summary) {
+        console.warn('Tenant configuration summary is null - likely due to session expiry');
+        // Initialize with default config when summary is null
+        const defaultConfig: TenantLLMConfigs = {
+          field_extraction: {
+            provider: 'openai',
+            api_key: '',
+            base_url: '',
+            model_name: 'gpt-4'
+          },
+          document_extraction: {
+            provider: 'ollama',
+            api_key: '',
+            base_url: '',
+            model_name: 'gemma2:2b'
+          }
+        };
+        setTenantConfig(defaultConfig);
+        setLoading(false);
+        return;
+      }
+      
       // Initialize config structure
       const config: TenantLLMConfigs = {
         field_extraction: {
@@ -456,42 +479,52 @@ const TenantConfigPage: React.FC = () => {
     }
   };
 
+  // Helper function to handle LLM test responses
+  const handleLLMTestResponse = (
+    response: any,
+    testType: 'Field Extraction' | 'Document Extraction',
+    setMessage: (message: { type: 'success' | 'error'; text: string } | null) => void,
+    setHealth: (health: 'healthy' | 'unhealthy') => void
+  ) => {
+    // Check if response indicates an error (status >= 400 or has error property)
+    if (response && (typeof response === 'object' && 'status' in response && (response as any).status >= 400)) {
+      const errorMessage = (response as any).error?.message || (response as any).statusText || 'Unknown error occurred';
+      setMessage({ type: 'error', text: `${testType} LLM test failed: ${errorMessage}` });
+      setHealth('unhealthy');
+    } else {
+      setMessage({ type: 'success', text: `${testType} LLM test completed successfully` });
+      setHealth('healthy');
+    }
+  };
+
   const handleTestFieldExtractionLLM = async () => {
     if (!tenantConfig?.field_extraction) {
       setFieldExtractionMessage({ type: 'error', text: 'No Field Extraction configuration found' });
       return;
     }
 
-    // Check if API key is required but missing
-    if ((tenantConfig.field_extraction.provider === 'openai' || tenantConfig.field_extraction.provider === 'anthropic') && !tenantConfig.field_extraction.api_key) {
-      setFieldExtractionMessage({ type: 'error', text: `Field Extraction LLM test failed: API key is required for ${tenantConfig.field_extraction.provider} but not provided` });
-      return;
-    }
-
-    try {
-      setTestingField(true);
-      setFieldExtractionMessage(null);
-      
-      const testResult = await serviceFactory.get<HealthService>('health').testLLMExtraction({
-        config_type: 'field_extraction',
-        document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
-        schema: { 
-          invoice_number: "string",
-          date: "string", 
-          amount: "number" 
-        },
-        prompt_config: {}
-      });
-      
-      setFieldExtractionMessage({ type: 'success', text: 'Field Extraction LLM test completed successfully' });
-      setFieldLlmHealth('healthy');
-    } catch (error) {
-      console.error('Field extraction LLM test failed:', error);
-      setFieldExtractionMessage({ type: 'error', text: `Field Extraction LLM test failed: ${error}` });
-      setFieldLlmHealth('unhealthy');
-    } finally {
-      setTestingField(false);
-    }
+    setTestingField(true);
+    setFieldExtractionMessage(null);
+    
+    const response = await serviceFactory.get<HealthService>('health').testLLMExtraction({
+      config_type: 'field_extraction',
+      document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
+      schema: { 
+        invoice_number: "string",
+        date: "string", 
+        amount: "number" 
+      },
+      prompt_config: {}
+    });
+    
+    handleLLMTestResponse(
+      response,
+      'Field Extraction',
+      setFieldExtractionMessage,
+      setFieldLlmHealth
+    );
+    
+    setTestingField(false);
   };
 
   const handleTestDocumentExtractionLLM = async () => {
@@ -500,36 +533,28 @@ const TenantConfigPage: React.FC = () => {
       return;
     }
 
-    // Check if API key is required but missing
-    if ((tenantConfig.document_extraction.provider === 'openai' || tenantConfig.document_extraction.provider === 'anthropic') && !tenantConfig.document_extraction.api_key) {
-      setDocumentExtractionMessage({ type: 'error', text: `Document Extraction LLM test failed: API key is required for ${tenantConfig.document_extraction.provider} but not provided` });
-      return;
-    }
-
-    try {
-      setTestingDocument(true);
-      setDocumentExtractionMessage(null);
-      
-      const testResult = await serviceFactory.get<HealthService>('health').testLLMExtraction({
-        config_type: 'document_extraction',
-        document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
-        schema: { 
-          invoice_number: "string",
-          date: "string", 
-          amount: "number" 
-        },
-        prompt_config: {}
-      });
-      
-      setDocumentExtractionMessage({ type: 'success', text: 'Document Extraction LLM test completed successfully' });
-      setDocumentLlmHealth('healthy');
-    } catch (error) {
-      console.error('Document extraction LLM test failed:', error);
-      setDocumentExtractionMessage({ type: 'error', text: `Document Extraction LLM test failed: ${error}` });
-      setDocumentLlmHealth('unhealthy');
-    } finally {
-      setTestingDocument(false);
-    }
+    setTestingDocument(true);
+    setDocumentExtractionMessage(null);
+    
+    const response = await serviceFactory.get<HealthService>('health').testLLMExtraction({
+      config_type: 'document_extraction',
+      document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
+      schema: { 
+        invoice_number: "string",
+        date: "string", 
+        amount: "number" 
+      },
+      prompt_config: {}
+    });
+    
+    handleLLMTestResponse(
+      response,
+      'Document Extraction',
+      setDocumentExtractionMessage,
+      setDocumentLlmHealth
+    );
+    
+    setTestingDocument(false);
   };
 
   const renderOverviewTab = () => (
@@ -630,7 +655,7 @@ const TenantConfigPage: React.FC = () => {
             <Label>API Key</Label>
             <Input 
               type="password"
-              value={tenantConfig?.field_extraction?.api_key || ''}
+              value={tenantConfig?.field_extraction?.has_api_key ? "••••••••••••••••••••••••••••••••" : ''}
               onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 field_extraction: {
@@ -638,11 +663,16 @@ const TenantConfigPage: React.FC = () => {
                   api_key: e.target.value
                 }
               } : null)}
-              placeholder="sk-..."
+              placeholder={tenantConfig?.field_extraction?.has_api_key ? "Key is set (hidden for security)" : "No key set - enter one"}
+              readOnly={!!tenantConfig?.field_extraction?.has_api_key}
             />
-            {!tenantConfig?.field_extraction?.api_key && (
+            {tenantConfig?.field_extraction?.has_api_key ? (
+              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>
+                ✓ API key is configured and hidden for security
+              </div>
+            ) : (
               <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
-                API key is required for OpenAI
+                ⚠️ No API key set - authentication will not work properly
               </div>
             )}
           </FormGroup>
@@ -653,7 +683,7 @@ const TenantConfigPage: React.FC = () => {
             <Label>API Key</Label>
             <Input 
               type="password"
-              value={tenantConfig?.field_extraction?.api_key || ''}
+              value={tenantConfig?.field_extraction?.has_api_key ? "••••••••••••••••••••••••••••••••" : ''}
               onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 field_extraction: {
@@ -661,8 +691,18 @@ const TenantConfigPage: React.FC = () => {
                   api_key: e.target.value
                 }
               } : null)}
-              placeholder="sk-ant-..."
+              placeholder={tenantConfig?.field_extraction?.has_api_key ? "Key is set (hidden for security)" : "No key set - enter one"}
+              readOnly={!!tenantConfig?.field_extraction?.has_api_key}
             />
+            {tenantConfig?.field_extraction?.has_api_key ? (
+              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>
+                ✓ API key is configured and hidden for security
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
+                ⚠️ No API key set - authentication will not work properly
+              </div>
+            )}
           </FormGroup>
         )}
         
@@ -748,7 +788,7 @@ const TenantConfigPage: React.FC = () => {
             <Label>API Key</Label>
             <Input 
               type="password"
-              value={tenantConfig?.document_extraction?.api_key || ''}
+              value={tenantConfig?.document_extraction?.has_api_key ? "••••••••••••••••••••••••••••••••" : ''}
               onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 document_extraction: {
@@ -756,8 +796,18 @@ const TenantConfigPage: React.FC = () => {
                   api_key: e.target.value
                 }
               } : null)}
-              placeholder="sk-..."
+              placeholder={tenantConfig?.document_extraction?.has_api_key ? "Key is set (hidden for security)" : "No key set - enter one"}
+              readOnly={!!tenantConfig?.document_extraction?.has_api_key}
             />
+            {tenantConfig?.document_extraction?.has_api_key ? (
+              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>
+                ✓ API key is configured and hidden for security
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
+                ⚠️ No API key set - authentication will not work properly
+              </div>
+            )}
           </FormGroup>
         )}
 
@@ -766,7 +816,7 @@ const TenantConfigPage: React.FC = () => {
             <Label>API Key</Label>
             <Input 
               type="password"
-              value={tenantConfig?.document_extraction?.api_key || ''}
+              value={tenantConfig?.document_extraction?.has_api_key ? "••••••••••••••••••••••••••••••••" : ''}
               onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 document_extraction: {
@@ -774,8 +824,18 @@ const TenantConfigPage: React.FC = () => {
                   api_key: e.target.value
                 }
               } : null)}
-              placeholder="sk-ant-..."
+              placeholder={tenantConfig?.document_extraction?.has_api_key ? "Key is set (hidden for security)" : "No key set - enter one"}
+              readOnly={!!tenantConfig?.document_extraction?.has_api_key}
             />
+            {tenantConfig?.document_extraction?.has_api_key ? (
+              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>
+                ✓ API key is configured and hidden for security
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
+                ⚠️ No API key set - authentication will not work properly
+              </div>
+            )}
           </FormGroup>
         )}
         

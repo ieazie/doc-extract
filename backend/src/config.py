@@ -42,17 +42,34 @@ class Settings(BaseSettings):
         'text/plain'
     }
     
-    # Security
-    secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
-    jwt_secret: str = Field(default="dev-jwt-secret-change-in-production", env="JWT_SECRET")
-    access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    # Security (DEPRECATED - Now tenant-specific via tenant configurations)
+    # These are kept for backward compatibility during transition period
+    secret_key: str = Field(
+        default="dev-secret-key-change-in-production", 
+        env="SECRET_KEY",
+        description="DEPRECATED: Use tenant-specific JWT secrets via tenant configurations"
+    )
+    jwt_secret: str = Field(
+        default="dev-jwt-secret-change-in-production", 
+        env="JWT_SECRET",
+        description="DEPRECATED: Use tenant-specific JWT secrets via tenant configurations"
+    )
+    access_token_expire_minutes: int = Field(
+        default=30, 
+        env="ACCESS_TOKEN_EXPIRE_MINUTES",
+        description="DEPRECATED: Use tenant-specific token expiry via tenant configurations"
+    )
     tenant_secret_encryption_key: str = Field(
         default="dev-tenant-secret-encryption-key-change-in-production", 
-        env="TENANT_SECRET_ENCRYPTION_KEY"
+        env="TENANT_SECRET_ENCRYPTION_KEY",
+        description="DEPRECATED: Use tenant-specific encryption keys via tenant configurations"
     )
     
-    # CORS Settings
-    cors_origins: list = Field(default=["http://localhost:3000", "http://frontend:3000"])
+    # CORS Settings (DEPRECATED - Now tenant-specific via tenant configurations)
+    cors_origins: list = Field(
+        default=["http://localhost:3000", "http://frontend:3000"],
+        description="DEPRECATED: Use tenant-specific CORS origins via tenant configurations"
+    )
     
     # Redis and Celery Configuration
     redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")

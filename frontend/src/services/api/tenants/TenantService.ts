@@ -215,6 +215,7 @@ export class TenantService extends BaseApiClient {
     return this.get<AvailableModelsResponse[]>('/api/models/available');
   }
 
+
   // Tenant Statistics
   async getTenantStatistics(tenantId: string): Promise<{
     user_count: number;

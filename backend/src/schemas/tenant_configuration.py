@@ -164,12 +164,86 @@ class SecurityConfig(BaseModel):
     referrer_policy: str = Field(default="strict-origin-when-cross-origin", description="Referrer Policy")
 
 
+# Secure versions of config schemas that exclude sensitive fields
+class SecureAuthenticationConfig(BaseModel):
+    """Secure version of authentication configuration (no secrets)"""
+    
+    # JWT Configuration (non-sensitive)
+    access_token_expire_minutes: int = Field(default=30, ge=1, le=1440, description="Access token expiry in minutes")
+    refresh_token_expire_days: int = Field(default=7, ge=1, le=30, description="Refresh token expiry in days")
+    
+    # Cookie Configuration
+    refresh_cookie_httponly: bool = Field(default=True, description="HttpOnly flag for refresh token cookie")
+    refresh_cookie_secure: bool = Field(default=True, description="Secure flag for refresh token cookie")
+    refresh_cookie_samesite: str = Field(default="strict", description="SameSite policy for refresh token cookie")
+    refresh_cookie_path: str = Field(default="/api/auth/refresh", description="Path for refresh token cookie")
+    refresh_cookie_domain: Optional[str] = Field(default=None, description="Domain for refresh token cookie")
+    
+    # Security Policies
+    max_login_attempts: int = Field(default=5, ge=1, le=20, description="Maximum login attempts before lockout")
+    lockout_duration_minutes: int = Field(default=15, ge=1, le=1440, description="Lockout duration in minutes")
+    password_min_length: int = Field(default=8, ge=6, le=128, description="Minimum password length")
+    require_2fa: bool = Field(default=False, description="Require two-factor authentication")
+    
+    # Additional fields
+    session_timeout_minutes: int = Field(default=480, ge=1, le=1440, description="Session timeout in minutes")
+    concurrent_sessions_limit: int = Field(default=5, ge=1, le=50, description="Maximum concurrent sessions")
+
+
+class SecureSecurityConfig(BaseModel):
+    """Secure version of security configuration (no secrets)"""
+    
+    # CSRF Protection
+    csrf_protection_enabled: bool = Field(default=True, description="Enable CSRF protection")
+    csrf_token_header: str = Field(default="X-CSRF-Token", description="CSRF token header name")
+    
+    # Rate Limiting
+    rate_limiting_enabled: bool = Field(default=True, description="Enable rate limiting")
+    rate_limit_requests_per_minute: int = Field(default=60, ge=1, le=1000, description="Requests per minute limit")
+    rate_limit_burst_size: int = Field(default=100, ge=1, le=1000, description="Burst size for rate limiting")
+    
+    # Security Headers
+    security_headers_enabled: bool = Field(default=True, description="Enable security headers")
+    content_security_policy: Optional[str] = Field(default=None, description="Content Security Policy")
+    strict_transport_security: bool = Field(default=True, description="Enable HSTS")
+    x_frame_options: str = Field(default="DENY", description="X-Frame-Options header value")
+    x_content_type_options: bool = Field(default=True, description="Enable X-Content-Type-Options")
+    
+    # Compromise Detection
+    compromise_detection_enabled: bool = Field(default=False, description="Enable automatic compromise detection")
+    compromise_detection_threshold: int = Field(default=3, ge=1, le=10, description="Minimum suspicious indicators to trigger")
+    rapid_token_threshold: int = Field(default=10, ge=5, le=50, description="Max tokens in 5 minutes before flagging")
+    auto_revoke_on_compromise: bool = Field(default=False, description="Automatically revoke tokens on compromise detection")
+    referrer_policy: str = Field(default="strict-origin-when-cross-origin", description="Referrer Policy")
+
+
+class SecureLLMConfig(BaseModel):
+    """Secure version of LLM configuration (no API keys)"""
+    
+    provider: str = Field(..., description="LLM provider (openai, ollama, etc.)")
+    model_name: str = Field(..., description="Model name to use")
+    base_url: Optional[str] = Field(default=None, description="Custom base URL for the API")
+    max_tokens: int = Field(default=2000, ge=1, le=32000, description="Maximum tokens to generate")
+    temperature: float = Field(default=0.3, ge=0.0, le=2.0, description="Sampling temperature")
+    ollama_config: Optional[Dict[str, Any]] = Field(default=None, description="Ollama-specific configuration")
+    has_api_key: bool = Field(default=False, description="Whether an API key is configured (without exposing the key)")
+
+
+class SecureTenantLLMConfigs(BaseModel):
+    """Secure version of tenant LLM configurations (no API keys)"""
+    
+    field_extraction: Optional[SecureLLMConfig] = None
+    document_extraction: Optional[SecureLLMConfig] = None
+
+
 class TenantConfigSummary(BaseModel):
-    """Summary of tenant configuration"""
+    """Summary of tenant configuration (secure version - no secrets exposed)"""
     tenant_id: UUID
-    llm_config: Optional[Union[LLMConfig, TenantLLMConfigs]] = None
+    llm_config: Optional[Union[SecureLLMConfig, SecureTenantLLMConfigs]] = None
     rate_limits: Optional[RateLimitsConfig] = None
     rate_usage: Optional[Dict[str, int]] = None
-    auth_config: Optional[AuthenticationConfig] = None
-    cors_config: Optional[CORSConfig] = None
-    security_config: Optional[SecurityConfig] = None
+    auth_config: Optional[SecureAuthenticationConfig] = None
+    cors_config: Optional[CORSConfig] = None  # CORS config is safe to expose
+    security_config: Optional[SecureSecurityConfig] = None
+
+

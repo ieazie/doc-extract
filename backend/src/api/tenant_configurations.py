@@ -27,7 +27,11 @@ from ..schemas.tenant_configuration import (
     AvailableModelsResponse,
     AuthenticationConfig,
     CORSConfig,
-    SecurityConfig
+    SecurityConfig,
+    SecureAuthenticationConfig,
+    SecureSecurityConfig,
+    SecureLLMConfig,
+    SecureTenantLLMConfigs
 )
 
 router = APIRouter()
@@ -303,8 +307,8 @@ async def check_llm_health(
     db: Session = Depends(get_db)
 ):
     """Check the health of the configured LLM provider"""
-    config_service = TenantConfigService(db)
-    llm_config = config_service.get_llm_config(current_user.tenant_id)
+    infrastructure_service = TenantInfrastructureService(db)
+    llm_config = infrastructure_service.get_llm_config(current_user.tenant_id)
     
     if not llm_config:
         raise HTTPException(
@@ -359,8 +363,8 @@ async def test_llm_extraction(
     db: Session = Depends(get_db)
 ):
     """Test LLM extraction with sample data"""
-    config_service = TenantConfigService(db)
-    llm_config = config_service.get_llm_config(current_user.tenant_id)
+    infrastructure_service = TenantInfrastructureService(db)
+    llm_config = infrastructure_service.get_llm_config(current_user.tenant_id)
     
     if not llm_config:
         raise HTTPException(
@@ -738,3 +742,5 @@ async def get_tenant_infrastructure_config_by_slug(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get infrastructure config: {str(e)}"
         )
+
+

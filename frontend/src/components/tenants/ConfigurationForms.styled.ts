@@ -242,3 +242,16 @@ export const EnvironmentBadge = styled.span`
   font-weight: ${props => props.theme.typography.weights.medium};
   text-transform: uppercase;
 `;
+
+export const WarningText = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${props => props.theme.spacing.xs};
+  font-size: ${props => props.theme.typography.sizes.xs};
+  color: ${props => props.theme.colors.warning};
+  margin-top: ${props => props.theme.spacing.xs};
+  padding: ${props => props.theme.spacing.xs} ${props => props.theme.spacing.sm};
+  background: ${props => props.theme.colors.warning}10;
+  border: 1px solid ${props => props.theme.colors.warning}30;
+  border-radius: ${props => props.theme.borderRadius.sm};
+`;

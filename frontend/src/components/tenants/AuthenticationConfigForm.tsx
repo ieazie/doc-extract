@@ -29,7 +29,8 @@ import {
   ActionButtons,
   EnvironmentSelector,
   EnvironmentLabel,
-  EnvironmentBadge
+  EnvironmentBadge,
+  WarningText
 } from './ConfigurationForms.styled';
 
 interface AuthenticationConfigFormProps {
@@ -195,23 +196,37 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
           <FormLabel>JWT Secret Key</FormLabel>
           <div style={{ display: 'flex', gap: '8px' }}>
             <FormInput
-              type="password"
-              value={config.jwt_secret_key}
+              type="text"
+              value={config.jwt_secret_key ? "••••••••••••••••••••••••••••••••" : ""}
               onChange={(e) => handleFieldChange('jwt_secret_key', e.target.value)}
-              placeholder="Enter JWT secret key"
-              style={{ flex: 1 }}
+              placeholder={config.jwt_secret_key ? "Key is set (hidden for security)" : "No key set - enter or generate one"}
+              style={{ 
+                flex: 1,
+                backgroundColor: config.jwt_secret_key ? '#f0f9ff' : '#fef2f2',
+                color: config.jwt_secret_key ? '#0369a1' : '#dc2626',
+                borderColor: config.jwt_secret_key ? '#0ea5e9' : '#f87171'
+              }}
+              readOnly={!!config.jwt_secret_key}
             />
             <Button
               onClick={generateSecretKey}
               variant="secondary"
               size="small"
             >
-              Generate
+              {config.jwt_secret_key ? "Generate New" : "Generate"}
             </Button>
           </div>
           <FormHelpText>
-            ⚠️ Keep this secret key secure. Changing it will invalidate all existing tokens.
+            {config.jwt_secret_key 
+              ? "✓ JWT Secret Key is configured and hidden for security"
+              : "⚠️ No JWT Secret Key set - authentication will not work properly"
+            }
           </FormHelpText>
+          {config.jwt_secret_key && (
+            <WarningText>
+              <AlertCircle size={16} /> Changing this key will invalidate all existing tokens.
+            </WarningText>
+          )}
         </FormGroup>
       </FormSection>
 

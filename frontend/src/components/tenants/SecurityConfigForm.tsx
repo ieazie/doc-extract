@@ -3,7 +3,7 @@
  * Functional form for editing security policies and compromise detection
  */
 import React, { useState, useEffect } from 'react';
-import { Save, RefreshCw, Shield, AlertTriangle } from 'lucide-react';
+import { Save, RefreshCw, Shield, AlertTriangle, AlertCircle } from 'lucide-react';
 import { SecurityConfig } from '../../services/api/tenants/types/tenants';
 import { serviceFactory } from '../../services/api';
 import { TenantService } from '../../services/api/tenants/TenantService';
@@ -30,7 +30,8 @@ import {
   ActionButtons,
   EnvironmentSelector,
   EnvironmentLabel,
-  EnvironmentBadge
+  EnvironmentBadge,
+  WarningText
 } from './ConfigurationForms.styled';
 
 interface SecurityConfigFormProps {
@@ -435,23 +436,37 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
           <FormLabel>Encryption Key</FormLabel>
           <div style={{ display: 'flex', gap: '8px' }}>
             <FormInput
-              type="password"
-              value={config.encryption_key}
+              type="text"
+              value={config.encryption_key ? "••••••••••••••••••••••••••••••••" : ""}
               onChange={(e) => handleFieldChange('encryption_key', e.target.value)}
-              placeholder="Enter encryption key"
-              style={{ flex: 1 }}
+              placeholder={config.encryption_key ? "Key is set (hidden for security)" : "No key set - enter or generate one"}
+              style={{ 
+                flex: 1,
+                backgroundColor: config.encryption_key ? '#f0f9ff' : '#fef2f2',
+                color: config.encryption_key ? '#0369a1' : '#dc2626',
+                borderColor: config.encryption_key ? '#0ea5e9' : '#f87171'
+              }}
+              readOnly={!!config.encryption_key}
             />
             <Button
               onClick={generateEncryptionKey}
               variant="secondary"
               size="small"
             >
-              Generate
+              {config.encryption_key ? "Generate New" : "Generate"}
             </Button>
           </div>
           <FormHelpText>
-            ⚠️ Keep this encryption key secure. Changing it may affect encrypted data.
+            {config.encryption_key 
+              ? "✓ Encryption Key is configured and hidden for security"
+              : "⚠️ No Encryption Key set - data encryption may not work properly"
+            }
           </FormHelpText>
+          {config.encryption_key && (
+            <WarningText>
+              <AlertCircle size={16} /> Changing this key may affect encrypted data.
+            </WarningText>
+          )}
         </FormGroup>
       </FormSection>
 

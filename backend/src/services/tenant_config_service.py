@@ -22,7 +22,11 @@ from ..schemas.tenant_configuration import (
     RateLimitsConfig,
     AuthenticationConfig,
     CORSConfig,
-    SecurityConfig
+    SecurityConfig,
+    SecureAuthenticationConfig,
+    SecureSecurityConfig,
+    SecureLLMConfig,
+    SecureTenantLLMConfigs
 )
 from .tenant_secret_service import TenantSecretService
 
@@ -142,9 +146,9 @@ class TenantConfigService:
             return True
         return False
     
-    def get_llm_config(self, tenant_id: UUID) -> Optional[Union[LLMConfig, TenantLLMConfigs]]:
-        """Get LLM configuration for tenant"""
-        config = self.get_config(tenant_id, "llm")
+    def get_llm_config(self, tenant_id: UUID, environment: str = "development") -> Optional[Union[LLMConfig, TenantLLMConfigs]]:
+        """Get LLM configuration for tenant and environment"""
+        config = self.get_config(tenant_id, "llm", environment)
         if not config:
             return None
         
@@ -330,35 +334,123 @@ class TenantConfigService:
         return security_config
     
     def get_tenant_config_summary(self, tenant_id: UUID) -> TenantConfigSummary:
-        """Get comprehensive tenant configuration summary"""
+        """Get comprehensive tenant configuration summary (secure version - no secrets)"""
         
-        # Get LLM configuration
+        # Get LLM configuration and convert to secure version
         llm_config = self.get_llm_config(tenant_id)
+        secure_llm_config = self._convert_to_secure_llm_config(llm_config) if llm_config else None
         
-        # Get rate limits configuration
+        # Get rate limits configuration (already safe)
         rate_limits = self.get_rate_limits_config(tenant_id)
         
-        # Get authentication configuration
+        # Get authentication configuration and convert to secure version
         auth_config = self.get_auth_config(tenant_id)
+        secure_auth_config = self._convert_to_secure_auth_config(auth_config) if auth_config else None
         
-        # Get CORS configuration
+        # Get CORS configuration (already safe)
         cors_config = self.get_cors_config(tenant_id)
         
-        # Get security configuration
+        # Get security configuration and convert to secure version
         security_config = self.get_security_config(tenant_id)
+        secure_security_config = self._convert_to_secure_security_config(security_config) if security_config else None
         
         # Get current rate limit usage (this would be implemented in RateLimitService)
         rate_usage = None
         
         return TenantConfigSummary(
             tenant_id=tenant_id,
-            llm_config=llm_config,
+            llm_config=secure_llm_config,
             rate_limits=rate_limits,
             rate_usage=rate_usage,
-            auth_config=auth_config,
+            auth_config=secure_auth_config,
             cors_config=cors_config,
-            security_config=security_config
+            security_config=secure_security_config
         )
+    
+    def _convert_to_secure_auth_config(self, auth_config: AuthenticationConfig) -> SecureAuthenticationConfig:
+        """Convert AuthenticationConfig to SecureAuthenticationConfig (exclude JWT secret)"""
+        from ..schemas.tenant_configuration import SecureAuthenticationConfig
+        
+        return SecureAuthenticationConfig(
+            access_token_expire_minutes=auth_config.access_token_expire_minutes,
+            refresh_token_expire_days=auth_config.refresh_token_expire_days,
+            refresh_cookie_httponly=auth_config.refresh_cookie_httponly,
+            refresh_cookie_secure=auth_config.refresh_cookie_secure,
+            refresh_cookie_samesite=auth_config.refresh_cookie_samesite,
+            refresh_cookie_path=auth_config.refresh_cookie_path,
+            refresh_cookie_domain=auth_config.refresh_cookie_domain,
+            max_login_attempts=auth_config.max_login_attempts,
+            lockout_duration_minutes=auth_config.lockout_duration_minutes,
+            password_min_length=auth_config.password_min_length,
+            require_2fa=auth_config.require_2fa,
+            session_timeout_minutes=getattr(auth_config, 'session_timeout_minutes', 480),
+            concurrent_sessions_limit=getattr(auth_config, 'concurrent_sessions_limit', 5)
+        )
+    
+    def _convert_to_secure_security_config(self, security_config: SecurityConfig) -> SecureSecurityConfig:
+        """Convert SecurityConfig to SecureSecurityConfig (exclude encryption key)"""
+        from ..schemas.tenant_configuration import SecureSecurityConfig
+        
+        return SecureSecurityConfig(
+            csrf_protection_enabled=security_config.csrf_protection_enabled,
+            csrf_token_header=security_config.csrf_token_header,
+            rate_limiting_enabled=security_config.rate_limiting_enabled,
+            rate_limit_requests_per_minute=security_config.rate_limit_requests_per_minute,
+            rate_limit_burst_size=security_config.rate_limit_burst_size,
+            security_headers_enabled=security_config.security_headers_enabled,
+            content_security_policy=security_config.content_security_policy,
+            strict_transport_security=security_config.strict_transport_security,
+            x_frame_options=security_config.x_frame_options,
+            x_content_type_options=security_config.x_content_type_options,
+            compromise_detection_enabled=security_config.compromise_detection_enabled,
+            compromise_detection_threshold=security_config.compromise_detection_threshold,
+            rapid_token_threshold=security_config.rapid_token_threshold,
+            auto_revoke_on_compromise=security_config.auto_revoke_on_compromise,
+            referrer_policy=security_config.referrer_policy
+        )
+    
+    def _convert_to_secure_llm_config(self, llm_config) -> SecureTenantLLMConfigs:
+        """Convert LLMConfig to SecureLLMConfig (exclude API keys)"""
+        from ..schemas.tenant_configuration import SecureLLMConfig, SecureTenantLLMConfigs
+        
+        def convert_single_config(config):
+            if not config:
+                return None
+            
+            # Convert ollama_config to dict if it's an object
+            ollama_config_dict = None
+            if config.ollama_config:
+                if hasattr(config.ollama_config, 'model_dump'):
+                    ollama_config_dict = config.ollama_config.model_dump()
+                elif hasattr(config.ollama_config, '__dict__'):
+                    ollama_config_dict = config.ollama_config.__dict__
+                else:
+                    ollama_config_dict = config.ollama_config
+            
+            # Check if API key exists (for providers that require it)
+            has_api_key = False
+            if config.provider in ['openai', 'anthropic']:
+                has_api_key = bool(config.api_key and config.api_key.strip())
+            
+            return SecureLLMConfig(
+                provider=config.provider,
+                model_name=config.model_name,
+                base_url=config.base_url,
+                max_tokens=config.max_tokens,
+                temperature=config.temperature,
+                ollama_config=ollama_config_dict,
+                has_api_key=has_api_key
+            )
+        
+        if hasattr(llm_config, 'field_extraction') and hasattr(llm_config, 'document_extraction'):
+            # TenantLLMConfigs
+            return SecureTenantLLMConfigs(
+                field_extraction=convert_single_config(llm_config.field_extraction),
+                document_extraction=convert_single_config(llm_config.document_extraction)
+            )
+        else:
+            # Single LLMConfig
+            return convert_single_config(llm_config)
     
     def get_available_environments(self, tenant_id: UUID) -> List[str]:
         """Get available environments for tenant"""

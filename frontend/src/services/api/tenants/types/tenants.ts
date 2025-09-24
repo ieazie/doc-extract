@@ -95,6 +95,7 @@ export interface LLMConfig {
   max_tokens?: number;
   temperature?: number;
   ollama_config?: OllamaConfig;
+  has_api_key?: boolean; // Indicates if API key is configured (without exposing the key)
   // Support for dual configuration structure
   field_extraction?: LLMConfig;
   document_extraction?: LLMConfig;

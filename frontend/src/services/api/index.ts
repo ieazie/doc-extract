@@ -5,6 +5,51 @@
 import axios, { AxiosInstance } from 'axios';
 import { ServiceFactory } from './base/ServiceFactory';
 
+/**
+ * Transform Axios errors into proper Error objects
+ */
+const transformAxiosError = (error: any): Error => {
+  // Network error
+  if (error.request && !error.response) {
+    const networkError = new Error('Network error - please check your connection');
+    (networkError as any).name = 'NetworkError';
+    return networkError;
+  }
+
+  // API error
+  if (error.response) {
+    const { status, data } = error.response;
+    const message = data?.message || data?.detail || `Request failed with status ${status}`;
+    const apiError = new Error(message);
+    
+    (apiError as any).status = status;
+    (apiError as any).data = data;
+
+    // Set error type based on status
+    switch (status) {
+      case 401:
+        (apiError as any).name = 'AuthenticationError';
+        break;
+      case 403:
+        (apiError as any).name = 'AuthorizationError';
+        break;
+      case 404:
+        (apiError as any).name = 'NotFoundError';
+        break;
+      case 422:
+        (apiError as any).name = 'ValidationError';
+        break;
+      default:
+        (apiError as any).name = 'ApiError';
+    }
+    
+    return apiError;
+  }
+
+  // Other error
+  return new Error(error.message || 'An unexpected error occurred');
+};
+
 // Create axios instance
 const createAxiosInstance = (): AxiosInstance => {
   // Determine the correct API URL based on environment
@@ -51,8 +96,18 @@ const createAxiosInstance = (): AxiosInstance => {
         });
       }
       
-      // For other errors, still reject the promise
-      return Promise.reject(error);
+      // For other errors, return a resolved promise with error data
+      // This prevents UI crashes and allows components to handle errors gracefully
+      const transformedError = transformAxiosError(error);
+      return Promise.resolve({
+        data: null,
+        status: error.response?.status || 500,
+        statusText: transformedError.message || 'Error occurred',
+        headers: {},
+        config: error.config,
+        request: error.request,
+        error: transformedError // Include the transformed error for component handling
+      });
     }
   );
 
