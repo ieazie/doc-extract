@@ -24,7 +24,10 @@ import {
   EnvironmentSecret,
   EnvironmentSecretUpdate,
   EnvironmentConfig,
-  AvailableModelsResponse
+  AvailableModelsResponse,
+  AuthenticationConfig,
+  CORSConfig,
+  SecurityConfig
 } from './types/tenants';
 
 export class TenantService extends BaseApiClient {
@@ -83,6 +86,79 @@ export class TenantService extends BaseApiClient {
 
   async deleteTenantConfiguration(configType: TenantConfiguration['config_type']): Promise<void> {
     await this.delete<void>(`/api/tenant/configurations/${configType}`);
+  }
+
+  // New Configuration Types (Auth, CORS, Security)
+  async getAuthenticationConfig(environment?: string): Promise<AuthenticationConfig | null> {
+    try {
+      const response = await this.get<{ config_data: AuthenticationConfig }>(
+        '/api/tenant/configurations/auth',
+        { environment }
+      );
+      return response?.config_data || null;
+    } catch (error) {
+      console.warn('No authentication config found:', error);
+      return null;
+    }
+  }
+
+  async updateAuthenticationConfig(
+    config: AuthenticationConfig,
+    environment?: string
+  ): Promise<TenantConfigurationWrite> {
+    return this.createTenantConfiguration({
+      tenant_id: '', // Will be set by backend from JWT
+      config_type: 'auth',
+      config_data: config
+    });
+  }
+
+  async getCORSConfig(environment?: string): Promise<CORSConfig | null> {
+    try {
+      const response = await this.get<{ config_data: CORSConfig }>(
+        '/api/tenant/configurations/cors',
+        { environment }
+      );
+      return response?.config_data || null;
+    } catch (error) {
+      console.warn('No CORS config found:', error);
+      return null;
+    }
+  }
+
+  async updateCORSConfig(
+    config: CORSConfig,
+    environment?: string
+  ): Promise<TenantConfigurationWrite> {
+    return this.createTenantConfiguration({
+      tenant_id: '', // Will be set by backend from JWT
+      config_type: 'cors',
+      config_data: config
+    });
+  }
+
+  async getSecurityConfig(environment?: string): Promise<SecurityConfig | null> {
+    try {
+      const response = await this.get<{ config_data: SecurityConfig }>(
+        '/api/tenant/configurations/security',
+        { environment }
+      );
+      return response?.config_data || null;
+    } catch (error) {
+      console.warn('No security config found:', error);
+      return null;
+    }
+  }
+
+  async updateSecurityConfig(
+    config: SecurityConfig,
+    environment?: string
+  ): Promise<TenantConfigurationWrite> {
+    return this.createTenantConfiguration({
+      tenant_id: '', // Will be set by backend from JWT
+      config_type: 'security',
+      config_data: config
+    });
   }
 
   // Tenant Information

@@ -24,7 +24,10 @@ from ..schemas.tenant_configuration import (
     LLMConfig,
     TenantLLMConfigs,
     RateLimitsConfig,
-    AvailableModelsResponse
+    AvailableModelsResponse,
+    AuthenticationConfig,
+    CORSConfig,
+    SecurityConfig
 )
 
 router = APIRouter()
@@ -57,10 +60,10 @@ async def get_tenant_configuration(
     db: Session = Depends(get_db)
 ):
     """Get specific tenant configuration"""
-    if config_type not in ["llm", "rate_limits"]:
+    if config_type not in ["llm", "rate_limits", "auth", "cors", "security"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid config type. Must be 'llm' or 'rate_limits'"
+            detail="Invalid config type. Must be 'llm', 'rate_limits', 'auth', 'cors', or 'security'"
         )
     
     config_service = TenantConfigService(db)
@@ -106,6 +109,33 @@ async def create_tenant_configuration(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid rate limits configuration: {str(e)}"
             )
+    elif config_data.config_type == "auth":
+        try:
+            from ..schemas.tenant_configuration import AuthenticationConfig
+            AuthenticationConfig(**config_data.config_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid authentication configuration: {str(e)}"
+            )
+    elif config_data.config_type == "cors":
+        try:
+            from ..schemas.tenant_configuration import CORSConfig
+            CORSConfig(**config_data.config_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid CORS configuration: {str(e)}"
+            )
+    elif config_data.config_type == "security":
+        try:
+            from ..schemas.tenant_configuration import SecurityConfig
+            SecurityConfig(**config_data.config_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid security configuration: {str(e)}"
+            )
     
     return config_service.create_or_update_config(
         tenant_id=current_user.tenant_id,
@@ -123,10 +153,10 @@ async def update_tenant_configuration(
     db: Session = Depends(get_db)
 ):
     """Update tenant configuration"""
-    if config_type not in ["llm", "rate_limits"]:
+    if config_type not in ["llm", "rate_limits", "auth", "cors", "security"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid config type. Must be 'llm' or 'rate_limits'"
+            detail="Invalid config type. Must be 'llm', 'rate_limits', 'auth', 'cors', or 'security'"
         )
     
     config_service = TenantConfigService(db)
@@ -162,6 +192,33 @@ async def update_tenant_configuration(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid rate limits configuration: {str(e)}"
             )
+    elif config_type == "auth":
+        try:
+            from ..schemas.tenant_configuration import AuthenticationConfig
+            AuthenticationConfig(**updated_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid authentication configuration: {str(e)}"
+            )
+    elif config_type == "cors":
+        try:
+            from ..schemas.tenant_configuration import CORSConfig
+            CORSConfig(**updated_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid CORS configuration: {str(e)}"
+            )
+    elif config_type == "security":
+        try:
+            from ..schemas.tenant_configuration import SecurityConfig
+            SecurityConfig(**updated_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid security configuration: {str(e)}"
+            )
     
     return config_service.create_or_update_config(
         tenant_id=current_user.tenant_id,
@@ -178,10 +235,10 @@ async def delete_tenant_configuration(
     db: Session = Depends(get_db)
 ):
     """Delete tenant configuration"""
-    if config_type not in ["llm", "rate_limits"]:
+    if config_type not in ["llm", "rate_limits", "auth", "cors", "security"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid config type. Must be 'llm' or 'rate_limits'"
+            detail="Invalid config type. Must be 'llm', 'rate_limits', 'auth', 'cors', or 'security'"
         )
     
     config_service = TenantConfigService(db)
