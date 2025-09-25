@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from uuid import UUID, uuid4
 from passlib.context import CryptContext
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
@@ -23,11 +22,12 @@ logger = logging.getLogger(__name__)
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT settings
-SECRET_KEY = settings.jwt_secret  # Use the dedicated JWT secret
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+# JWT settings - These are now tenant-specific via TenantAuthService
+# Legacy constants removed - all authentication now uses tenant-specific configurations
+ALGORITHM = "HS256"  # Algorithm is still consistent across tenants
+
+# Legacy constants are no longer used - all authentication operations
+# must use TenantAuthService for tenant-specific configurations
 
 
 class AuthService:
@@ -43,118 +43,6 @@ class AuthService:
     def get_password_hash(self, password: str) -> str:
         """Hash a password"""
         return self.pwd_context.hash(password)
-    
-    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
-        """Create a JWT access token"""
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.now(timezone.utc) + expires_delta
-        else:
-            expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        
-        to_encode.update({"exp": expire, "type": "access"})
-        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        return encoded_jwt
-    
-    def create_refresh_token(self, db: Session, user_id: UUID, family_id: Optional[UUID] = None) -> str:
-        """Create a JWT refresh token with family tracking"""
-        # Generate unique JTI (JWT ID)
-        jti = str(uuid4())
-        
-        # Create family ID if not provided (new login)
-        if family_id is None:
-            family_id = uuid4()
-        
-        # Calculate expiry
-        expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-        
-        # Create JWT payload
-        to_encode = {
-            "sub": str(user_id),
-            "jti": jti,
-            "family_id": str(family_id),
-            "exp": expire,
-            "type": "refresh"
-        }
-        
-        # Create JWT token
-        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        
-        # Hash the token for secure storage
-        token_hash = hashlib.sha256(encoded_jwt.encode()).hexdigest()
-        
-        # Store refresh token in database
-        refresh_token_record = RefreshToken(
-            jti=jti,
-            family_id=family_id,
-            user_id=user_id,
-            token_hash=token_hash,
-            expires_at=expire,
-            is_active=True
-        )
-        
-        db.add(refresh_token_record)
-        db.commit()
-        
-        return encoded_jwt
-    
-    def verify_token(self, token: str, token_type: str = "access") -> Optional[dict]:
-        """Verify and decode a JWT token"""
-        try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            if payload.get("type") != token_type:
-                return None
-            return payload
-        except JWTError:
-            return None
-    
-    def verify_refresh_token(self, db: Session, token: str) -> Optional[dict]:
-        """Verify refresh token with reuse detection and family tracking"""
-        try:
-            # First verify the JWT structure and signature
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            if payload.get("type") != "refresh":
-                return None
-            
-            jti = payload.get("jti")
-            family_id = payload.get("family_id")
-            user_id = payload.get("sub")
-            
-            if not all([jti, family_id, user_id]):
-                return None
-            
-            # Check if token exists in database and is active (with row lock to prevent race conditions)
-            refresh_token_record = (
-                db.query(RefreshToken)
-                .with_for_update()
-                .filter(
-                    and_(
-                        RefreshToken.jti == jti,
-                        RefreshToken.is_active.is_(True),
-                        RefreshToken.expires_at > datetime.now(timezone.utc),
-                    )
-                )
-                .first()
-            )
-            
-            if not refresh_token_record:
-                return None
-            
-            # Ensure the presented token matches the stored record (prevents jti-only bypass)
-            import hashlib
-            presented_hash = hashlib.sha256(token.encode()).hexdigest()
-            if presented_hash != refresh_token_record.token_hash:
-                return None
-            
-            # For token rotation, we don't mark tokens as "used" since we create new ones
-            # Instead, we just verify the token exists and is active
-            # The old token will be replaced by a new one in the refresh endpoint
-            
-            return payload
-            
-        except (JWTError, ValueError, TypeError):
-            logger.exception("Refresh token verification failed")
-            return None
     
     def _revoke_token_family(self, db: Session, family_id: UUID):
         """Revoke all tokens in a family (security measure for reuse detection)"""

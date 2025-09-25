@@ -1,7 +1,7 @@
 """
 Configuration management for the Document Extraction Platform
 """
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings
 from typing import Set, Optional, Union
 import os
@@ -42,33 +42,8 @@ class Settings(BaseSettings):
         'text/plain'
     }
     
-    # Security (DEPRECATED - Now tenant-specific via tenant configurations)
-    # These are kept for backward compatibility during transition period
-    jwt_secret: str = Field(
-        default="dev-jwt-secret-change-in-production", 
-        env="JWT_SECRET",
-        description="DEPRECATED: Use tenant-specific JWT secrets via tenant configurations"
-    )
-    access_token_expire_minutes: int = Field(
-        default=30, 
-        env="ACCESS_TOKEN_EXPIRE_MINUTES",
-        description="DEPRECATED: Use tenant-specific token expiry via tenant configurations"
-    )
-    
-    # CORS Settings (DEPRECATED - Now tenant-specific via tenant configurations)
-    cors_origins: Union[list, str] = Field(
-        default=["http://localhost:3000", "http://frontend:3000"],
-        env="CORS_ORIGINS",
-        description="DEPRECATED: Use tenant-specific CORS origins via tenant configurations"
-    )
-    
-    @field_validator('cors_origins', mode='before')
-    @classmethod
-    def parse_cors_origins(cls, v):
-        """Parse comma-separated CORS origins string into list"""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(',') if origin.strip()]
-        return v
+    # Security and CORS settings are now tenant-specific via tenant configurations
+    # See TenantAuthService and TenantConfigService for tenant-specific JWT, CORS, and security settings
     
     # Redis and Celery Configuration
     redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
@@ -123,8 +98,6 @@ def is_production() -> bool:
 
 
 def get_cors_origins() -> list:
-    """Get CORS origins list"""
-    if settings.debug:
-        # Explicit origins for development - NO wildcard with credentials
-        return ["http://localhost:3000", "http://frontend:3000"]
-    return settings.cors_origins
+    """Get fallback CORS origins list for requests without tenant context"""
+    # This is used as a fallback by the CORS middleware when tenant-specific CORS is not available
+    return ["http://localhost:3000", "http://frontend:3000"]

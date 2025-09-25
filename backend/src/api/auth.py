@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 
 from ..models.database import get_db, User, Tenant, APIKey
-from ..services.auth_service import auth_service
+from ..services.tenant_auth_service import get_tenant_auth_service
 from ..schemas.auth import (
     UserCreate, UserResponse, UserLogin, TokenResponse, UserUpdate,
     TenantCreate, TenantResponse, TenantUpdate, TenantStatus,
@@ -27,13 +27,55 @@ security = HTTPBearer()
 # Dependency to get current user from JWT token
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ) -> User:
-    """Get current authenticated user from JWT token"""
+    """Get current authenticated user from JWT token using tenant-specific verification"""
     token = credentials.credentials
     
-    # Verify token
-    payload = auth_service.verify_token(token, "access")
+    # Get tenant-aware authentication service
+    tenant_auth_service = get_tenant_auth_service(db)
+    
+    # Extract tenant ID from token payload for verification
+    try:
+        # Decode token without verification to get tenant_id
+        from jose import jwt
+        unverified_payload = jwt.get_unverified_claims(token)
+        tenant_id = unverified_payload.get("tenant_id")
+        
+        if tenant_id:
+            # Verify token using tenant-specific configuration
+            payload = tenant_auth_service.verify_tenant_token(token, UUID(tenant_id), "access")
+        else:
+            # For system admin tokens without tenant_id, we need to handle differently
+            # Try to find the tenant from the user's context
+            try:
+                user_id = UUID(unverified_payload.get("sub"))
+                user = tenant_auth_service.get_user_by_id(db, user_id)
+                if user and user.tenant_id:
+                    # Use user's tenant for verification
+                    payload = tenant_auth_service.verify_tenant_token(token, user.tenant_id, "access")
+                else:
+                    # System admin without tenant - this should not happen in tenant-aware system
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid token - no tenant context",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token format",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,7 +93,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
     
-    user = auth_service.get_user_by_id(db, user_id)
+    user = tenant_auth_service.get_user_by_id(db, user_id)
     if not user or user.status != UserStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -68,7 +110,8 @@ async def get_current_tenant(
     db: Session = Depends(get_db)
 ) -> Tenant:
     """Get current user's tenant"""
-    tenant = auth_service.get_tenant_by_id(db, current_user.tenant_id)
+    tenant_auth_service = get_tenant_auth_service(db)
+    tenant = tenant_auth_service.get_tenant_by_id(db, current_user.tenant_id)
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -80,16 +123,18 @@ async def get_current_tenant(
 # Dependency to check permissions
 def require_permission(permission: str, allow_cross_tenant: bool = False):
     """Dependency factory to check user permissions with tenant scoping"""
-    def permission_checker(current_user: User = Depends(get_current_user)) -> User:
+    def permission_checker(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+        tenant_auth_service = get_tenant_auth_service(db)
+        
         # Check basic permission
-        if not auth_service.has_permission(current_user, permission):
+        if not tenant_auth_service.has_permission(current_user, permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied: {permission} required"
             )
         
         # For cross-tenant permissions, only system admins are allowed
-        if allow_cross_tenant and not auth_service.is_system_admin(current_user):
+        if allow_cross_tenant and not tenant_auth_service.is_system_admin(current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cross-tenant access requires system admin privileges"
@@ -102,16 +147,18 @@ def require_permission(permission: str, allow_cross_tenant: bool = False):
 # Enhanced dependency for tenant-scoped permissions
 def require_tenant_permission(permission: str, target_tenant_id: Optional[UUID] = None):
     """Dependency factory to check permissions with specific tenant scoping"""
-    def permission_checker(current_user: User = Depends(get_current_user)) -> User:
+    def permission_checker(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+        tenant_auth_service = get_tenant_auth_service(db)
+        
         # Check basic permission
-        if not auth_service.has_permission(current_user, permission):
+        if not tenant_auth_service.has_permission(current_user, permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied: {permission} required"
             )
         
         # Check tenant access
-        if target_tenant_id and not auth_service.can_access_tenant(current_user, target_tenant_id):
+        if target_tenant_id and not tenant_auth_service.can_access_tenant(current_user, target_tenant_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied: Cannot access tenant {target_tenant_id}"
@@ -132,8 +179,10 @@ async def register_user(
 ):
     """Register a new user"""
     try:
+        tenant_auth_service = get_tenant_auth_service(db)
+        
         # Create user
-        user = auth_service.create_user(
+        user = tenant_auth_service.create_user(
             db=db,
             email=user_data.email,
             password=user_data.password,
@@ -178,8 +227,11 @@ async def login_user(
 ):
     """Authenticate user and return access token with refresh token"""
     try:
+        # Get tenant-aware authentication service
+        tenant_auth_service = get_tenant_auth_service(db)
+        
         # Authenticate user
-        user = auth_service.authenticate_user(db, login_data.email, login_data.password)
+        user = tenant_auth_service.authenticate_user(db, login_data.email, login_data.password)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -187,13 +239,24 @@ async def login_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        # Create access token
-        access_token = auth_service.create_access_token(
-            data={"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None}
+        # Get tenant context from request
+        tenant_context = tenant_auth_service.get_tenant_context(request)
+        tenant_id = tenant_context.get('tenant_id') or user.tenant_id
+        environment = tenant_context.get('environment', 'development')
+        
+        # Create access token using tenant-specific configuration
+        access_token = tenant_auth_service.create_tenant_access_token(
+            data={"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None},
+            tenant_id=tenant_id,
+            environment=environment
         )
         
-        # Create refresh token and store in database
-        refresh_token = auth_service.create_refresh_token(db, user.id)
+        # Create refresh token using tenant-specific configuration
+        refresh_token = tenant_auth_service.create_tenant_refresh_token(
+            user_id=user.id,
+            tenant_id=tenant_id,
+            environment=environment
+        )
         
         # Derive cookie attributes (secure in HTTPS/prod, SameSite=None when secure)
         secure = request.url.scheme == "https"
@@ -245,6 +308,9 @@ async def refresh_token(
 ):
     """Refresh access token using httpOnly cookie with family tracking and reuse detection"""
     try:
+        # Get tenant-aware authentication service
+        tenant_auth_service = get_tenant_auth_service(db)
+        
         refresh_token = request.cookies.get("refresh_token")
         if not refresh_token:
             raise HTTPException(
@@ -253,7 +319,13 @@ async def refresh_token(
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        payload = auth_service.verify_refresh_token(db, refresh_token)
+        # Get tenant context from request
+        tenant_context = tenant_auth_service.get_tenant_context(request)
+        tenant_id = tenant_context.get('tenant_id')
+        environment = tenant_context.get('environment', 'development')
+        
+        # Verify refresh token using tenant-specific configuration
+        payload = tenant_auth_service.verify_tenant_token(refresh_token, tenant_id, "refresh")
         if not payload:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
@@ -273,7 +345,7 @@ async def refresh_token(
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        user = auth_service.get_user_by_id(db, user_id)
+        user = tenant_auth_service.get_user_by_id(db, user_id)
         if not user or user.status != UserStatus.ACTIVE:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
@@ -289,10 +361,20 @@ async def refresh_token(
             db.query(RefreshToken).filter(RefreshToken.jti == jti).update({"is_active": False})
             db.commit()
         
-        access_token = auth_service.create_access_token(
-            {"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None}
+        # Create access token using tenant-specific configuration
+        access_token = tenant_auth_service.create_tenant_access_token(
+            data={"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None},
+            tenant_id=tenant_id,
+            environment=environment
         )
-        new_refresh_token = auth_service.create_refresh_token(db=db, user_id=user_id, family_id=family_uuid)
+        
+        # Create new refresh token using tenant-specific configuration
+        new_refresh_token = tenant_auth_service.create_tenant_refresh_token(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            environment=environment,
+            family_id=family_uuid
+        )
         
         # Derive cookie attributes (secure in HTTPS/prod, SameSite=None when secure)
         secure = request.url.scheme == "https"
@@ -345,8 +427,10 @@ async def logout_user(
 ):
     """Logout user and revoke all refresh tokens"""
     try:
+        tenant_auth_service = get_tenant_auth_service(db)
+        
         # Revoke all refresh tokens for the user
-        auth_service.revoke_user_tokens(db, current_user.id)
+        tenant_auth_service.revoke_user_tokens(db, current_user.id)
         
         # Clear refresh token cookie
         response.delete_cookie("refresh_token", path="/api/auth/refresh")
@@ -382,10 +466,12 @@ async def get_current_user_info(
 
 @router.get("/permissions", response_model=PermissionResponse)
 async def get_user_permissions(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get current user permissions"""
-    permissions = auth_service.get_user_permissions(current_user)
+    tenant_auth_service = get_tenant_auth_service(db)
+    permissions = tenant_auth_service.get_user_permissions(current_user)
     return PermissionResponse(
         permissions=permissions,
         role=current_user.role,
@@ -419,7 +505,7 @@ async def get_user_tenants(
     db: Session = Depends(get_db)
 ):
     """Get all tenants accessible to the current user"""
-    tenants = auth_service.get_user_tenants(db, current_user.id)
+    tenants = tenant_auth_service.get_user_tenants(db, current_user.id)
     return [
         TenantResponse(
             id=tenant.id,
@@ -441,7 +527,7 @@ async def switch_tenant(
     db: Session = Depends(get_db)
 ):
     """Switch user's current tenant"""
-    success = auth_service.switch_tenant(db, current_user.id, switch_data.tenant_id)
+    success = tenant_auth_service.switch_tenant(db, current_user.id, switch_data.tenant_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -463,7 +549,7 @@ async def create_api_key(
 ):
     """Create a new API key for the current user"""
     try:
-        api_key = auth_service.create_api_key(
+        api_key = tenant_auth_service.create_api_key(
             db=db,
             user_id=current_user.id,
             name=api_key_data.name,
@@ -629,7 +715,7 @@ async def create_tenant(
 ):
     """Create a new tenant (admin only)"""
     try:
-        tenant = auth_service.create_tenant(db, tenant_data)
+        tenant = tenant_auth_service.create_tenant(db, tenant_data)
         
         return TenantResponse(
             id=tenant.id,
@@ -679,13 +765,13 @@ async def get_tenant(
 ):
     """Get tenant by ID (admin only)"""
     # Check if user can access this tenant
-    if not auth_service.can_access_tenant(current_user, tenant_id):
+    if not tenant_auth_service.can_access_tenant(current_user, tenant_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Permission denied: Cannot access this tenant"
         )
     
-    tenant = auth_service.get_tenant_by_id(db, tenant_id)
+    tenant = tenant_auth_service.get_tenant_by_id(db, tenant_id)
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -712,13 +798,13 @@ async def update_tenant(
 ):
     """Update a tenant (admin only)"""
     # Check if user can access this tenant
-    if not auth_service.can_access_tenant(current_user, tenant_id):
+    if not tenant_auth_service.can_access_tenant(current_user, tenant_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Permission denied: Cannot access this tenant"
         )
     
-    tenant = auth_service.get_tenant_by_id(db, tenant_id)
+    tenant = tenant_auth_service.get_tenant_by_id(db, tenant_id)
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -757,13 +843,13 @@ async def delete_tenant(
 ):
     """Delete a tenant (admin only)"""
     # Check if user can access this tenant
-    if not auth_service.can_access_tenant(current_user, tenant_id):
+    if not tenant_auth_service.can_access_tenant(current_user, tenant_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Permission denied: Cannot access this tenant"
         )
     
-    tenant = auth_service.get_tenant_by_id(db, tenant_id)
+    tenant = tenant_auth_service.get_tenant_by_id(db, tenant_id)
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

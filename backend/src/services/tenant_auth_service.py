@@ -841,6 +841,49 @@ class TenantAuthService(AuthService):
             raise ValueError("Tenant ID is required for this operation")
         
         return context
+    
+    # Override base AuthService methods to use tenant-specific configurations
+    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
+        """Override base method to use tenant-specific configuration"""
+        # This method should not be used directly - use create_tenant_access_token instead
+        # But we provide a fallback that tries to extract tenant info from data
+        tenant_id = data.get("tenant_id")
+        if tenant_id:
+            return self.create_tenant_access_token(data, UUID(tenant_id))
+        else:
+            # Fallback to legacy method with warning
+            logger.warning("Using legacy create_access_token - consider using create_tenant_access_token")
+            return super().create_access_token(data, expires_delta)
+    
+    def create_refresh_token(self, db: Session, user_id: UUID, family_id: Optional[UUID] = None) -> str:
+        """Override base method to use tenant-specific configuration"""
+        # Get user to find their tenant
+        user = self.get_user_by_id(db, user_id)
+        if user and user.tenant_id:
+            return self.create_tenant_refresh_token(user_id, user.tenant_id, family_id=family_id)
+        else:
+            # Fallback to legacy method with warning
+            logger.warning("Using legacy create_refresh_token - consider using create_tenant_refresh_token")
+            return super().create_refresh_token(db, user_id, family_id)
+    
+    def verify_token(self, token: str, token_type: str = "access") -> Optional[dict]:
+        """Override base method to use tenant-specific verification"""
+        # This method should not be used directly - use verify_tenant_token instead
+        # But we provide a fallback that tries to extract tenant info from token
+        try:
+            # Decode token without verification to get tenant_id
+            unverified_payload = jwt.get_unverified_claims(token)
+            tenant_id = unverified_payload.get("tenant_id")
+            
+            if tenant_id:
+                return self.verify_tenant_token(token, UUID(tenant_id), token_type)
+            else:
+                # Fallback to legacy method with warning
+                logger.warning("Using legacy verify_token - consider using verify_tenant_token")
+                return super().verify_token(token, token_type)
+        except Exception:
+            # Fallback to legacy method
+            return super().verify_token(token, token_type)
 
 
 # Global instance for dependency injection

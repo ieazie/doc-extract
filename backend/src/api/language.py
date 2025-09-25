@@ -17,7 +17,8 @@ from ..services.language_service import (
     LanguageDetectionResult,
     SupportedLanguage
 )
-from ..services.auth_service import get_current_user, auth_service
+from ..api.auth import get_current_user
+from ..services.tenant_auth_service import get_tenant_auth_service
 from ..models.database import User
 
 logger = logging.getLogger(__name__)
