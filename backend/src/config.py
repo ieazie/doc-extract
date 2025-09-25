@@ -1,9 +1,9 @@
 """
 Configuration management for the Document Extraction Platform
 """
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
-from typing import Set, Optional
+from typing import Set, Optional, Union
 import os
 
 
@@ -44,11 +44,6 @@ class Settings(BaseSettings):
     
     # Security (DEPRECATED - Now tenant-specific via tenant configurations)
     # These are kept for backward compatibility during transition period
-    secret_key: str = Field(
-        default="dev-secret-key-change-in-production", 
-        env="SECRET_KEY",
-        description="DEPRECATED: Use tenant-specific JWT secrets via tenant configurations"
-    )
     jwt_secret: str = Field(
         default="dev-jwt-secret-change-in-production", 
         env="JWT_SECRET",
@@ -59,17 +54,21 @@ class Settings(BaseSettings):
         env="ACCESS_TOKEN_EXPIRE_MINUTES",
         description="DEPRECATED: Use tenant-specific token expiry via tenant configurations"
     )
-    tenant_secret_encryption_key: str = Field(
-        default="dev-tenant-secret-encryption-key-change-in-production", 
-        env="TENANT_SECRET_ENCRYPTION_KEY",
-        description="DEPRECATED: Use tenant-specific encryption keys via tenant configurations"
-    )
     
     # CORS Settings (DEPRECATED - Now tenant-specific via tenant configurations)
-    cors_origins: list = Field(
+    cors_origins: Union[list, str] = Field(
         default=["http://localhost:3000", "http://frontend:3000"],
+        env="CORS_ORIGINS",
         description="DEPRECATED: Use tenant-specific CORS origins via tenant configurations"
     )
+    
+    @field_validator('cors_origins', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Parse comma-separated CORS origins string into list"""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(',') if origin.strip()]
+        return v
     
     # Redis and Celery Configuration
     redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")

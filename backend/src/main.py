@@ -57,19 +57,19 @@ async def check_ollama_model():
     import httpx
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{settings.ollama_url}/api/tags")
+            response = await client.get(f"{settings.ollama_endpoint_url}/api/tags")
             if response.status_code == 200:
                 models = response.json().get("models", [])
                 model_names = [model["name"] for model in models]
                 
-                if settings.ollama_model in model_names:
-                    logger.info(f"Ollama model {settings.ollama_model} is available")
+                if settings.default_ollama_model in model_names:
+                    logger.info(f"Ollama model {settings.default_ollama_model} is available")
                 else:
-                    logger.warning(f"Ollama model {settings.ollama_model} not found. Available models: {model_names}")
-                    logger.info(f"Attempting to pull {settings.ollama_model}...")
+                    logger.warning(f"Ollama model {settings.default_ollama_model} not found. Available models: {model_names}")
+                    logger.info(f"Attempting to pull {settings.default_ollama_model}...")
                     
                     # Try to pull the model (non-blocking)
-                    logger.info(f"Model {settings.ollama_model} will be downloaded in background")
+                    logger.info(f"Model {settings.default_ollama_model} will be downloaded in background")
                     # Note: Model download happens in background via ollama-init service
             else:
                 logger.error(f"Failed to connect to Ollama: {response.status_code}")
@@ -133,7 +133,7 @@ async def get_app_info():
         "debug": settings.debug,
         "allowed_file_types": list(settings.allowed_file_types),
         "max_file_size": settings.max_file_size,
-        "ollama_model": settings.ollama_model
+        "ollama_model": settings.default_ollama_model
     }
 
 

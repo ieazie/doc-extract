@@ -108,6 +108,7 @@ export class ServiceFactory {
   clear(): void {
     this.services = {};
     this.initialized = false;
+    this.currentTenantId = null;
   }
 
   /**

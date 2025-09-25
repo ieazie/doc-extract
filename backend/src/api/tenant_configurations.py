@@ -728,7 +728,21 @@ async def get_tenant_infrastructure_config_by_slug(
         # Get LLM config
         try:
             llm_config = infrastructure_service.get_llm_config(tenant.id, environment)
-            configs["llm"] = llm_config
+            if isinstance(llm_config, TenantLLMConfigs):
+                configs["llm"] = SecureTenantLLMConfigs(
+                    field_extraction=SecureLLMConfig(
+                        **llm_config.field_extraction.model_dump(exclude={"api_key"})
+                    ) if llm_config.field_extraction else None,
+                    document_extraction=SecureLLMConfig(
+                        **llm_config.document_extraction.model_dump(exclude={"api_key"})
+                    ) if llm_config.document_extraction else None,
+                )
+            elif llm_config:
+                configs["llm"] = SecureLLMConfig(
+                    **llm_config.model_dump(exclude={"api_key"})
+                )
+            else:
+                configs["llm"] = None
         except Exception as e:
             configs["llm"] = {"error": f"LLM config not available: {str(e)}"}
         

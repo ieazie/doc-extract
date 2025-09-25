@@ -89,8 +89,15 @@ export abstract class BaseApiClient {
       const response: AxiosResponse<T> = await this.client.request(config);
       return response.data;
     } catch (error) {
-      // Process error through handleError for consistent error objects
-      throw this.handleError(error);
+      // Avoid double-processing handled Axios errors
+      // The response interceptor already calls handleError and rejects with the transformed error
+      if (error && (error as any)._baseHandled) {
+        throw error;
+      }
+      
+      const handled = this.handleError(error);
+      (handled as any)._baseHandled = true;
+      throw handled;
     }
   }
 
@@ -102,6 +109,7 @@ export abstract class BaseApiClient {
     if (error.request && !error.response) {
       const networkError = new Error('Network error - please check your connection');
       (networkError as any).name = 'NetworkError';
+      (networkError as any)._baseHandled = true;
       return networkError;
     }
 
@@ -132,11 +140,14 @@ export abstract class BaseApiClient {
           (apiError as any).name = 'ApiError';
       }
       
+      (apiError as any)._baseHandled = true;
       return apiError;
     }
 
     // Other error
-    return new Error(error.message || 'An unexpected error occurred');
+    const unexpectedError = new Error(error.message || 'An unexpected error occurred');
+    (unexpectedError as any)._baseHandled = true;
+    return unexpectedError;
   }
 
   private generateRequestId(): string {

@@ -186,6 +186,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               clearAuthData();
             }
           }
+        } else {
+          // No stored user – still attempt silent refresh (cookie-based)
+          const authService = serviceFactory.get<AuthService>('auth');
+          const refreshResult = await authService.silentRefreshToken();
+          if (refreshResult) {
+            setUser(refreshResult.user || null);
+            setTenant(null);
+            setAccessToken(refreshResult.access_token);
+            setStoredAccessToken(refreshResult.access_token);
+            serviceFactory.setAuthToken(refreshResult.access_token);
+            if (refreshResult.user?.tenant_id) {
+              serviceFactory.setTenantId(refreshResult.user.tenant_id);
+              localStorage.setItem('auth_user', JSON.stringify(refreshResult.user));
+            }
+          } else {
+            clearAuthData();
+          }
         }
       } catch (error) {
         console.error('Error initializing auth:', error);

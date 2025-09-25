@@ -34,9 +34,6 @@ services:
       - DEBUG=true
       - MAX_FILE_SIZE=52428800  # 50MB
       
-      # Security (DEPRECATED - Now tenant-specific via tenant configurations)
-      # These are kept for backward compatibility during transition period
-      - TENANT_SECRET_ENCRYPTION_KEY=dev-tenant-secret-encryption-key-change-in-production
       
       # External Service Endpoints (tenant-agnostic)
       - MINIO_ENDPOINT_URL=http://minio:9000
@@ -86,9 +83,6 @@ services:
       - DEBUG=true
       - MAX_FILE_SIZE=52428800  # 50MB
       
-      # Security (DEPRECATED - Now tenant-specific via tenant configurations)
-      # These are kept for backward compatibility during transition period
-      - TENANT_SECRET_ENCRYPTION_KEY=dev-tenant-secret-encryption-key-change-in-production
       
       # External Service Endpoints (tenant-agnostic)
       - MINIO_ENDPOINT_URL=http://minio:9000
@@ -125,9 +119,6 @@ services:
       - DEBUG=true
       - MAX_FILE_SIZE=52428800  # 50MB
       
-      # Security (DEPRECATED - Now tenant-specific via tenant configurations)
-      # These are kept for backward compatibility during transition period
-      - TENANT_SECRET_ENCRYPTION_KEY=dev-tenant-secret-encryption-key-change-in-production
       
       # External Service Endpoints (tenant-agnostic)
       - MINIO_ENDPOINT_URL=http://minio:9000

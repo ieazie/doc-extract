@@ -195,16 +195,18 @@ async def login_user(
         # Create refresh token and store in database
         refresh_token = auth_service.create_refresh_token(db, user.id)
         
-        # Set refresh token as httpOnly cookie
+        # Derive cookie attributes (secure in HTTPS/prod, SameSite=None when secure)
+        secure = request.url.scheme == "https"
+        samesite = "none" if secure else "lax"
         response.set_cookie(
             key="refresh_token",
             value=refresh_token,
             max_age=7 * 24 * 60 * 60,  # 7 days
             httponly=True,
-            secure=False,  # Allow HTTP in development
-            samesite="lax",  # Allow cross-site requests in development
+            secure=secure,
+            samesite=samesite,  # None requires secure
             path="/api/auth/refresh",
-            domain=None  # Allow cookies across localhost subdomains
+            domain=None
         )
         
         return TokenResponse(
@@ -292,15 +294,18 @@ async def refresh_token(
         )
         new_refresh_token = auth_service.create_refresh_token(db=db, user_id=user_id, family_id=family_uuid)
         
+        # Derive cookie attributes (secure in HTTPS/prod, SameSite=None when secure)
+        secure = request.url.scheme == "https"
+        samesite = "none" if secure else "lax"
         response.set_cookie(
             key="refresh_token", 
             value=new_refresh_token, 
             max_age=7 * 24 * 60 * 60, 
             httponly=True, 
-            secure=False,  # Allow HTTP in development
-            samesite="lax",  # Allow cross-site requests in development
+            secure=secure,
+            samesite=samesite,  # None requires secure
             path="/api/auth/refresh",
-            domain=None  # Allow cookies across localhost subdomains
+            domain=None
         )
         
         return TokenResponse(

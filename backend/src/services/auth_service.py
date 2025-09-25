@@ -140,6 +140,12 @@ class AuthService:
             if not refresh_token_record:
                 return None
             
+            # Ensure the presented token matches the stored record (prevents jti-only bypass)
+            import hashlib
+            presented_hash = hashlib.sha256(token.encode()).hexdigest()
+            if presented_hash != refresh_token_record.token_hash:
+                return None
+            
             # For token rotation, we don't mark tokens as "used" since we create new ones
             # Instead, we just verify the token exists and is active
             # The old token will be replaced by a new one in the refresh endpoint
@@ -351,7 +357,8 @@ class AuthService:
             ]
         }
         
-        return permissions.get(user.role, [])
+        role_key = user.role if isinstance(user.role, UserRole) else UserRole(user.role)
+        return permissions.get(role_key, [])
     
     def has_permission(self, user: User, permission: str) -> bool:
         """Check if user has a specific permission"""
@@ -481,15 +488,18 @@ class AuthService:
     
     def is_system_admin(self, user: User) -> bool:
         """Check if user is a system admin"""
-        return user.role == UserRole.SYSTEM_ADMIN.value
+        role = user.role if isinstance(user.role, UserRole) else UserRole(user.role)
+        return role == UserRole.SYSTEM_ADMIN
     
     def is_tenant_admin(self, user: User) -> bool:
         """Check if user is a tenant admin"""
-        return user.role == UserRole.TENANT_ADMIN.value
+        role = user.role if isinstance(user.role, UserRole) else UserRole(user.role)
+        return role == UserRole.TENANT_ADMIN
     
     def is_admin(self, user: User) -> bool:
         """Check if user has admin privileges (system or tenant)"""
-        return user.role in [UserRole.SYSTEM_ADMIN.value, UserRole.TENANT_ADMIN.value]
+        role = user.role if isinstance(user.role, UserRole) else UserRole(user.role)
+        return role in (UserRole.SYSTEM_ADMIN, UserRole.TENANT_ADMIN)
     
     def can_access_tenant(self, user: User, target_tenant_id: UUID) -> bool:
         """Check if user can access a specific tenant"""
@@ -521,7 +531,10 @@ class AuthService:
                 return False
         
         # Update role
-        user.role = new_role
+        try:
+            user.role = UserRole(new_role) if isinstance(new_role, str) else new_role
+        except ValueError:
+            return False
         db.commit()
         return True
     
@@ -566,7 +579,15 @@ async def get_current_user(
         )
     
     # Get user
-    user_id = UUID(payload.get("sub"))
+    sub = payload.get("sub")
+    try:
+        user_id = UUID(sub)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     user = auth_service.get_user_by_id(db, user_id)
     if not user or user.status != UserStatus.ACTIVE:
         raise HTTPException(
@@ -593,7 +614,8 @@ def require_permission(permission: str):
 def require_role(required_role: UserRole):
     """Create a dependency that requires a specific role"""
     async def role_dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != required_role:
+        role = current_user.role if isinstance(current_user.role, UserRole) else UserRole(current_user.role)
+        if role != required_role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role required: {required_role.value}"
@@ -603,8 +625,17 @@ def require_role(required_role: UserRole):
     return role_dependency
 
 def require_admin():
-    """Create a dependency that requires admin role"""
-    return require_role(UserRole.ADMIN)
+    """Create a dependency that requires admin role (system or tenant)"""
+    async def admin_dependency(current_user: User = Depends(get_current_user)) -> User:
+        role = current_user.role if isinstance(current_user.role, UserRole) else UserRole(current_user.role)
+        if role not in (UserRole.SYSTEM_ADMIN, UserRole.TENANT_ADMIN):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Role required: admin (system or tenant)"
+            )
+        return current_user
+    
+    return admin_dependency
 
 def require_tenant_admin():
     """Create a dependency that requires tenant admin role"""

@@ -426,7 +426,7 @@ const TenantConfigPage: React.FC = () => {
       setFieldExtractionMessage({ type: 'success', text: 'Field Extraction configuration saved successfully' });
       
       // Check health after saving if we have API key or using Ollama
-      if (tenantConfig.field_extraction.api_key || tenantConfig.field_extraction.provider === 'ollama') {
+      if (tenantConfig.field_extraction.has_api_key || tenantConfig.field_extraction.provider === 'ollama') {
         try {
           const health = await serviceFactory.get<HealthService>('health').checkLLMHealth({ config_type: 'field_extraction' });
           setFieldLlmHealth(health.healthy ? 'healthy' : 'unhealthy');
@@ -463,7 +463,7 @@ const TenantConfigPage: React.FC = () => {
       setDocumentExtractionMessage({ type: 'success', text: 'Document Extraction configuration saved successfully' });
       
       // Check health after saving if we have API key or using Ollama
-      if (tenantConfig.document_extraction.api_key || tenantConfig.document_extraction.provider === 'ollama') {
+      if (tenantConfig.document_extraction.has_api_key || tenantConfig.document_extraction.provider === 'ollama') {
         try {
           const health = await serviceFactory.get<HealthService>('health').checkLLMHealth({ config_type: 'document_extraction' });
           setDocumentLlmHealth(health.healthy ? 'healthy' : 'unhealthy');
