@@ -236,6 +236,59 @@ class SecureTenantLLMConfigs(BaseModel):
     document_extraction: Optional[SecureLLMConfig] = None
 
 
+# Secure schemas (no sensitive data exposed)
+class SecureAuthenticationConfig(BaseModel):
+    """Secure version of AuthenticationConfig (no JWT secret)"""
+    access_token_expire_minutes: int
+    refresh_token_expire_days: int
+    refresh_cookie_httponly: bool
+    refresh_cookie_secure: bool
+    refresh_cookie_samesite: str
+    refresh_cookie_path: str
+    refresh_cookie_domain: Optional[str]
+    max_login_attempts: int
+    lockout_duration_minutes: int
+    password_min_length: int
+    require_2fa: bool
+    session_timeout_minutes: int
+    concurrent_sessions_limit: int
+    has_jwt_secret: bool = Field(default=False, description="Whether a JWT secret is configured (without exposing the key)")
+    # jwt_secret_key is intentionally omitted for security
+
+class SecureSecurityConfig(BaseModel):
+    """Secure version of SecurityConfig (no encryption keys)"""
+    csrf_protection_enabled: bool
+    csrf_token_header: str
+    rate_limiting_enabled: bool
+    rate_limit_requests_per_minute: int
+    rate_limit_burst_size: int
+    # encryption_key is intentionally omitted for security
+    security_headers_enabled: bool
+    content_security_policy: Optional[str]
+    strict_transport_security: bool
+    x_frame_options: str
+    x_content_type_options: bool
+    referrer_policy: str
+    compromise_detection_enabled: bool
+    compromise_detection_threshold: int
+    rapid_token_threshold: int
+    auto_revoke_on_compromise: bool
+
+class SecureLLMConfig(BaseModel):
+    """Secure version of LLMConfig (no API keys)"""
+    provider: str
+    model_name: str
+    base_url: Optional[str]
+    max_tokens: Optional[int]
+    temperature: Optional[float]
+    ollama_config: Optional[OllamaConfig]
+    # api_key is intentionally omitted for security
+
+class SecureTenantLLMConfigs(BaseModel):
+    """Secure version of TenantLLMConfigs (no API keys)"""
+    field_extraction: Optional[SecureLLMConfig]
+    document_extraction: Optional[SecureLLMConfig]
+
 class TenantConfigSummary(BaseModel):
     """Summary of tenant configuration (secure version - no secrets exposed)"""
     tenant_id: UUID
@@ -245,5 +298,16 @@ class TenantConfigSummary(BaseModel):
     auth_config: Optional[SecureAuthenticationConfig] = None
     cors_config: Optional[CORSConfig] = None  # CORS config is safe to expose
     security_config: Optional[SecureSecurityConfig] = None
+
+class SecureTenantConfigurationResponse(BaseModel):
+    """Secure response for individual tenant configuration (no sensitive data)"""
+    id: UUID
+    tenant_id: UUID
+    config_type: str
+    config_data: Union[SecureAuthenticationConfig, SecureSecurityConfig, SecureLLMConfig, SecureTenantLLMConfigs, RateLimitsConfig, CORSConfig]
+    environment: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
 
 

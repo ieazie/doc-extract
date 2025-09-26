@@ -91,11 +91,17 @@ export class TenantService extends BaseApiClient {
   // New Configuration Types (Auth, CORS, Security)
   async getAuthenticationConfig(environment?: string): Promise<AuthenticationConfig | null> {
     try {
-      const response = await this.get<{ config_data: AuthenticationConfig }>(
-        '/api/tenant/configurations/auth',
-        { environment }
+      if (environment) {
+        const response = await this.get<TenantConfigurationRead>(
+          `/api/tenant/configurations/auth/${environment}`
+        );
+        return (response?.config_data as unknown as AuthenticationConfig) ?? null;
+      }
+
+      const response = await this.get<TenantConfigurationRead>(
+        '/api/tenant/configurations/auth'
       );
-      return response?.config_data || null;
+      return (response?.config_data as unknown as AuthenticationConfig) ?? null;
     } catch (error) {
       console.warn('No authentication config found:', error);
       return null;
@@ -106,6 +112,13 @@ export class TenantService extends BaseApiClient {
     config: AuthenticationConfig,
     environment?: string
   ): Promise<TenantConfigurationWrite> {
+    if (environment) {
+      return this.put<TenantConfigurationWrite>(
+        `/api/tenant/configurations/auth/${environment}`,
+        config
+      );
+    }
+
     return this.createTenantConfiguration({
       tenant_id: '', // Will be set by backend from JWT
       config_type: 'auth',
@@ -115,11 +128,17 @@ export class TenantService extends BaseApiClient {
 
   async getCORSConfig(environment?: string): Promise<CORSConfig | null> {
     try {
-      const response = await this.get<{ config_data: CORSConfig }>(
-        '/api/tenant/configurations/cors',
-        { environment }
+      if (environment) {
+        const response = await this.get<TenantConfigurationRead>(
+          `/api/tenant/configurations/cors/${environment}`
+        );
+        return (response?.config_data as unknown as CORSConfig) ?? null;
+      }
+
+      const response = await this.get<TenantConfigurationRead>(
+        '/api/tenant/configurations/cors'
       );
-      return response?.config_data || null;
+      return (response?.config_data as unknown as CORSConfig) ?? null;
     } catch (error) {
       console.warn('No CORS config found:', error);
       return null;
@@ -130,6 +149,13 @@ export class TenantService extends BaseApiClient {
     config: CORSConfig,
     environment?: string
   ): Promise<TenantConfigurationWrite> {
+    if (environment) {
+      return this.put<TenantConfigurationWrite>(
+        `/api/tenant/configurations/cors/${environment}`,
+        config
+      );
+    }
+
     return this.createTenantConfiguration({
       tenant_id: '', // Will be set by backend from JWT
       config_type: 'cors',
@@ -139,11 +165,17 @@ export class TenantService extends BaseApiClient {
 
   async getSecurityConfig(environment?: string): Promise<SecurityConfig | null> {
     try {
-      const response = await this.get<{ config_data: SecurityConfig }>(
-        '/api/tenant/configurations/security',
-        { environment }
+      if (environment) {
+        const response = await this.get<TenantConfigurationRead>(
+          `/api/tenant/configurations/security/${environment}`
+        );
+        return (response?.config_data as unknown as SecurityConfig) ?? null;
+      }
+
+      const response = await this.get<TenantConfigurationRead>(
+        '/api/tenant/configurations/security'
       );
-      return response?.config_data || null;
+      return (response?.config_data as unknown as SecurityConfig) ?? null;
     } catch (error) {
       console.warn('No security config found:', error);
       return null;
@@ -154,6 +186,13 @@ export class TenantService extends BaseApiClient {
     config: SecurityConfig,
     environment?: string
   ): Promise<TenantConfigurationWrite> {
+    if (environment) {
+      return this.put<TenantConfigurationWrite>(
+        `/api/tenant/configurations/security/${environment}`,
+        config
+      );
+    }
+
     return this.createTenantConfiguration({
       tenant_id: '', // Will be set by backend from JWT
       config_type: 'security',

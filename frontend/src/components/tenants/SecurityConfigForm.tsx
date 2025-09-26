@@ -156,8 +156,28 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
   };
 
   const generateEncryptionKey = () => {
-    const newKey = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
-    handleFieldChange('encryption_key', newKey);
+    try {
+      // Check if Web Crypto API is available
+      const crypto = window.crypto || globalThis.crypto;
+      if (!crypto || !crypto.getRandomValues) {
+        throw new Error('Web Crypto API not available');
+      }
+
+      // Generate 32 bytes (256 bits) of cryptographically secure random data
+      const bytes = new Uint8Array(32);
+      crypto.getRandomValues(bytes);
+      
+      // Convert to hex string
+      const newKey = Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      
+      handleFieldChange('encryption_key', newKey);
+    } catch (error) {
+      console.error('Failed to generate secure encryption key:', error);
+      setError('Failed to generate secure encryption key. Please try again.');
+      setTimeout(() => setError(null), 5000);
+    }
   };
 
   if (loading) {

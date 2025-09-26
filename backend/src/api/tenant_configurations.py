@@ -63,7 +63,7 @@ async def get_tenant_configuration(
     current_user: User = Depends(require_permission("tenant_config:read")),
     db: Session = Depends(get_db)
 ):
-    """Get specific tenant configuration"""
+    """Get specific tenant configuration (secure - no sensitive data)"""
     if config_type not in ["llm", "rate_limits", "auth", "cors", "security"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -79,7 +79,58 @@ async def get_tenant_configuration(
             detail=f"Configuration of type '{config_type}' not found"
         )
     
-    return config
+    # Convert to secure version (exclude sensitive data like JWT secrets, API keys, encryption keys)
+    secure_config = config_service._convert_config_to_secure(config, config_type)
+    return secure_config
+
+
+@router.get("/configurations/{config_type}/secret")
+async def get_tenant_config_secret(
+    config_type: str,
+    current_user: User = Depends(require_permission("tenant_config:read")),
+    db: Session = Depends(get_db)
+):
+    """Get sensitive configuration data (JWT secret, encryption keys, API keys) for display purposes"""
+    if config_type not in ["auth", "security", "llm"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid config type for secret access. Must be 'auth', 'security', or 'llm'"
+        )
+    
+    config_service = TenantConfigService(db)
+    config = config_service.get_config(current_user.tenant_id, config_type)
+    
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Configuration of type '{config_type}' not found"
+        )
+    
+    # Return only the sensitive fields for display
+    config_data = config.config_data
+    
+    if config_type == "auth":
+        return {
+            "jwt_secret_key": config_data.get("jwt_secret_key", "")
+        }
+    elif config_type == "security":
+        return {
+            "encryption_key": config_data.get("encryption_key", "")
+        }
+    elif config_type == "llm":
+        # Return API keys for both field and document extraction
+        result = {}
+        if "field_extraction" in config_data:
+            result["field_extraction"] = {
+                "api_key": config_data["field_extraction"].get("api_key", "")
+            }
+        if "document_extraction" in config_data:
+            result["document_extraction"] = {
+                "api_key": config_data["document_extraction"].get("api_key", "")
+            }
+        return result
+    
+    return {}
 
 
 @router.post("/configurations", response_model=TenantConfigurationResponse)
@@ -489,7 +540,7 @@ async def get_tenant_config_by_environment(
     current_user: User = Depends(require_permission("tenant_config:read")),
     db: Session = Depends(get_db)
 ):
-    """Get tenant configuration for specific environment"""
+    """Get tenant configuration for specific environment (secure - no sensitive data)"""
     config_service = TenantConfigService(db)
     config = config_service.get_config(current_user.tenant_id, config_type, environment)
     
@@ -499,7 +550,11 @@ async def get_tenant_config_by_environment(
             detail=f"No {config_type} configuration found for {environment} environment"
         )
     
-    return config
+    # Convert to secure version (exclude sensitive data like JWT secrets, API keys, encryption keys)
+    secure_config = config_service._convert_config_to_secure(config, config_type)
+    if secure_config and 'environment' not in secure_config:
+        secure_config['environment'] = environment
+    return secure_config
 
 
 @router.put("/configurations/{config_type}/{environment}")

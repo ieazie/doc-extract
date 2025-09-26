@@ -18,7 +18,7 @@ from ..services.language_service import (
     SupportedLanguage
 )
 from ..api.auth import get_current_user
-from ..services.tenant_auth_service import get_tenant_auth_service
+from ..schemas.auth import UserRole
 from ..models.database import User
 
 logger = logging.getLogger(__name__)
@@ -37,9 +37,17 @@ class ValidateRequest(BaseModel):
     language: str
 
 
-def _ensure_tenant_access(current_user: User, tenant_id: UUID) -> None:
+def _ensure_tenant_access(current_user: User, tenant_id: UUID, db: Session) -> None:
     """Ensure user has access to the specified tenant"""
-    if not auth_service.can_access_tenant(current_user, tenant_id):
+    # Normalize role to enum for consistent comparison
+    role = current_user.role if isinstance(current_user.role, UserRole) else UserRole(current_user.role)
+    
+    # System admins can access any tenant
+    if role == UserRole.SYSTEM_ADMIN:
+        return
+    
+    # Other users can only access their own tenant
+    if current_user.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: access to tenant denied"
@@ -68,16 +76,22 @@ async def get_tenant_language_config(
     """Get tenant's language configuration"""
     try:
         # Enforce tenant access
-        _ensure_tenant_access(current_user, tenant_id)
+        _ensure_tenant_access(current_user, tenant_id, db)
         
         language_service = LanguageService(db)
         config = language_service.get_tenant_language_config(str(tenant_id))
         
         if not config:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Language configuration not found for tenant"
+            # Create default language configuration if none exists
+            logger.info(f"Creating default language configuration for tenant {tenant_id}")
+            from ..services.language_service import TenantLanguageConfigUpdate
+            default_config = TenantLanguageConfigUpdate(
+                supported_languages=['en'],
+                default_language='en',
+                auto_detect_language=True,
+                require_language_match=False
             )
+            config = language_service.update_tenant_language_config(str(tenant_id), default_config)
         
         return config
         
@@ -101,7 +115,7 @@ async def update_tenant_language_config(
     """Update tenant's language configuration"""
     try:
         # Enforce tenant access
-        _ensure_tenant_access(current_user, tenant_id)
+        _ensure_tenant_access(current_user, tenant_id, db)
         
         language_service = LanguageService(db)
         config = language_service.update_tenant_language_config(str(tenant_id), config_update)
@@ -160,7 +174,7 @@ async def get_tenant_supported_languages(
     """Get list of supported languages for a specific tenant"""
     try:
         # Enforce tenant access
-        _ensure_tenant_access(current_user, tenant_id)
+        _ensure_tenant_access(current_user, tenant_id, db)
         
         language_service = LanguageService(db)
         supported_languages = language_service.get_supported_languages(str(tenant_id))
@@ -184,7 +198,7 @@ async def get_tenant_default_language(
     """Get tenant's default language"""
     try:
         # Enforce tenant access
-        _ensure_tenant_access(current_user, tenant_id)
+        _ensure_tenant_access(current_user, tenant_id, db)
         
         language_service = LanguageService(db)
         default_language = language_service.get_default_language(str(tenant_id))
@@ -211,7 +225,7 @@ async def validate_language_support(
         language = body.language
         
         # Enforce tenant access
-        _ensure_tenant_access(current_user, tenant_id)
+        _ensure_tenant_access(current_user, tenant_id, db)
         
         language_service = LanguageService(db)
         is_supported = language_service.validate_language_support(str(tenant_id), language)

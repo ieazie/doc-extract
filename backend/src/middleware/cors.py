@@ -56,7 +56,8 @@ class TenantAwareCORSMiddleware(BaseHTTPMiddleware):
         
         # Apply CORS headers to response
         if cors_config:
-            self.apply_cors_headers(response, cors_config)
+            request_origin = request.headers.get("Origin")
+            self.apply_cors_headers(response, cors_config, request_origin)
         
         return response
     
@@ -150,24 +151,38 @@ class TenantAwareCORSMiddleware(BaseHTTPMiddleware):
             logger.error(f"Failed to get CORS config for tenant {tenant_id}: {e}")
             return None
     
-    def apply_cors_headers(self, response: Response, cors_config: Dict[str, Any]):
+    def apply_cors_headers(
+        self,
+        response: Response,
+        cors_config: Dict[str, Any],
+        request_origin: Optional[str] = None,
+    ):
         """
         Apply CORS headers to the response based on tenant configuration
         
         Args:
             response: The HTTP response object
             cors_config: Tenant-specific CORS configuration dictionary
+            request_origin: The origin of the requesting client
         """
         
         try:
-            # Apply allowed origins
+            # Apply allowed origins (CORS spec requires single origin, not comma-separated list)
             allowed_origins = cors_config.get("allowed_origins", [])
-            if allowed_origins:
-                # Join multiple origins with comma (CORS spec allows this)
-                response.headers["Access-Control-Allow-Origin"] = ",".join(allowed_origins)
+            allow_credentials = cors_config.get("allow_credentials", False)
+            
+            if "*" in allowed_origins and not allow_credentials:
+                # Only allow "*" when credentials are not required
+                response.headers["Access-Control-Allow-Origin"] = "*"
+            elif request_origin and request_origin in allowed_origins:
+                # Echo the specific request origin when it's allowed
+                response.headers["Access-Control-Allow-Origin"] = request_origin
+            elif len(allowed_origins) == 1:
+                # Single allowed origin
+                response.headers["Access-Control-Allow-Origin"] = allowed_origins[0]
+            # If no match and not single origin, don't set the header (browser will reject)
             
             # Apply allow credentials
-            allow_credentials = cors_config.get("allow_credentials", False)
             response.headers["Access-Control-Allow-Credentials"] = str(allow_credentials).lower()
             
             # Apply allowed methods
@@ -211,7 +226,8 @@ class TenantAwareCORSMiddleware(BaseHTTPMiddleware):
         if cors_config:
             # Create response with CORS headers
             response = Response(status_code=200)
-            self.apply_cors_headers(response, cors_config)
+            request_origin = request.headers.get("Origin")
+            self.apply_cors_headers(response, cors_config, request_origin)
             return response
         else:
             # Return standard preflight response

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from uuid import UUID
+from jose import jwt
 
 from ..models.database import get_db, User, Tenant, APIKey
 from ..services.tenant_auth_service import get_tenant_auth_service
@@ -36,6 +37,10 @@ async def get_current_user(
     # Get tenant-aware authentication service
     tenant_auth_service = get_tenant_auth_service(db)
     
+    # Detect environment from request
+    from ..utils.environment_detection import get_environment_from_request
+    environment = get_environment_from_request(request)
+    
     # Extract tenant ID from token payload for verification
     try:
         # Decode token without verification to get tenant_id
@@ -45,7 +50,7 @@ async def get_current_user(
         
         if tenant_id:
             # Verify token using tenant-specific configuration
-            payload = tenant_auth_service.verify_tenant_token(token, UUID(tenant_id), "access")
+            payload = tenant_auth_service.verify_tenant_token(token, UUID(tenant_id), "access", environment)
         else:
             # For system admin tokens without tenant_id, we need to handle differently
             # Try to find the tenant from the user's context
@@ -54,7 +59,7 @@ async def get_current_user(
                 user = tenant_auth_service.get_user_by_id(db, user_id)
                 if user and user.tenant_id:
                     # Use user's tenant for verification
-                    payload = tenant_auth_service.verify_tenant_token(token, user.tenant_id, "access")
+                    payload = tenant_auth_service.verify_tenant_token(token, user.tenant_id, "access", environment)
                 else:
                     # System admin without tenant - this should not happen in tenant-aware system
                     raise HTTPException(
@@ -319,11 +324,18 @@ async def refresh_token(
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        # Get tenant context from request
-        tenant_context = tenant_auth_service.get_tenant_context(request)
-        tenant_id = tenant_context.get('tenant_id')
-        environment = tenant_context.get('environment', 'development')
-        
+        # Extract tenant/environment from token claims first
+        unverified = jwt.get_unverified_claims(refresh_token)
+        try:
+            tenant_id = UUID(unverified.get("tenant_id"))  # type: ignore[arg-type]
+        except (TypeError, ValueError, AttributeError):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        environment = unverified.get("environment", "development")
+
         # Verify refresh token using tenant-specific configuration
         payload = tenant_auth_service.verify_tenant_token(refresh_token, tenant_id, "refresh")
         if not payload:
@@ -429,8 +441,8 @@ async def logout_user(
     try:
         tenant_auth_service = get_tenant_auth_service(db)
         
-        # Revoke all refresh tokens for the user
-        tenant_auth_service.revoke_user_tokens(db, current_user.id)
+        # Revoke all refresh tokens for the user (tenant-scoped)
+        tenant_auth_service.revoke_user_tokens(current_user.id, current_user.tenant_id)
         
         # Clear refresh token cookie
         response.delete_cookie("refresh_token", path="/api/auth/refresh")
@@ -505,6 +517,7 @@ async def get_user_tenants(
     db: Session = Depends(get_db)
 ):
     """Get all tenants accessible to the current user"""
+    tenant_auth_service = get_tenant_auth_service(db)
     tenants = tenant_auth_service.get_user_tenants(db, current_user.id)
     return [
         TenantResponse(

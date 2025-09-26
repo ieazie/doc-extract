@@ -3,7 +3,7 @@
  * Functional form for editing JWT, cookie, and security settings
  */
 import React, { useState, useEffect } from 'react';
-import { Save, RefreshCw, AlertCircle } from 'lucide-react';
+import { Save, RefreshCw, AlertCircle, Eye, EyeOff, Copy } from 'lucide-react';
 import { AuthenticationConfig } from '../../services/api/tenants/types/tenants';
 import { serviceFactory } from '../../services/api';
 import { TenantService } from '../../services/api/tenants/TenantService';
@@ -50,6 +50,7 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
 
   const tenantService = serviceFactory.get<TenantService>('tenants');
 
@@ -71,6 +72,7 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
         // Create default configuration
         const defaultConfig: AuthenticationConfig = {
           jwt_secret_key: '',
+          has_jwt_secret: false,
           access_token_expire_minutes: 30,
           refresh_token_expire_days: 7,
           refresh_cookie_httponly: true,
@@ -89,6 +91,7 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
       // Don't show error for missing configs, just use defaults
       const defaultConfig: AuthenticationConfig = {
         jwt_secret_key: '',
+        has_jwt_secret: false,
         access_token_expire_minutes: 30,
         refresh_token_expire_days: 7,
         refresh_cookie_httponly: true,
@@ -105,6 +108,7 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
       setLoading(false);
     }
   };
+
 
   const handleFieldChange = (field: keyof AuthenticationConfig, value: any) => {
     if (!config) return;
@@ -143,8 +147,26 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
   };
 
   const generateSecretKey = () => {
-    const newKey = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+    // Generate cryptographically secure random bytes
+    const bytes = new Uint8Array(32); // 32 bytes = 256 bits of entropy
+    window.crypto.getRandomValues(bytes);
+    
+    // Convert to hex string for JWT secret
+    const newKey = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
     handleFieldChange('jwt_secret_key', newKey);
+  };
+
+  const copySecretToClipboard = async () => {
+    if (config?.has_jwt_secret && config.jwt_secret_key) {
+      try {
+        await navigator.clipboard.writeText(config.jwt_secret_key);
+        setSuccess('JWT secret copied to clipboard');
+        setTimeout(() => setSuccess(null), 3000);
+      } catch (err) {
+        setError('Failed to copy to clipboard');
+        setTimeout(() => setError(null), 3000);
+      }
+    }
   };
 
   if (loading) {
@@ -194,35 +216,51 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
 
         <FormGroup>
           <FormLabel>JWT Secret Key</FormLabel>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <FormInput
-              type="text"
-              value={config.jwt_secret_key ? "••••••••••••••••••••••••••••••••" : ""}
+              type={showSecret ? 'text' : 'password'}
+              value={config.has_jwt_secret ? (showSecret ? config.jwt_secret_key : '••••••••••••••••••••••••••••••••') : ''}
               onChange={(e) => handleFieldChange('jwt_secret_key', e.target.value)}
-              placeholder={config.jwt_secret_key ? "Key is set (hidden for security)" : "No key set - enter or generate one"}
-              style={{ 
-                flex: 1,
-                backgroundColor: config.jwt_secret_key ? '#f0f9ff' : '#fef2f2',
-                color: config.jwt_secret_key ? '#0369a1' : '#dc2626',
-                borderColor: config.jwt_secret_key ? '#0ea5e9' : '#f87171'
-              }}
-              readOnly={!!config.jwt_secret_key}
+              placeholder="Enter or generate a secret key"
+              style={{ flex: 1 }}
+              readOnly={config.has_jwt_secret && !showSecret}
             />
+            {config.has_jwt_secret && (
+              <Button
+                onClick={() => setShowSecret(!showSecret)}
+                variant="secondary"
+                size="small"
+                style={{ minWidth: '40px', padding: '8px' }}
+              >
+                {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+              </Button>
+            )}
+            {config.has_jwt_secret && (
+              <Button
+                onClick={copySecretToClipboard}
+                variant="secondary"
+                size="small"
+                style={{ minWidth: '40px', padding: '8px' }}
+                title="Copy to clipboard"
+              >
+                <Copy size={16} />
+              </Button>
+            )}
             <Button
               onClick={generateSecretKey}
               variant="secondary"
               size="small"
             >
-              {config.jwt_secret_key ? "Generate New" : "Generate"}
+              {config.has_jwt_secret ? "Generate New" : "Generate"}
             </Button>
           </div>
           <FormHelpText>
-            {config.jwt_secret_key 
-              ? "✓ JWT Secret Key is configured and hidden for security"
+            {config.has_jwt_secret
+              ? "✓ JWT Secret Key is configured - click eye icon to reveal, copy icon to clipboard"
               : "⚠️ No JWT Secret Key set - authentication will not work properly"
             }
           </FormHelpText>
-          {config.jwt_secret_key && (
+          {config.has_jwt_secret && (
             <WarningText>
               <AlertCircle size={16} /> Changing this key will invalidate all existing tokens.
             </WarningText>

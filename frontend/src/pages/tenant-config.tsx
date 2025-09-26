@@ -339,15 +339,15 @@ const TenantConfigPage: React.FC = () => {
         const defaultConfig: TenantLLMConfigs = {
           field_extraction: {
             provider: 'openai',
-            api_key: '',
             base_url: '',
-            model_name: 'gpt-4'
+            model_name: 'gpt-4',
+            has_api_key: false
           },
           document_extraction: {
             provider: 'ollama',
-            api_key: '',
             base_url: '',
-            model_name: 'gemma2:2b'
+            model_name: 'gemma2:2b',
+            has_api_key: false
           }
         };
         setTenantConfig(defaultConfig);
@@ -357,18 +357,18 @@ const TenantConfigPage: React.FC = () => {
       
       // Initialize config structure
       const config: TenantLLMConfigs = {
-        field_extraction: {
-          provider: 'openai',
-          api_key: '',
-          base_url: '',
-          model_name: 'gpt-4'
-        },
-        document_extraction: {
-          provider: 'ollama',
-          api_key: '',
-          base_url: '',
-          model_name: 'gemma2:2b'
-        }
+      field_extraction: {
+        provider: 'openai',
+        base_url: '',
+        model_name: 'gpt-4',
+        has_api_key: false
+      },
+      document_extraction: {
+        provider: 'ollama',
+        base_url: '',
+        model_name: 'gemma2:2b',
+        has_api_key: false
+      }
       };
       
       // Load existing configurations if available
@@ -486,15 +486,31 @@ const TenantConfigPage: React.FC = () => {
     setMessage: (message: { type: 'success' | 'error'; text: string } | null) => void,
     setHealth: (health: 'healthy' | 'unhealthy') => void
   ) => {
-    // Check if response indicates an error (status >= 400 or has error property)
-    if (response && (typeof response === 'object' && 'status' in response && (response as any).status >= 400)) {
-      const errorMessage = (response as any).error?.message || (response as any).statusText || 'Unknown error occurred';
+    // Check for HTTP errors first (status >= 400)
+    if (
+      !response ||
+      (typeof response === 'object' && 'status' in response && (response as any).status >= 400)
+    ) {
+      const errorMessage =
+        (response as any)?.error?.message ||
+        (response as any)?.statusText ||
+        'Unknown error occurred';
       setMessage({ type: 'error', text: `${testType} LLM test failed: ${errorMessage}` });
       setHealth('unhealthy');
-    } else {
-      setMessage({ type: 'success', text: `${testType} LLM test completed successfully` });
-      setHealth('healthy');
+      return;
     }
+
+    // Check for API-level failures (success: false in response payload)
+    if ('success' in response && response.success === false) {
+      const errorMessage = response.error || 'LLM test reported failure';
+      setMessage({ type: 'error', text: `${testType} LLM test failed: ${errorMessage}` });
+      setHealth('unhealthy');
+      return;
+    }
+
+    // Success case
+    setMessage({ type: 'success', text: `${testType} LLM test completed successfully` });
+    setHealth('healthy');
   };
 
   const handleTestFieldExtractionLLM = async () => {

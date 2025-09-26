@@ -90,7 +90,7 @@ export interface OllamaConfig {
 export interface LLMConfig {
   provider: 'ollama' | 'openai' | 'anthropic' | 'custom';
   model_name: string;
-  api_key?: string;
+  api_key?: string; // Optional - only used for form input, not returned from backend
   base_url?: string;
   max_tokens?: number;
   temperature?: number;
@@ -120,6 +120,7 @@ export interface RateLimitsConfig {
 export interface AuthenticationConfig {
   // JWT Configuration
   jwt_secret_key: string;
+  has_jwt_secret: boolean; // Indicates if JWT secret is configured (without exposing the key)
   access_token_expire_minutes: number;
   refresh_token_expire_days: number;
   

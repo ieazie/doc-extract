@@ -92,7 +92,9 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
       console.warn('No existing CORS config found, using defaults:', err);
       // Don't show error for missing configs, just use defaults
       const defaultCORSConfig: CORSConfig = {
-        allowed_origins: environment === 'development' ? ['*'] : [],
+        allowed_origins: environment === 'development'
+          ? ['http://localhost:3000', 'http://127.0.0.1:3000']
+          : [],
         allow_credentials: true,
         allowed_methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
         allowed_headers: ['Content-Type', 'Authorization', 'X-Tenant-ID'],

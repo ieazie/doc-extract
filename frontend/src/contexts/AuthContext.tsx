@@ -1,3 +1,19 @@
+/**
+ * Authentication Context - Secure Token Management
+ * 
+ * SECURITY APPROACH:
+ * - Access tokens are stored in sessionStorage for React navigation compatibility
+ * - Refresh tokens are stored in httpOnly cookies (secure, not accessible to JavaScript)
+ * - Silent refresh on page load to obtain fresh access tokens
+ * - XSS mitigation through proper token handling and httpOnly refresh cookies
+ * 
+ * XSS MITIGATION:
+ * - Primary security comes from httpOnly refresh cookies
+ * - Access tokens are short-lived and rotated frequently
+ * - Clear documentation of XSS risks and mitigation strategies
+ * - Backend enforces proper token validation and rotation
+ */
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/router';
 import { AuthService, TenantService, serviceFactory } from '@/services/api/index';
@@ -71,7 +87,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null); // Stored in sessionStorage for persistence
+  const [accessToken, setAccessToken] = useState<string | null>(null); // Stored in sessionStorage for React navigation compatibility
   const [isLoading, setIsLoading] = useState(true);
 
   // Helper functions for access token persistence
@@ -152,7 +168,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             serviceFactory.setAuthToken(storedAccessToken);
             
             // Restore tenant ID in service factory
-            if (parsedUser.tenant_id) {
+            if (parsedUser && parsedUser.tenant_id) {
               serviceFactory.setTenantId(parsedUser.tenant_id);
             }
           } else {
@@ -176,7 +192,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 if (refreshResult.user.tenant_id) {
                   serviceFactory.setTenantId(refreshResult.user.tenant_id);
                 }
-              } else if (parsedUser.tenant_id) {
+              } else if (parsedUser && parsedUser.tenant_id) {
                 // Use stored tenant ID if refresh didn't return user data
                 serviceFactory.setTenantId(parsedUser.tenant_id);
               }

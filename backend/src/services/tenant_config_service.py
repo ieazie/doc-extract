@@ -168,9 +168,9 @@ class TenantConfigService:
         
         return RateLimitsConfig(**config.config_data)
     
-    def get_auth_config(self, tenant_id: UUID) -> Optional[AuthenticationConfig]:
+    def get_auth_config(self, tenant_id: UUID, environment: Optional[str] = None) -> Optional[AuthenticationConfig]:
         """Get authentication configuration for tenant"""
-        config = self.get_config(tenant_id, "auth")
+        config = self.get_config(tenant_id, "auth", environment)
         if not config:
             return None
         
@@ -184,9 +184,9 @@ class TenantConfigService:
         
         return CORSConfig(**config.config_data)
     
-    def get_security_config(self, tenant_id: UUID) -> Optional[SecurityConfig]:
+    def get_security_config(self, tenant_id: UUID, environment: Optional[str] = None) -> Optional[SecurityConfig]:
         """Get security configuration for tenant"""
-        config = self.get_config(tenant_id, "security")
+        config = self.get_config(tenant_id, "security", environment)
         if not config:
             return None
         
@@ -384,7 +384,8 @@ class TenantConfigService:
             password_min_length=auth_config.password_min_length,
             require_2fa=auth_config.require_2fa,
             session_timeout_minutes=getattr(auth_config, 'session_timeout_minutes', 480),
-            concurrent_sessions_limit=getattr(auth_config, 'concurrent_sessions_limit', 5)
+            concurrent_sessions_limit=getattr(auth_config, 'concurrent_sessions_limit', 5),
+            has_jwt_secret=bool(getattr(auth_config, 'jwt_secret_key', '') and auth_config.jwt_secret_key.strip())
         )
     
     def _convert_to_secure_security_config(self, security_config: SecurityConfig) -> SecureSecurityConfig:
@@ -409,6 +410,57 @@ class TenantConfigService:
             referrer_policy=security_config.referrer_policy
         )
     
+    def _convert_to_secure_auth_config(self, auth_config) -> SecureAuthenticationConfig:
+        """Convert AuthenticationConfig to SecureAuthenticationConfig (exclude JWT secret)"""
+        from ..schemas.tenant_configuration import SecureAuthenticationConfig
+        
+        if not auth_config:
+            return None
+        
+        return SecureAuthenticationConfig(
+            access_token_expire_minutes=auth_config.access_token_expire_minutes,
+            refresh_token_expire_days=auth_config.refresh_token_expire_days,
+            refresh_cookie_httponly=auth_config.refresh_cookie_httponly,
+            refresh_cookie_secure=auth_config.refresh_cookie_secure,
+            refresh_cookie_samesite=auth_config.refresh_cookie_samesite,
+            refresh_cookie_path=auth_config.refresh_cookie_path,
+            refresh_cookie_domain=auth_config.refresh_cookie_domain,
+            max_login_attempts=auth_config.max_login_attempts,
+            lockout_duration_minutes=auth_config.lockout_duration_minutes,
+            password_min_length=auth_config.password_min_length,
+            require_2fa=auth_config.require_2fa,
+            session_timeout_minutes=auth_config.session_timeout_minutes,
+            concurrent_sessions_limit=auth_config.concurrent_sessions_limit,
+            has_jwt_secret=bool(getattr(auth_config, 'jwt_secret_key', '') and auth_config.jwt_secret_key.strip())
+            # jwt_secret_key is intentionally excluded for security
+        )
+
+    def _convert_to_secure_security_config(self, security_config) -> SecureSecurityConfig:
+        """Convert SecurityConfig to SecureSecurityConfig (exclude encryption key)"""
+        from ..schemas.tenant_configuration import SecureSecurityConfig
+        
+        if not security_config:
+            return None
+        
+        return SecureSecurityConfig(
+            csrf_protection_enabled=security_config.csrf_protection_enabled,
+            csrf_token_header=security_config.csrf_token_header,
+            rate_limiting_enabled=security_config.rate_limiting_enabled,
+            rate_limit_requests_per_minute=security_config.rate_limit_requests_per_minute,
+            rate_limit_burst_size=security_config.rate_limit_burst_size,
+            security_headers_enabled=security_config.security_headers_enabled,
+            content_security_policy=security_config.content_security_policy,
+            strict_transport_security=security_config.strict_transport_security,
+            x_frame_options=security_config.x_frame_options,
+            x_content_type_options=security_config.x_content_type_options,
+            referrer_policy=security_config.referrer_policy,
+            compromise_detection_enabled=security_config.compromise_detection_enabled,
+            compromise_detection_threshold=security_config.compromise_detection_threshold,
+            rapid_token_threshold=security_config.rapid_token_threshold,
+            auto_revoke_on_compromise=security_config.auto_revoke_on_compromise
+            # encryption_key is intentionally excluded for security
+        )
+
     def _convert_to_secure_llm_config(self, llm_config) -> SecureTenantLLMConfigs:
         """Convert LLMConfig to SecureLLMConfig (exclude API keys)"""
         from ..schemas.tenant_configuration import SecureLLMConfig, SecureTenantLLMConfigs
@@ -417,40 +469,119 @@ class TenantConfigService:
             if not config:
                 return None
             
+            # Handle both dict and object inputs
+            if isinstance(config, dict):
+                # Convert dict to object-like access
+                provider = config.get('provider', '')
+                api_key = config.get('api_key', '')
+                ollama_config = config.get('ollama_config')
+            else:
+                # Object access
+                provider = config.provider
+                api_key = config.api_key
+                ollama_config = config.ollama_config
+            
             # Convert ollama_config to dict if it's an object
             ollama_config_dict = None
-            if config.ollama_config:
-                if hasattr(config.ollama_config, 'model_dump'):
-                    ollama_config_dict = config.ollama_config.model_dump()
-                elif hasattr(config.ollama_config, '__dict__'):
-                    ollama_config_dict = config.ollama_config.__dict__
+            if ollama_config:
+                if hasattr(ollama_config, 'model_dump'):
+                    ollama_config_dict = ollama_config.model_dump()
+                elif hasattr(ollama_config, '__dict__'):
+                    ollama_config_dict = ollama_config.__dict__
                 else:
-                    ollama_config_dict = config.ollama_config
+                    ollama_config_dict = ollama_config
             
             # Check if API key exists (for providers that require it)
             has_api_key = False
-            if config.provider in ['openai', 'anthropic']:
-                has_api_key = bool(config.api_key and config.api_key.strip())
+            if provider in ['openai', 'anthropic']:
+                has_api_key = bool(api_key and api_key.strip())
             
             return SecureLLMConfig(
-                provider=config.provider,
-                model_name=config.model_name,
-                base_url=config.base_url,
-                max_tokens=config.max_tokens,
-                temperature=config.temperature,
+                provider=provider,
+                model_name=config.get('model_name', '') if isinstance(config, dict) else config.model_name,
+                base_url=config.get('base_url') if isinstance(config, dict) else config.base_url,
+                max_tokens=config.get('max_tokens') if isinstance(config, dict) else config.max_tokens,
+                temperature=config.get('temperature') if isinstance(config, dict) else config.temperature,
                 ollama_config=ollama_config_dict,
                 has_api_key=has_api_key
             )
         
-        if hasattr(llm_config, 'field_extraction') and hasattr(llm_config, 'document_extraction'):
-            # TenantLLMConfigs
-            return SecureTenantLLMConfigs(
-                field_extraction=convert_single_config(llm_config.field_extraction),
-                document_extraction=convert_single_config(llm_config.document_extraction)
-            )
+        # Handle both dict and object inputs
+        if isinstance(llm_config, dict):
+            if 'field_extraction' in llm_config and 'document_extraction' in llm_config:
+                # TenantLLMConfigs (dict)
+                return SecureTenantLLMConfigs(
+                    field_extraction=convert_single_config(llm_config['field_extraction']),
+                    document_extraction=convert_single_config(llm_config['document_extraction'])
+                )
+            else:
+                # Single LLMConfig (dict)
+                return convert_single_config(llm_config)
         else:
-            # Single LLMConfig
-            return convert_single_config(llm_config)
+            # Object inputs
+            if hasattr(llm_config, 'field_extraction') and hasattr(llm_config, 'document_extraction'):
+                # TenantLLMConfigs (object)
+                return SecureTenantLLMConfigs(
+                    field_extraction=convert_single_config(llm_config.field_extraction),
+                    document_extraction=convert_single_config(llm_config.document_extraction)
+                )
+            else:
+                # Single LLMConfig (object)
+                return convert_single_config(llm_config)
+
+    def _convert_config_to_secure(self, config, config_type: str):
+        """Convert configuration to secure version based on type"""
+        if not config:
+            return None
+        
+        config_data = config.config_data
+        
+        if config_type == "auth":
+            from ..schemas.tenant_configuration import AuthenticationConfig
+            auth_config = AuthenticationConfig(**config_data)
+            secure_config_data = self._convert_to_secure_auth_config(auth_config)
+        elif config_type == "security":
+            from ..schemas.tenant_configuration import SecurityConfig
+            security_config = SecurityConfig(**config_data)
+            secure_config_data = self._convert_to_secure_security_config(security_config)
+        elif config_type == "llm":
+            llm_config = self._convert_to_secure_llm_config(config_data)
+            secure_config_data = llm_config
+        elif config_type in ["rate_limits", "cors"]:
+            # These configs are safe to expose as-is
+            secure_config_data = config_data
+        else:
+            # Unknown config type, return as-is (should not happen)
+            secure_config_data = config_data
+        
+        # Build secure response - handle both database objects and response objects
+        # Convert secure_config_data to dict if it's a Pydantic model
+        if hasattr(secure_config_data, 'model_dump'):
+            config_data_dict = secure_config_data.model_dump()
+        elif hasattr(secure_config_data, 'dict'):
+            config_data_dict = secure_config_data.dict()
+        else:
+            config_data_dict = secure_config_data
+        
+        result = {
+            "id": config.id,
+            "tenant_id": config.tenant_id,
+            "config_type": config.config_type,
+            "config_data": config_data_dict,
+            "is_active": config.is_active,
+            "created_at": config.created_at,
+            "updated_at": config.updated_at
+        }
+        
+        # Add environment field if it exists (for database objects)
+        if hasattr(config, 'environment'):
+            result["environment"] = config.environment
+        else:
+            # For response objects, we need to get environment from the method parameter
+            # This will be handled by the calling method
+            pass
+        
+        return result
     
     def get_available_environments(self, tenant_id: UUID) -> List[str]:
         """Get available environments for tenant"""
@@ -503,7 +634,8 @@ class RateLimitService:
             return True
         
         # Check if we're in a new time window
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
         window_duration = self._get_window_duration(limit_type)
         
         if now - rate_limit.window_start > window_duration:
@@ -515,10 +647,6 @@ class RateLimitService:
         # Check if limit is exceeded
         if rate_limit.current_count >= limit_value:
             return False
-        
-        # Increment counter
-        rate_limit.current_count += 1
-        self.db.commit()
         
         return True
     
@@ -535,11 +663,12 @@ class RateLimitService:
             rate_limit.current_count += 1
         else:
             # Create new rate limit record
+            from datetime import timezone
             rate_limit = TenantRateLimit(
                 tenant_id=tenant_id,
                 limit_type=limit_type,
                 current_count=1,
-                window_start=datetime.utcnow()
+                window_start=datetime.now(timezone.utc)
             )
             self.db.add(rate_limit)
         

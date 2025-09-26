@@ -34,7 +34,7 @@ class TenantAuthService(AuthService):
         """Get tenant-specific authentication configuration"""
         
         # Try to get existing configuration
-        auth_config = self.config_service.get_auth_config(tenant_id)
+        auth_config = self.config_service.get_auth_config(tenant_id, environment)
         
         if not auth_config:
             # Create default configuration for the tenant
@@ -47,7 +47,7 @@ class TenantAuthService(AuthService):
         """Get tenant-specific CORS configuration"""
         
         # Try to get existing configuration
-        cors_config = self.config_service.get_cors_config(tenant_id)
+        cors_config = self.config_service.get_cors_config(tenant_id, environment)
         
         if not cors_config:
             # Create default configuration for the tenant
@@ -60,7 +60,7 @@ class TenantAuthService(AuthService):
         """Get tenant-specific security configuration"""
         
         # Try to get existing configuration
-        security_config = self.config_service.get_security_config(tenant_id)
+        security_config = self.config_service.get_security_config(tenant_id, environment)
         
         if not security_config:
             # Create default configuration for the tenant
@@ -173,23 +173,24 @@ class TenantAuthService(AuthService):
         logger.debug(f"Created tenant-specific refresh token for tenant {tenant_id}")
         return encoded_jwt
     
-    def verify_tenant_token(self, token: str, tenant_id: UUID, token_type: str = "access") -> Optional[dict]:
+    def verify_tenant_token(self, token: str, tenant_id: UUID, token_type: str = "access", environment: Optional[str] = None) -> Optional[dict]:
         """Verify token using tenant-specific configuration with enhanced security"""
         
         try:
-            # Get tenant auth configuration
-            auth_config = self.get_tenant_auth_config(tenant_id)
+            # Get environment from unverified claims first
+            unverified = jwt.get_unverified_claims(token)
+            env = unverified.get("environment", "development")
             
-            # First decode without audience/issuer validation to get the environment
-            temp_payload = jwt.decode(token, auth_config.jwt_secret_key, algorithms=["HS256"], options={"verify_aud": False, "verify_iss": False})
+            # Fetch env-scoped auth config to obtain the correct secret
+            auth_config = self.get_tenant_auth_config(tenant_id, env)
             
-            # Now verify with full validation including audience and issuer
+            # Verify with full validation including audience and issuer
             payload = jwt.decode(
-                token, 
-                auth_config.jwt_secret_key, 
+                token,
+                auth_config.jwt_secret_key,
                 algorithms=["HS256"],
-                audience=f"tenant-{tenant_id}-{temp_payload.get('environment', 'development')}",
-                issuer=f"tenant-{tenant_id}"
+                audience=f"tenant-{tenant_id}-{env}",
+                issuer=f"tenant-{tenant_id}",
             )
             
             if payload.get("type") != token_type:
@@ -794,7 +795,8 @@ class TenantAuthService(AuthService):
     
     def get_tenant_from_request(self, request: Request) -> Optional[UUID]:
         """Extract tenant ID from request"""
-        return TenantIdentifier.extract_tenant_id(request)
+        tenant_id, _ = TenantIdentifier.extract_tenant_id(request)
+        return tenant_id
     
     def get_environment_from_request(self, request: Request) -> str:
         """Extract environment from request"""
@@ -884,6 +886,28 @@ class TenantAuthService(AuthService):
         except Exception:
             # Fallback to legacy method
             return super().verify_token(token, token_type)
+
+    def get_user_tenants(self, db: Session, user_id: UUID) -> List['Tenant']:
+        """Get all tenants accessible to a user"""
+        from ..models.database import Tenant, TenantStatusEnum, User
+        
+        # Get user's primary tenant
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return []
+        
+        # For now, return only the user's primary tenant
+        # In a multi-tenant system, this could be expanded to include
+        # tenants the user has access to through roles/permissions
+        tenant = db.query(Tenant).filter(
+            Tenant.id == user.tenant_id,
+            Tenant.status == TenantStatusEnum.ACTIVE
+        ).first()
+        
+        if tenant:
+            return [tenant]
+        
+        return []
 
 
 # Global instance for dependency injection

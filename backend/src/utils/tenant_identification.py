@@ -18,20 +18,20 @@ class TenantIdentifier:
     """Utility for identifying tenants from requests"""
     
     @staticmethod
-    def extract_tenant_id(request: Request) -> Optional[UUID]:
+    def extract_tenant_id(request: Request) -> tuple[Optional[UUID], str]:
         """
         Extract tenant ID from request using multiple methods.
         
         Priority order:
         1. X-Tenant-ID header (primary method as requested)
         2. JWT token (from Authorization header)
-        3. Subdomain detection (future enhancement)
+        3. Subdomain detection
         
         Args:
             request: FastAPI request object
             
         Returns:
-            Tenant UUID if found, None otherwise
+            Tuple of (tenant UUID if found, source method: "header"|"jwt"|"subdomain"|"none")
         """
         
         # Method 1: X-Tenant-ID header (primary method as requested)
@@ -40,7 +40,7 @@ class TenantIdentifier:
             try:
                 tenant_id = UUID(tenant_header)
                 logger.debug(f"Tenant ID extracted from X-Tenant-ID header: {tenant_id}")
-                return tenant_id
+                return tenant_id, "header"
             except (ValueError, TypeError) as e:
                 logger.warning(f"Invalid tenant ID in X-Tenant-ID header: {tenant_header}, error: {e}")
         
@@ -55,16 +55,18 @@ class TenantIdentifier:
                 if tenant_id_str:
                     tenant_id = UUID(tenant_id_str)
                     logger.debug(f"Tenant ID extracted from JWT token: {tenant_id}")
-                    return tenant_id
+                    return tenant_id, "jwt"
             except (jwt.InvalidTokenError, ValueError, TypeError) as e:
                 logger.warning(f"Failed to extract tenant ID from JWT token: {e}")
         
-        # Method 3: Subdomain detection (future enhancement)
-        # This could be implemented for subdomain-based tenant identification
-        # For now, we'll skip this method
+        # Method 3: Subdomain detection
+        tenant_id = TenantIdentifier.identify_from_subdomain(request)
+        if tenant_id:
+            logger.debug(f"Tenant ID extracted from subdomain: {tenant_id}")
+            return tenant_id, "subdomain"
         
         logger.debug("No tenant ID found in request")
-        return None
+        return None, "none"
     
     @staticmethod
     def extract_tenant_id_or_raise(request: Request) -> UUID:
@@ -80,12 +82,12 @@ class TenantIdentifier:
         Raises:
             HTTPException: If tenant ID cannot be determined
         """
-        tenant_id = TenantIdentifier.extract_tenant_id(request)
+        tenant_id, source = TenantIdentifier.extract_tenant_id(request)
         
         if not tenant_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Tenant ID is required. Please provide X-Tenant-ID header or valid JWT token."
+                detail="Tenant ID is required. Please provide X-Tenant-ID header, valid JWT token, or subdomain."
             )
         
         return tenant_id
@@ -170,7 +172,7 @@ class TenantIdentifier:
         
         # Map subdomain to tenant UUID by querying the database
         try:
-            from ..models.database import get_db, Tenant
+            from ..models.database import get_db, Tenant, TenantStatusEnum
             from sqlalchemy.orm import Session
             
             # Get database session
@@ -180,7 +182,7 @@ class TenantIdentifier:
                 # Look up tenant by slug (assuming subdomain matches tenant slug)
                 tenant = db.query(Tenant).filter(
                     Tenant.slug == subdomain,
-                    Tenant.status == "active"  # Only active tenants
+                    Tenant.status == TenantStatusEnum.ACTIVE  # Only active tenants
                 ).first()
                 
                 if tenant:
@@ -193,8 +195,8 @@ class TenantIdentifier:
             finally:
                 db.close()
                 
-        except Exception as e:
-            logger.error(f"Error looking up tenant for subdomain '{subdomain}': {e}")
+        except (ImportError, AttributeError, ValueError) as e:
+            logger.exception(f"Error looking up tenant for subdomain '{subdomain}': {e}")
             return None
     
     @staticmethod
@@ -208,7 +210,7 @@ class TenantIdentifier:
         Returns:
             Dictionary containing tenant context information
         """
-        tenant_id = TenantIdentifier.extract_tenant_id(request)
+        tenant_id, source = TenantIdentifier.extract_tenant_id(request)
         subdomain = TenantIdentifier.extract_tenant_from_subdomain(request)
         
         return {
@@ -216,7 +218,7 @@ class TenantIdentifier:
             "subdomain": subdomain,
             "has_tenant_id": tenant_id is not None,
             "has_subdomain": subdomain is not None,
-            "identification_method": "header" if tenant_id and request.headers.get("X-Tenant-ID") else "jwt" if tenant_id else "none"
+            "identification_method": source
         }
 
 
@@ -230,7 +232,8 @@ def get_tenant_id_from_request(request: Request) -> Optional[UUID]:
     Returns:
         Tenant UUID if found, None otherwise
     """
-    return TenantIdentifier.extract_tenant_id(request)
+    tenant_id, _ = TenantIdentifier.extract_tenant_id(request)
+    return tenant_id
 
 
 def require_tenant_id(request: Request) -> UUID:

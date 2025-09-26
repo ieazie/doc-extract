@@ -156,10 +156,24 @@ export abstract class BaseApiClient {
 
   setAuthToken(token: string | null): void {
     this.authToken = token;
+    const common = (this.client.defaults.headers as any).common
+      || ((this.client.defaults.headers as any).common = {});
+    if (token) {
+      common['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete common['Authorization'];
+    }
   }
 
   setTenantId(tenantId: string | null): void {
     this.tenantId = tenantId;
+    const common = (this.client.defaults.headers as any).common
+      || ((this.client.defaults.headers as any).common = {});
+    if (tenantId) {
+      common['X-Tenant-ID'] = tenantId;
+    } else {
+      delete common['X-Tenant-ID'];
+    }
   }
 
   // Common HTTP methods
