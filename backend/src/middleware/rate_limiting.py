@@ -59,8 +59,7 @@ class RateLimitMiddleware:
             is_allowed = rate_limit_service.check_rate_limit(
                 tenant_id=user.tenant_id,
                 limit_type=limit_type,
-                limit_value=limit_value,
-                window_minutes=window_minutes
+                limit_value=limit_value
             )
             
             if not is_allowed:
@@ -70,8 +69,7 @@ class RateLimitMiddleware:
             # Increment counter
             rate_limit_service.increment_rate_limit(
                 tenant_id=user.tenant_id,
-                limit_type=limit_type,
-                window_minutes=window_minutes
+                limit_type=limit_type
             )
             
             return True

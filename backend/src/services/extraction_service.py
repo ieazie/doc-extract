@@ -148,8 +148,7 @@ class ExtractionService:
         if not self.rate_limit_service.check_rate_limit(
             tenant_id=tenant_id,
             limit_type="extractions_per_hour",
-            limit_value=rate_limits_config.extractions_per_hour,
-            window_minutes=60
+            limit_value=rate_limits_config.extractions_per_hour
         ):
             raise Exception(f"Rate limit exceeded: {rate_limits_config.extractions_per_hour} extractions per hour")
         
@@ -164,8 +163,7 @@ class ExtractionService:
         # Increment extraction counter
         self.rate_limit_service.increment_rate_limit(
             tenant_id=tenant_id,
-            limit_type="extractions_per_hour",
-            window_minutes=60
+            limit_type="extractions_per_hour"
         )
     
     def health_check(self, tenant_id: UUID) -> Dict[str, Any]:

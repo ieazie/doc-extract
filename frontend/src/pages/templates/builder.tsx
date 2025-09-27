@@ -576,6 +576,7 @@ const TemplateBuilderPage: React.FC = () => {
         title: 'Extraction Failed',
         message: errorMessage
       });
+      setExtractionError(errorMessage);
       setIsExtracting(false);
     }
   };
@@ -934,7 +935,7 @@ const TemplateBuilderPage: React.FC = () => {
               </PanelContent>
             </MiddlePanel>
 
-            {(isExtracting || extractionResults) && (
+            {(isExtracting || extractionResults || extractionError) && (
               <RightPanel>
                 <PanelHeader>
                   <PanelTitle>Extraction Results</PanelTitle>
@@ -946,6 +947,10 @@ const TemplateBuilderPage: React.FC = () => {
                     extractionError={extractionError}
                     size="small"
                     showExportButton={false}
+                    onRetry={() => {
+                      setExtractionError(null);
+                      handleTestExtraction();
+                    }}
                   />
                 </PanelContent>
               </RightPanel>

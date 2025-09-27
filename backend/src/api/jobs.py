@@ -22,7 +22,7 @@ from ..schemas.jobs import (
     DocumentExtractionTrackingResponse, DocumentExtractionTrackingListResponse,
     JobStatistics, JobAnalytics, ScheduleType, TriggeredBy
 )
-from ..services.auth_service import require_permission, get_current_user
+from ..api.auth import get_current_user, require_permission
 from ..tasks.job_tasks import queue_job_execution, execute_job_immediate
 
 logger = logging.getLogger(__name__)

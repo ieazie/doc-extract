@@ -10,9 +10,13 @@ import {
   TestTube,
   RefreshCw,
   X,
-  AlertCircle
+  AlertCircle,
+  Globe
 } from 'lucide-react';
 import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, ApiTenant } from '@/services/api/index';
+import { AuthenticationConfigForm } from './AuthenticationConfigForm';
+import { CORSConfigForm } from './CORSConfigForm';
+import { SecurityConfigForm } from './SecurityConfigForm';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
@@ -288,7 +292,7 @@ interface TenantConfigModalProps {
 }
 
 export default function TenantConfigModal({ tenant, onClose }: TenantConfigModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'general' | 'llm' | 'rate-limits'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'general' | 'llm' | 'rate-limits' | 'authentication' | 'cors' | 'security'>('overview');
   const [fieldExtractionConfig, setFieldExtractionConfig] = useState<LLMConfig | null>(null);
   const [documentExtractionConfig, setDocumentExtractionConfig] = useState<LLMConfig | null>(null);
   const [rateLimitsConfig, setRateLimitsConfig] = useState<RateLimitsConfig | null>(null);
@@ -312,6 +316,7 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     max_documents: number;
     max_templates: number;
   } | null>(null);
+
 
   const loadAvailableModels = async (provider: string) => {
     try {
@@ -1441,6 +1446,49 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     </SectionCard>
   );
 
+  const renderAuthenticationTab = () => {
+    if (!tenant) return <div>No tenant selected</div>;
+    
+    return (
+      <AuthenticationConfigForm
+        tenantId={tenant.id}
+        environment={tenant.environment as 'development' | 'staging' | 'production'}
+        onConfigUpdated={() => {
+          // Optionally reload tenant data or show success message
+          console.log('Authentication configuration updated');
+        }}
+      />
+    );
+  };
+
+  const renderCORSTab = () => {
+    if (!tenant) return <div>No tenant selected</div>;
+    
+    return (
+      <CORSConfigForm
+        tenantId={tenant.id}
+        environment={tenant.environment as 'development' | 'staging' | 'production'}
+        onConfigUpdated={() => {
+          console.log('CORS configuration updated');
+        }}
+      />
+    );
+  };
+
+  const renderSecurityTab = () => {
+    if (!tenant) return <div>No tenant selected</div>;
+    
+    return (
+      <SecurityConfigForm
+        tenantId={tenant.id}
+        environment={tenant.environment as 'development' | 'staging' | 'production'}
+        onConfigUpdated={() => {
+          console.log('Security configuration updated');
+        }}
+      />
+    );
+  };
+
   return (
     <ModalOverlay onClick={onClose}>
       <ModalContent onClick={(e) => e.stopPropagation()}>
@@ -1476,6 +1524,24 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
           >
             Rate Limits
           </TabButton>
+          <TabButton 
+            $isActive={activeTab === 'authentication'} 
+            onClick={() => setActiveTab('authentication')}
+          >
+            Authentication
+          </TabButton>
+          <TabButton 
+            $isActive={activeTab === 'cors'} 
+            onClick={() => setActiveTab('cors')}
+          >
+            CORS
+          </TabButton>
+          <TabButton 
+            $isActive={activeTab === 'security'} 
+            onClick={() => setActiveTab('security')}
+          >
+            Security
+          </TabButton>
         </TabNavigation>
 
         <ModalBody>
@@ -1489,6 +1555,9 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
               {activeTab === 'general' && renderGeneralTab()}
               {activeTab === 'llm' && renderLLMTab()}
               {activeTab === 'rate-limits' && renderRateLimitsTab()}
+              {activeTab === 'authentication' && renderAuthenticationTab()}
+              {activeTab === 'cors' && renderCORSTab()}
+              {activeTab === 'security' && renderSecurityTab()}
             </>
           )}
         </ModalBody>

@@ -163,7 +163,7 @@ const ExtractionsPage: React.FC = () => {
       try {
         const extractionService = serviceFactory.get<ExtractionService>('extractions');
         const data = await extractionService.getExtractions(buildApiParams(filters));
-        setExtractionsData(data);
+        setExtractionsData(data || { extractions: [], total: 0, page: 1, per_page: 10, total_pages: 0 });
       } catch (err) {
         setError('Failed to load extractions');
         console.error('Error fetching extractions:', err);
@@ -183,7 +183,7 @@ const ExtractionsPage: React.FC = () => {
       await extractionService.deleteExtraction(extractionId);
       // Refresh the data after successful deletion
       const data = await extractionService.getExtractions(buildApiParams(filters));
-      setExtractionsData(data);
+      setExtractionsData(data || { extractions: [], total: 0, page: 1, per_page: 10, total_pages: 0 });
     } catch (err) {
       console.error('Error deleting extraction:', err);
       // You could add a toast notification here
@@ -499,8 +499,8 @@ const ExtractionsPage: React.FC = () => {
         <HeaderActions>
           <RefreshButton onClick={async () => {
             const extractionService = serviceFactory.get<ExtractionService>('extractions');
-        const data = await extractionService.getExtractions(buildApiParams(filters));
-            setExtractionsData(data);
+            const data = await extractionService.getExtractions(buildApiParams(filters));
+            setExtractionsData(data || { extractions: [], total: 0, page: 1, per_page: 10, total_pages: 0 });
           }} disabled={isLoading}>
             <RefreshCw size={16} />
             Refresh
