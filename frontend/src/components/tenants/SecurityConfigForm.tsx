@@ -171,8 +171,10 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
       
       // Create payload that preserves encryption key unless it was explicitly changed
       const { encryption_key, has_encryption_key, ...rest } = config;
-      const payload = encryptionKeyDirty && encryption_key
-        ? { ...rest, encryption_key, has_encryption_key: true }
+      const payload = encryptionKeyDirty
+        ? (encryption_key
+            ? { ...rest, encryption_key, has_encryption_key: true }
+            : { ...rest, has_encryption_key: false })
         : { ...rest, has_encryption_key: hasEncryptionKeyInitially };
       
       await tenantService.updateSecurityConfig(payload as SecurityConfig, environment);
