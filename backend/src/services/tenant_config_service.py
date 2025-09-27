@@ -229,7 +229,6 @@ class TenantConfigService:
         
         auth_config = AuthenticationConfig(
             jwt_secret_key=secrets.token_urlsafe(32),
-            encryption_key=secrets.token_urlsafe(32),
             **defaults
         )
         
@@ -398,6 +397,7 @@ class TenantConfigService:
             rate_limiting_enabled=security_config.rate_limiting_enabled,
             rate_limit_requests_per_minute=security_config.rate_limit_requests_per_minute,
             rate_limit_burst_size=security_config.rate_limit_burst_size,
+            has_encryption_key=bool(security_config.encryption_key and security_config.encryption_key.strip()),
             security_headers_enabled=security_config.security_headers_enabled,
             content_security_policy=security_config.content_security_policy,
             strict_transport_security=security_config.strict_transport_security,
@@ -410,56 +410,7 @@ class TenantConfigService:
             referrer_policy=security_config.referrer_policy
         )
     
-    def _convert_to_secure_auth_config(self, auth_config) -> SecureAuthenticationConfig:
-        """Convert AuthenticationConfig to SecureAuthenticationConfig (exclude JWT secret)"""
-        from ..schemas.tenant_configuration import SecureAuthenticationConfig
-        
-        if not auth_config:
-            return None
-        
-        return SecureAuthenticationConfig(
-            access_token_expire_minutes=auth_config.access_token_expire_minutes,
-            refresh_token_expire_days=auth_config.refresh_token_expire_days,
-            refresh_cookie_httponly=auth_config.refresh_cookie_httponly,
-            refresh_cookie_secure=auth_config.refresh_cookie_secure,
-            refresh_cookie_samesite=auth_config.refresh_cookie_samesite,
-            refresh_cookie_path=auth_config.refresh_cookie_path,
-            refresh_cookie_domain=auth_config.refresh_cookie_domain,
-            max_login_attempts=auth_config.max_login_attempts,
-            lockout_duration_minutes=auth_config.lockout_duration_minutes,
-            password_min_length=auth_config.password_min_length,
-            require_2fa=auth_config.require_2fa,
-            session_timeout_minutes=auth_config.session_timeout_minutes,
-            concurrent_sessions_limit=auth_config.concurrent_sessions_limit,
-            has_jwt_secret=bool(getattr(auth_config, 'jwt_secret_key', '') and auth_config.jwt_secret_key.strip())
-            # jwt_secret_key is intentionally excluded for security
-        )
 
-    def _convert_to_secure_security_config(self, security_config) -> SecureSecurityConfig:
-        """Convert SecurityConfig to SecureSecurityConfig (exclude encryption key)"""
-        from ..schemas.tenant_configuration import SecureSecurityConfig
-        
-        if not security_config:
-            return None
-        
-        return SecureSecurityConfig(
-            csrf_protection_enabled=security_config.csrf_protection_enabled,
-            csrf_token_header=security_config.csrf_token_header,
-            rate_limiting_enabled=security_config.rate_limiting_enabled,
-            rate_limit_requests_per_minute=security_config.rate_limit_requests_per_minute,
-            rate_limit_burst_size=security_config.rate_limit_burst_size,
-            security_headers_enabled=security_config.security_headers_enabled,
-            content_security_policy=security_config.content_security_policy,
-            strict_transport_security=security_config.strict_transport_security,
-            x_frame_options=security_config.x_frame_options,
-            x_content_type_options=security_config.x_content_type_options,
-            referrer_policy=security_config.referrer_policy,
-            compromise_detection_enabled=security_config.compromise_detection_enabled,
-            compromise_detection_threshold=security_config.compromise_detection_threshold,
-            rapid_token_threshold=security_config.rapid_token_threshold,
-            auto_revoke_on_compromise=security_config.auto_revoke_on_compromise
-            # encryption_key is intentionally excluded for security
-        )
 
     def _convert_to_secure_llm_config(self, llm_config) -> SecureTenantLLMConfigs:
         """Convert LLMConfig to SecureLLMConfig (exclude API keys)"""
@@ -626,29 +577,28 @@ class RateLimitService:
         return None
     
     def check_rate_limit(self, tenant_id: UUID, limit_type: str, limit_value: int) -> bool:
-        """Check if tenant has exceeded rate limit"""
-        rate_limit = self.get_rate_limit_status(tenant_id, limit_type)
-        
-        if not rate_limit:
-            # No rate limit set, allow request
-            return True
-        
-        # Check if we're in a new time window
+        """Check if tenant has exceeded rate limit (operates on ORM entity)"""
         from datetime import timezone
+        from sqlalchemy import and_
+        
+        rl = self.db.query(TenantRateLimit).filter(
+            and_(
+                TenantRateLimit.tenant_id == tenant_id,
+                TenantRateLimit.limit_type == limit_type
+            )
+        ).first()
+        
+        if not rl:
+            return True
+
         now = datetime.now(timezone.utc)
         window_duration = self._get_window_duration(limit_type)
-        
-        if now - rate_limit.window_start > window_duration:
-            # Reset the window
-            rate_limit.current_count = 0
-            rate_limit.window_start = now
+        if now - rl.window_start > window_duration:
+            rl.current_count = 0
+            rl.window_start = now
             self.db.commit()
-        
-        # Check if limit is exceeded
-        if rate_limit.current_count >= limit_value:
-            return False
-        
-        return True
+
+        return rl.current_count < limit_value
     
     def increment_rate_limit(self, tenant_id: UUID, limit_type: str) -> None:
         """Increment rate limit counter"""

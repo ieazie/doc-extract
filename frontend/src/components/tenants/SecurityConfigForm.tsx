@@ -77,6 +77,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
           rate_limit_requests_per_minute: environment === 'production' ? 60 : 1000,
           rate_limit_burst_size: environment === 'production' ? 100 : 1000,
           encryption_key: '',
+          has_encryption_key: false,
           security_headers_enabled: environment !== 'development',
           content_security_policy: environment === 'production' 
             ? "default-src 'self'; script-src 'self' 'unsafe-inline'"
@@ -102,6 +103,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
         rate_limit_requests_per_minute: 60,
         rate_limit_burst_size: 100,
         encryption_key: '',
+        has_encryption_key: false,
         security_headers_enabled: true,
         content_security_policy: environment === 'production' ? "default-src 'self'; script-src 'self' 'unsafe-inline'" : undefined,
         strict_transport_security: environment === 'production',
@@ -173,6 +175,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
         .join('');
       
       handleFieldChange('encryption_key', newKey);
+      handleFieldChange('has_encryption_key', true);
     } catch (error) {
       console.error('Failed to generate secure encryption key:', error);
       setError('Failed to generate secure encryption key. Please try again.');
@@ -251,7 +254,10 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
               min="1"
               max="1000"
               value={config.rate_limit_requests_per_minute}
-              onChange={(e) => handleFieldChange('rate_limit_requests_per_minute', parseInt(e.target.value))}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                handleFieldChange('rate_limit_requests_per_minute', Number.isNaN(v) ? config.rate_limit_requests_per_minute : v);
+              }}
               disabled={!config.rate_limiting_enabled}
             />
             <FormHelpText>Maximum requests per minute per client</FormHelpText>
@@ -264,7 +270,10 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
               min="1"
               max="1000"
               value={config.rate_limit_burst_size}
-              onChange={(e) => handleFieldChange('rate_limit_burst_size', parseInt(e.target.value))}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                handleFieldChange('rate_limit_burst_size', Number.isNaN(v) ? config.rate_limit_burst_size : v);
+              }}
               disabled={!config.rate_limiting_enabled}
             />
             <FormHelpText>Maximum burst size for rate limiting</FormHelpText>
@@ -393,7 +402,10 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
               min="1"
               max="10"
               value={config.compromise_detection_threshold}
-              onChange={(e) => handleFieldChange('compromise_detection_threshold', parseInt(e.target.value))}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                handleFieldChange('compromise_detection_threshold', Number.isNaN(v) ? config.compromise_detection_threshold : v);
+              }}
               disabled={!config.compromise_detection_enabled}
             />
             <FormHelpText>Minimum suspicious indicators to trigger detection</FormHelpText>
@@ -406,7 +418,10 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
               min="5"
               max="50"
               value={config.rapid_token_threshold}
-              onChange={(e) => handleFieldChange('rapid_token_threshold', parseInt(e.target.value))}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                handleFieldChange('rapid_token_threshold', Number.isNaN(v) ? config.rapid_token_threshold : v);
+              }}
               disabled={!config.compromise_detection_enabled}
             />
             <FormHelpText>Max tokens in 5 minutes before flagging</FormHelpText>
@@ -457,32 +472,32 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
           <div style={{ display: 'flex', gap: '8px' }}>
             <FormInput
               type="text"
-              value={config.encryption_key ? "••••••••••••••••••••••••••••••••" : ""}
+              value={config.has_encryption_key ? "••••••••••••••••••••••••••••••••" : ""}
               onChange={(e) => handleFieldChange('encryption_key', e.target.value)}
-              placeholder={config.encryption_key ? "Key is set (hidden for security)" : "No key set - enter or generate one"}
+              placeholder={config.has_encryption_key ? "Key is set (hidden for security)" : "No key set - enter or generate one"}
               style={{ 
                 flex: 1,
-                backgroundColor: config.encryption_key ? '#f0f9ff' : '#fef2f2',
-                color: config.encryption_key ? '#0369a1' : '#dc2626',
-                borderColor: config.encryption_key ? '#0ea5e9' : '#f87171'
+                backgroundColor: config.has_encryption_key ? '#f0f9ff' : '#fef2f2',
+                color: config.has_encryption_key ? '#0369a1' : '#dc2626',
+                borderColor: config.has_encryption_key ? '#0ea5e9' : '#f87171'
               }}
-              readOnly={!!config.encryption_key}
+              readOnly={!!config.has_encryption_key}
             />
             <Button
               onClick={generateEncryptionKey}
               variant="secondary"
               size="small"
             >
-              {config.encryption_key ? "Generate New" : "Generate"}
+              {config.has_encryption_key ? "Generate New" : "Generate"}
             </Button>
           </div>
           <FormHelpText>
-            {config.encryption_key 
+            {config.has_encryption_key 
               ? "✓ Encryption Key is configured and hidden for security"
               : "⚠️ No Encryption Key set - data encryption may not work properly"
             }
           </FormHelpText>
-          {config.encryption_key && (
+          {config.has_encryption_key && (
             <WarningText>
               <AlertCircle size={16} /> Changing this key may affect encrypted data.
             </WarningText>

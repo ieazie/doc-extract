@@ -521,26 +521,30 @@ const TenantConfigPage: React.FC = () => {
 
     setTestingField(true);
     setFieldExtractionMessage(null);
-    
-    const response = await serviceFactory.get<HealthService>('health').testLLMExtraction({
-      config_type: 'field_extraction',
-      document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
-      schema: { 
-        invoice_number: "string",
-        date: "string", 
-        amount: "number" 
-      },
-      prompt_config: {}
-    });
-    
-    handleLLMTestResponse(
-      response,
-      'Field Extraction',
-      setFieldExtractionMessage,
-      setFieldLlmHealth
-    );
-    
-    setTestingField(false);
+    try {
+      const response = await serviceFactory.get<HealthService>('health').testLLMExtraction({
+        config_type: 'field_extraction',
+        document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
+        schema: { 
+          invoice_number: "string",
+          date: "string", 
+          amount: "number" 
+        },
+        prompt_config: {}
+      });
+      
+      handleLLMTestResponse(
+        response,
+        'Field Extraction',
+        setFieldExtractionMessage,
+        setFieldLlmHealth
+      );
+    } catch (err: any) {
+      setFieldExtractionMessage({ type: 'error', text: `Field Extraction LLM test failed: ${err?.message || 'Unknown error'}` });
+      setFieldLlmHealth('unhealthy');
+    } finally {
+      setTestingField(false);
+    }
   };
 
   const handleTestDocumentExtractionLLM = async () => {
@@ -551,26 +555,30 @@ const TenantConfigPage: React.FC = () => {
 
     setTestingDocument(true);
     setDocumentExtractionMessage(null);
-    
-    const response = await serviceFactory.get<HealthService>('health').testLLMExtraction({
-      config_type: 'document_extraction',
-      document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
-      schema: { 
-        invoice_number: "string",
-        date: "string", 
-        amount: "number" 
-      },
-      prompt_config: {}
-    });
-    
-    handleLLMTestResponse(
-      response,
-      'Document Extraction',
-      setDocumentExtractionMessage,
-      setDocumentLlmHealth
-    );
-    
-    setTestingDocument(false);
+    try {
+      const response = await serviceFactory.get<HealthService>('health').testLLMExtraction({
+        config_type: 'document_extraction',
+        document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
+        schema: { 
+          invoice_number: "string",
+          date: "string", 
+          amount: "number" 
+        },
+        prompt_config: {}
+      });
+      
+      handleLLMTestResponse(
+        response,
+        'Document Extraction',
+        setDocumentExtractionMessage,
+        setDocumentLlmHealth
+      );
+    } catch (err: any) {
+      setDocumentExtractionMessage({ type: 'error', text: `Document Extraction LLM test failed: ${err?.message || 'Unknown error'}` });
+      setDocumentLlmHealth('unhealthy');
+    } finally {
+      setTestingDocument(false);
+    }
   };
 
   const renderOverviewTab = () => (

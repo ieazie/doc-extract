@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-import jwt
+from jose import jwt
 
 from ..services.tenant_config_service import TenantConfigService
 from ..utils.tenant_identification import TenantIdentifier
@@ -51,6 +51,10 @@ class TenantAwareCORSMiddleware(BaseHTTPMiddleware):
             request.scope["tenant_cors_config"] = cors_config
             logger.debug(f"Applied CORS config for tenant {tenant_id}: {cors_config}")
         
+        # Handle preflight early
+        if request.method == "OPTIONS":
+            return self.handle_preflight_request(request)
+        
         # Process the request
         response = await call_next(request)
         
@@ -77,8 +81,8 @@ class TenantAwareCORSMiddleware(BaseHTTPMiddleware):
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
             try:
-                # Decode without verification to get tenant_id
-                payload = jwt.decode(token, options={"verify_signature": False})
+                # Decode without verification to get tenant_id (python-jose)
+                payload = jwt.get_unverified_claims(token)
                 tenant_id_str = payload.get("tenant_id")
                 if tenant_id_str:
                     return UUID(tenant_id_str)
@@ -177,9 +181,15 @@ class TenantAwareCORSMiddleware(BaseHTTPMiddleware):
             elif request_origin and request_origin in allowed_origins:
                 # Echo the specific request origin when it's allowed
                 response.headers["Access-Control-Allow-Origin"] = request_origin
+                # Ensure caches vary by Origin
+                existing_vary = response.headers.get("Vary")
+                response.headers["Vary"] = "Origin" if not existing_vary else f"{existing_vary}, Origin"
             elif len(allowed_origins) == 1:
                 # Single allowed origin
                 response.headers["Access-Control-Allow-Origin"] = allowed_origins[0]
+                # Ensure caches vary by Origin
+                existing_vary = response.headers.get("Vary")
+                response.headers["Vary"] = "Origin" if not existing_vary else f"{existing_vary}, Origin"
             # If no match and not single origin, don't set the header (browser will reject)
             
             # Apply allow credentials
@@ -228,6 +238,13 @@ class TenantAwareCORSMiddleware(BaseHTTPMiddleware):
             response = Response(status_code=200)
             request_origin = request.headers.get("Origin")
             self.apply_cors_headers(response, cors_config, request_origin)
+            # Vary on preflight request headers
+            vary = response.headers.get("Vary")
+            vary_items = [h.strip() for h in (vary or "").split(",") if h.strip()]
+            for h in ["Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"]:
+                if h not in vary_items:
+                    vary_items.append(h)
+            response.headers["Vary"] = ", ".join(vary_items)
             return response
         else:
             # Return standard preflight response
@@ -237,6 +254,7 @@ class TenantAwareCORSMiddleware(BaseHTTPMiddleware):
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
                     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-                    "Access-Control-Max-Age": "3600"
+                    "Access-Control-Max-Age": "3600",
+                    "Vary": "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
                 }
             )

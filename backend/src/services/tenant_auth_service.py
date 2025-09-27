@@ -177,9 +177,9 @@ class TenantAuthService(AuthService):
         """Verify token using tenant-specific configuration with enhanced security"""
         
         try:
-            # Get environment from unverified claims first
+            # Prefer explicit environment; otherwise use unverified claim
             unverified = jwt.get_unverified_claims(token)
-            env = unverified.get("environment", "development")
+            env = environment or unverified.get("environment", "development")
             
             # Fetch env-scoped auth config to obtain the correct secret
             auth_config = self.get_tenant_auth_config(tenant_id, env)
@@ -192,6 +192,11 @@ class TenantAuthService(AuthService):
                 audience=f"tenant-{tenant_id}-{env}",
                 issuer=f"tenant-{tenant_id}",
             )
+            
+            # If caller provided environment, enforce match
+            if environment and payload.get("environment") != environment:
+                logger.warning(f"Token environment mismatch: expected {environment}, got {payload.get('environment')}")
+                return None
             
             if payload.get("type") != token_type:
                 logger.warning(f"Invalid token type: expected {token_type}, got {payload.get('type')}")
@@ -234,7 +239,7 @@ class TenantAuthService(AuthService):
             refresh_token = self.db.query(RefreshToken).with_for_update().filter(
                 and_(
                     RefreshToken.jti == jti,
-                    RefreshToken.is_active == True,
+                    RefreshToken.is_active.is_(True),
                     RefreshToken.expires_at > datetime.now(timezone.utc)
                 )
             ).first()
@@ -290,11 +295,18 @@ class TenantAuthService(AuthService):
         
         try:
             from ..models.database import RefreshToken
+            from uuid import UUID
+            # Normalize family_id to UUID for accurate comparisons
+            try:
+                fam_uuid = UUID(family_id) if isinstance(family_id, str) else family_id
+            except (ValueError, TypeError) as e:
+                logger.error(f"Invalid family_id format for reuse handling: {family_id}, error: {e}")
+                return
             
             # Revoke entire token family
             revoked_count = self.db.query(RefreshToken).filter(
-                RefreshToken.family_id == family_id,
-                RefreshToken.is_active == True
+                RefreshToken.family_id == fam_uuid,
+                RefreshToken.is_active.is_(True)
             ).update({
                 "is_active": False,
                 "revoked_at": datetime.now(timezone.utc)
@@ -354,7 +366,7 @@ class TenantAuthService(AuthService):
             active_tokens = self.db.query(RefreshToken).filter(
                 and_(
                     RefreshToken.user_id == user_id,
-                    RefreshToken.is_active == True,
+                    RefreshToken.is_active.is_(True),
                     RefreshToken.expires_at > datetime.now(timezone.utc)
                 )
             ).all()
@@ -444,7 +456,7 @@ class TenantAuthService(AuthService):
             revoked_count = self.db.query(RefreshToken).filter(
                 and_(
                     RefreshToken.user_id == user_id,
-                    RefreshToken.is_active == True
+                    RefreshToken.is_active.is_(True)
                 )
             ).update({
                 "is_active": False,
@@ -690,7 +702,7 @@ class TenantAuthService(AuthService):
             # Revoke all tokens in the family
             revoked_count = self.db.query(RefreshToken).filter(
                 RefreshToken.family_id == family_id,
-                RefreshToken.is_active == True
+                RefreshToken.is_active.is_(True)
             ).update({
                 "is_active": False,
                 "revoked_at": datetime.now(timezone.utc)
@@ -715,7 +727,7 @@ class TenantAuthService(AuthService):
             # Revoke all active tokens for the user
             revoked_count = self.db.query(RefreshToken).filter(
                 RefreshToken.user_id == user_id,
-                RefreshToken.is_active == True
+                RefreshToken.is_active.is_(True)
             ).update({
                 "is_active": False,
                 "revoked_at": datetime.now(timezone.utc)
@@ -738,13 +750,15 @@ class TenantAuthService(AuthService):
             from ..models.database import RefreshToken
             
             # Verify the old token
-            payload = self.verify_tenant_token(old_token, tenant_id, "refresh")
+            payload = self.verify_tenant_token(old_token, tenant_id, "refresh", environment)
             if not payload:
                 logger.warning("Invalid refresh token for rotation")
                 return None
             
             user_id = UUID(payload["sub"])
             family_id = UUID(payload["family_id"])
+            # Use the original token's environment if present
+            token_env = payload.get("environment", environment)
             
             # Invalidate the old token
             old_jti = payload["jti"]
@@ -759,7 +773,7 @@ class TenantAuthService(AuthService):
             new_token = self.create_tenant_refresh_token(
                 user_id=user_id,
                 tenant_id=tenant_id,
-                environment=environment,
+                environment=token_env,
                 family_id=family_id
             )
             

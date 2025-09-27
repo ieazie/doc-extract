@@ -1,6 +1,7 @@
 """
 Tenant Configuration API Endpoints
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
@@ -34,6 +35,7 @@ from ..schemas.tenant_configuration import (
     SecureTenantLLMConfigs
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -87,10 +89,14 @@ async def get_tenant_configuration(
 @router.get("/configurations/{config_type}/secret")
 async def get_tenant_config_secret(
     config_type: str,
-    current_user: User = Depends(require_permission("tenant_config:read")),
+    current_user: User = Depends(require_permission("tenant_config:secret:read")),
     db: Session = Depends(get_db)
 ):
-    """Get sensitive configuration data (JWT secret, encryption keys, API keys) for display purposes"""
+    """Get sensitive configuration data (JWT secret, encryption keys, API keys) for display purposes
+    
+    SECURITY: This endpoint requires elevated permissions (tenant_config:secret:read) and returns
+    masked values by default. Full secret reveal requires additional authentication.
+    """
     if config_type not in ["auth", "security", "llm"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -106,27 +112,49 @@ async def get_tenant_config_secret(
             detail=f"Configuration of type '{config_type}' not found"
         )
     
-    # Return only the sensitive fields for display
+    # Log secret access attempt for audit purposes
+    logger.warning(f"Secret access attempt by user {current_user.id} for config type {config_type}")
+    
+    # Return only the sensitive fields; consider masking/partial reveal
     config_data = config.config_data
     
+    def mask_secret(secret: str, visible_chars: int = 4) -> str:
+        """Mask secret showing only last few characters"""
+        if not secret or len(secret) <= visible_chars:
+            return "•" * 8  # Show dots for short secrets
+        return "•" * (len(secret) - visible_chars) + secret[-visible_chars:]
+    
     if config_type == "auth":
+        jwt_secret = config_data.get("jwt_secret_key", "")
         return {
-            "jwt_secret_key": config_data.get("jwt_secret_key", "")
+            "jwt_secret_key": mask_secret(jwt_secret),
+            "has_jwt_secret": bool(jwt_secret),
+            "masked": True,
+            "note": "Full secret reveal requires additional authentication"
         }
     elif config_type == "security":
+        encryption_key = config_data.get("encryption_key", "")
         return {
-            "encryption_key": config_data.get("encryption_key", "")
+            "encryption_key": mask_secret(encryption_key),
+            "has_encryption_key": bool(encryption_key),
+            "masked": True,
+            "note": "Full secret reveal requires additional authentication"
         }
     elif config_type == "llm":
         # Return API keys for both field and document extraction
-        result = {}
+        result = {"masked": True, "note": "Full secret reveal requires additional authentication"}
+        
         if "field_extraction" in config_data:
+            api_key = config_data["field_extraction"].get("api_key", "")
             result["field_extraction"] = {
-                "api_key": config_data["field_extraction"].get("api_key", "")
+                "api_key": mask_secret(api_key),
+                "has_api_key": bool(api_key)
             }
         if "document_extraction" in config_data:
+            api_key = config_data["document_extraction"].get("api_key", "")
             result["document_extraction"] = {
-                "api_key": config_data["document_extraction"].get("api_key", "")
+                "api_key": mask_secret(api_key),
+                "has_api_key": bool(api_key)
             }
         return result
     

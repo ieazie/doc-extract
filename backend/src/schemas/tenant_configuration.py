@@ -188,6 +188,9 @@ class SecureAuthenticationConfig(BaseModel):
     # Additional fields
     session_timeout_minutes: int = Field(default=480, ge=1, le=1440, description="Session timeout in minutes")
     concurrent_sessions_limit: int = Field(default=5, ge=1, le=50, description="Maximum concurrent sessions")
+    
+    # JWT Secret Status (without exposing the actual secret)
+    has_jwt_secret: bool = Field(default=False, description="Whether a JWT secret is configured (without exposing the key)")
 
 
 class SecureSecurityConfig(BaseModel):
@@ -201,6 +204,9 @@ class SecureSecurityConfig(BaseModel):
     rate_limiting_enabled: bool = Field(default=True, description="Enable rate limiting")
     rate_limit_requests_per_minute: int = Field(default=60, ge=1, le=1000, description="Requests per minute limit")
     rate_limit_burst_size: int = Field(default=100, ge=1, le=1000, description="Burst size for rate limiting")
+    
+    # Encryption
+    has_encryption_key: bool = Field(default=False, description="Whether an encryption key is configured (without exposing the key)")
     
     # Security Headers
     security_headers_enabled: bool = Field(default=True, description="Enable security headers")
@@ -236,58 +242,7 @@ class SecureTenantLLMConfigs(BaseModel):
     document_extraction: Optional[SecureLLMConfig] = None
 
 
-# Secure schemas (no sensitive data exposed)
-class SecureAuthenticationConfig(BaseModel):
-    """Secure version of AuthenticationConfig (no JWT secret)"""
-    access_token_expire_minutes: int
-    refresh_token_expire_days: int
-    refresh_cookie_httponly: bool
-    refresh_cookie_secure: bool
-    refresh_cookie_samesite: str
-    refresh_cookie_path: str
-    refresh_cookie_domain: Optional[str]
-    max_login_attempts: int
-    lockout_duration_minutes: int
-    password_min_length: int
-    require_2fa: bool
-    session_timeout_minutes: int
-    concurrent_sessions_limit: int
-    has_jwt_secret: bool = Field(default=False, description="Whether a JWT secret is configured (without exposing the key)")
-    # jwt_secret_key is intentionally omitted for security
-
-class SecureSecurityConfig(BaseModel):
-    """Secure version of SecurityConfig (no encryption keys)"""
-    csrf_protection_enabled: bool
-    csrf_token_header: str
-    rate_limiting_enabled: bool
-    rate_limit_requests_per_minute: int
-    rate_limit_burst_size: int
-    # encryption_key is intentionally omitted for security
-    security_headers_enabled: bool
-    content_security_policy: Optional[str]
-    strict_transport_security: bool
-    x_frame_options: str
-    x_content_type_options: bool
-    referrer_policy: str
-    compromise_detection_enabled: bool
-    compromise_detection_threshold: int
-    rapid_token_threshold: int
-    auto_revoke_on_compromise: bool
-
-class SecureLLMConfig(BaseModel):
-    """Secure version of LLMConfig (no API keys)"""
-    provider: str
-    model_name: str
-    base_url: Optional[str]
-    max_tokens: Optional[int]
-    temperature: Optional[float]
-    ollama_config: Optional[OllamaConfig]
-    # api_key is intentionally omitted for security
-
-class SecureTenantLLMConfigs(BaseModel):
-    """Secure version of TenantLLMConfigs (no API keys)"""
-    field_extraction: Optional[SecureLLMConfig]
-    document_extraction: Optional[SecureLLMConfig]
+# Removed duplicate secure schema redefinitions; retain single canonical definitions above
 
 class TenantConfigSummary(BaseModel):
     """Summary of tenant configuration (secure version - no secrets exposed)"""

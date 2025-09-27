@@ -26,12 +26,21 @@ export abstract class BaseApiClient {
     // Request interceptor for auth token and tenant ID
     this.client.interceptors.request.use(
       (config) => {
+        // Ensure headers is mutable and support Axios v1 AxiosHeaders
+        const headers = (config.headers ?? {}) as any;
+        const set = typeof headers.set === 'function'
+          ? (k: string, v: string) => headers.set(k, v)
+          : (k: string, v: string) => { headers[k] = v; };
+
         if (this.authToken) {
-          config.headers.Authorization = `Bearer ${this.authToken}`;
+          set('Authorization', `Bearer ${this.authToken}`);
         }
         if (this.tenantId) {
-          config.headers['X-Tenant-ID'] = this.tenantId;
+          set('X-Tenant-ID', this.tenantId);
         }
+
+        config.headers = headers;
+        
         (config as any).metadata = {
           ...(config as any).metadata,
           timestamp: Date.now(),

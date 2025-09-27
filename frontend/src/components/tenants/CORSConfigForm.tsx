@@ -273,7 +273,7 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
             </Button>
           </TagInputContainer>
           <FormHelpText>
-            Add allowed origins for cross-origin requests. Leave empty to allow all origins (not recommended for production).
+            Add allowed origins for cross-origin requests. Leave empty to deny all origins. If Allow Credentials is enabled, avoid using "*" and list explicit origins.
           </FormHelpText>
         </FormGroup>
       </FormSection>
@@ -421,7 +421,10 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
               min="0"
               max="86400"
               value={config.max_age}
-              onChange={(e) => handleFieldChange('max_age', parseInt(e.target.value))}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                handleFieldChange('max_age', Number.isNaN(v) ? config.max_age : v);
+              }}
             />
             <FormHelpText>How long browsers can cache preflight requests (0-86400 seconds)</FormHelpText>
           </FormGroup>

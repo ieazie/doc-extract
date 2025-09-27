@@ -18,6 +18,7 @@ from ..schemas.auth import (
     PasswordChange, PasswordReset, PasswordResetConfirm,
     TenantSwitch, PermissionResponse, UserStatus
 )
+from ..schemas.tenant_configuration import SecureAuthenticationConfig
 
 logger = logging.getLogger(__name__)
 
@@ -540,6 +541,7 @@ async def switch_tenant(
     db: Session = Depends(get_db)
 ):
     """Switch user's current tenant"""
+    tenant_auth_service = get_tenant_auth_service(db)
     success = tenant_auth_service.switch_tenant(db, current_user.id, switch_data.tenant_id)
     if not success:
         raise HTTPException(
@@ -561,6 +563,7 @@ async def create_api_key(
     db: Session = Depends(get_db)
 ):
     """Create a new API key for the current user"""
+    tenant_auth_service = get_tenant_auth_service(db)
     try:
         api_key = tenant_auth_service.create_api_key(
             db=db,
@@ -727,6 +730,7 @@ async def create_tenant(
     db: Session = Depends(get_db)
 ):
     """Create a new tenant (admin only)"""
+    tenant_auth_service = get_tenant_auth_service(db)
     try:
         tenant = tenant_auth_service.create_tenant(db, tenant_data)
         
@@ -777,6 +781,9 @@ async def get_tenant(
     db: Session = Depends(get_db)
 ):
     """Get tenant by ID (admin only)"""
+    # Initialize tenant auth service
+    tenant_auth_service = get_tenant_auth_service(db)
+    
     # Check if user can access this tenant
     if not tenant_auth_service.can_access_tenant(current_user, tenant_id):
         raise HTTPException(
@@ -810,6 +817,7 @@ async def update_tenant(
     db: Session = Depends(get_db)
 ):
     """Update a tenant (admin only)"""
+    tenant_auth_service = get_tenant_auth_service(db)
     # Check if user can access this tenant
     if not tenant_auth_service.can_access_tenant(current_user, tenant_id):
         raise HTTPException(
@@ -855,6 +863,7 @@ async def delete_tenant(
     db: Session = Depends(get_db)
 ):
     """Delete a tenant (admin only)"""
+    tenant_auth_service = get_tenant_auth_service(db)
     # Check if user can access this tenant
     if not tenant_auth_service.can_access_tenant(current_user, tenant_id):
         raise HTTPException(
@@ -879,3 +888,24 @@ async def delete_tenant(
     
     db.delete(tenant)
     db.commit()
+    
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/auth-config", response_model=SecureAuthenticationConfig)
+async def get_current_tenant_auth_config(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get current tenant's authentication configuration"""
+    tenant_auth_service = get_tenant_auth_service(db)
+    
+    # Get the tenant's auth configuration
+    auth_config = tenant_auth_service.get_tenant_auth_config(current_user.tenant_id)
+    
+    # Convert to secure version
+    from ..services.tenant_config_service import TenantConfigService
+    config_service = TenantConfigService(db)
+    secure_config = config_service._convert_to_secure_auth_config(auth_config)
+    
+    return secure_config

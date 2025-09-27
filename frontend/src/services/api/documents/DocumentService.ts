@@ -84,9 +84,10 @@ export class DocumentService extends BaseApiClient {
     formData.append('file', file);
     formData.append('is_test_document', 'true');
 
-    return this.request<Document>({
+    // Upload the document and get the upload response
+    const uploadResponse = await this.request<DocumentUploadResponse>({
       method: 'POST',
-      url: '/api/documents/upload-test',
+      url: '/api/documents/upload',
       data: formData,
       // Do not set Content-Type; the browser will add the correct boundary
       onUploadProgress: options?.onUploadProgress ? (progressEvent) => {
@@ -94,6 +95,9 @@ export class DocumentService extends BaseApiClient {
         options.onUploadProgress!(progress);
       } : undefined
     });
+
+    // Fetch the full document object using the document_id from upload response
+    return this.getDocument(uploadResponse.document_id);
   }
 
   // Document Updates

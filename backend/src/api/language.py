@@ -84,7 +84,6 @@ async def get_tenant_language_config(
         if not config:
             # Create default language configuration if none exists
             logger.info(f"Creating default language configuration for tenant {tenant_id}")
-            from ..services.language_service import TenantLanguageConfigUpdate
             default_config = TenantLanguageConfigUpdate(
                 supported_languages=['en'],
                 default_language='en',

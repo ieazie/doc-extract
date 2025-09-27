@@ -8,7 +8,7 @@ authentication and configuration management.
 from typing import Optional
 from uuid import UUID
 from fastapi import Request, HTTPException, status
-import jwt
+from jose import jwt
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,14 +49,14 @@ class TenantIdentifier:
         if auth_header and auth_header.startswith("Bearer "):
             try:
                 token = auth_header.split(" ")[1]
-                # Decode without verification to get tenant_id
-                payload = jwt.decode(token, options={"verify_signature": False})
+                # Decode without verification to get tenant_id (python-jose)
+                payload = jwt.get_unverified_claims(token)
                 tenant_id_str = payload.get("tenant_id")
                 if tenant_id_str:
                     tenant_id = UUID(tenant_id_str)
                     logger.debug(f"Tenant ID extracted from JWT token: {tenant_id}")
                     return tenant_id, "jwt"
-            except (jwt.InvalidTokenError, ValueError, TypeError) as e:
+            except (jwt.JWTError, ValueError, TypeError) as e:
                 logger.warning(f"Failed to extract tenant ID from JWT token: {e}")
         
         # Method 3: Subdomain detection

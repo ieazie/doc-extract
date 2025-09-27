@@ -144,6 +144,7 @@ interface ExtractionResultsPanelProps {
   size?: 'small' | 'medium' | 'large';
   showExportButton?: boolean;
   onExport?: () => void;
+  onRetry?: () => void;
   // Review workflow props
   extractionId?: string;
   reviewStatus?: ReviewStatus;
@@ -170,6 +171,7 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
   size = 'medium',
   showExportButton = true,
   onExport,
+  onRetry,
   // Review workflow props
   extractionId,
   reviewStatus = 'pending',
@@ -252,7 +254,26 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
     return (
       <ErrorState>
         <h4 style={{ margin: '0 0 0.5rem 0' }}>Extraction Failed</h4>
-        <p style={{ margin: 0, fontSize: '0.875rem' }}>{extractionError}</p>
+        <p style={{ margin: '0 0 1rem 0', fontSize: '0.875rem' }}>{extractionError}</p>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            style={{
+              padding: '0.5rem 1rem',
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '0.375rem',
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+          >
+            Try Again
+          </button>
+        )}
       </ErrorState>
     );
   }

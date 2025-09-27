@@ -160,6 +160,7 @@ export interface SecurityConfig {
   
   // Encryption
   encryption_key: string;
+  has_encryption_key: boolean; // Indicates if encryption key is configured (without exposing the key)
   
   // Security Headers
   security_headers_enabled: boolean;
