@@ -34,13 +34,9 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Document Extraction Platform...")
     
-    # Create database tables
-    try:
-        create_tables()
-        logger.info("Database tables created/verified")
-    except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
-        raise
+    # Database tables are created via migrations only
+    # No SQLAlchemy auto-creation to prevent deployment issues
+    logger.info("Database initialization - tables managed via migrations only")
     
     # Check Ollama model availability
     await check_ollama_model()

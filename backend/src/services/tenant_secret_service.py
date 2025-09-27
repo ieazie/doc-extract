@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet
 import base64
 import os
 
-from ..models.database import TenantEnvironmentSecret
+from ..models.database import TenantEnvironmentSecret, TenantConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -21,25 +21,54 @@ class TenantSecretService:
     
     def __init__(self, db: Session):
         self.db = db
-        # Use environment variable for encryption key
-        self.encryption_key = os.getenv('TENANT_SECRET_ENCRYPTION_KEY')
-        if not self.encryption_key:
-            raise Exception("TENANT_SECRET_ENCRYPTION_KEY environment variable not set")
-        
+        # Initialize without encryption key - will be set per tenant
+        self.cipher = None
+        logger.info("TenantSecretService initialized successfully")
+    
+    def _get_encryption_key(self, tenant_id: UUID, environment: str = "development") -> str:
+        """Get encryption key from tenant security configuration"""
         try:
-            # Generate Fernet key from the environment variable
-            # Ensure the key is exactly 32 bytes for Fernet
-            key_bytes = self.encryption_key.encode()[:32].ljust(32, b'0')
-            key = base64.urlsafe_b64encode(key_bytes)
-            self.cipher = Fernet(key)
-            logger.info("TenantSecretService initialized successfully")
+            # Get security config for the tenant
+            config = self.db.query(TenantConfiguration).filter(
+                TenantConfiguration.tenant_id == tenant_id,
+                TenantConfiguration.config_type == 'security',
+                TenantConfiguration.environment == environment
+            ).first()
+            
+            if not config:
+                raise Exception(f"No security configuration found for tenant {tenant_id} in {environment}")
+            
+            config_data = config.config_data
+            if not isinstance(config_data, dict):
+                raise Exception("Invalid security configuration format")
+            
+            encryption_key = config_data.get('encryption_key')
+            if not encryption_key:
+                raise Exception(f"No encryption_key found in security configuration for tenant {tenant_id}")
+            
+            return encryption_key
         except Exception as e:
-            logger.error(f"Failed to initialize TenantSecretService: {e}")
-            raise Exception(f"Failed to initialize encryption: {e}")
+            logger.error(f"Failed to get encryption key for tenant {tenant_id}: {e}")
+            raise Exception(f"Failed to get encryption key: {e}")
+    
+    def _get_cipher(self, tenant_id: UUID, environment: str = "development") -> Fernet:
+        """Get Fernet cipher for tenant encryption"""
+        try:
+            encryption_key = self._get_encryption_key(tenant_id, environment)
+            
+            # Generate Fernet key from the encryption key
+            # Ensure the key is exactly 32 bytes for Fernet
+            key_bytes = encryption_key.encode()[:32].ljust(32, b'0')
+            key = base64.urlsafe_b64encode(key_bytes)
+            return Fernet(key)
+        except Exception as e:
+            logger.error(f"Failed to create cipher for tenant {tenant_id}: {e}")
+            raise Exception(f"Failed to create encryption cipher: {e}")
     
     def store_secret(self, tenant_id: UUID, environment: str, secret_type: str, value: str):
         """Store encrypted secret for tenant environment"""
-        encrypted_value = self.cipher.encrypt(value.encode()).decode()
+        cipher = self._get_cipher(tenant_id, environment)
+        encrypted_value = cipher.encrypt(value.encode()).decode()
         
         secret = self.db.query(TenantEnvironmentSecret).filter(
             TenantEnvironmentSecret.tenant_id == tenant_id,
@@ -73,7 +102,8 @@ class TenantSecretService:
             return None
         
         try:
-            decrypted_value = self.cipher.decrypt(secret.encrypted_value.encode()).decode()
+            cipher = self._get_cipher(tenant_id, environment)
+            decrypted_value = cipher.decrypt(secret.encrypted_value.encode()).decode()
             return decrypted_value
         except Exception as e:
             logger.error(f"Failed to decrypt secret: {e}")
@@ -121,7 +151,8 @@ class TenantSecretService:
                 result[secret.environment] = {}
             
             try:
-                decrypted_value = self.cipher.decrypt(secret.encrypted_value.encode()).decode()
+                cipher = self._get_cipher(tenant_id, secret.environment)
+                decrypted_value = cipher.decrypt(secret.encrypted_value.encode()).decode()
                 # Mask the value for security
                 result[secret.environment][secret.secret_type] = "***" + decrypted_value[-4:] if len(decrypted_value) > 4 else "***"
             except Exception as e:

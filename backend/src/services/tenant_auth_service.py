@@ -6,11 +6,14 @@ configuration management and environment-aware authentication settings.
 """
 
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from uuid import UUID, uuid4
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from fastapi import Request
+
+if TYPE_CHECKING:
+    from ..models.database import Tenant
 
 from .auth_service import AuthService
 from .tenant_config_service import TenantConfigService
@@ -29,6 +32,11 @@ class TenantAuthService(AuthService):
         super().__init__()
         self.db = db
         self.config_service = TenantConfigService(db)
+    
+    def get_user_by_id(self, user_id: UUID):
+        """Get user by ID using the encapsulated database session"""
+        from ..models.database import User
+        return self.db.query(User).filter(User.id == user_id).first()
     
     def get_tenant_auth_config(self, tenant_id: UUID, environment: str = "development") -> AuthenticationConfig:
         """Get tenant-specific authentication configuration"""
@@ -162,6 +170,7 @@ class TenantAuthService(AuthService):
             jti=jti,
             family_id=family_id,
             user_id=user_id,
+            tenant_id=tenant_id,  # ✅ CRITICAL: Include tenant_id for isolation
             token_hash=token_hash,
             expires_at=expire,
             is_active=True
@@ -235,10 +244,24 @@ class TenantAuthService(AuthService):
             if not jti or not family_id:
                 return False
             
+            # Extract tenant_id from payload for tenant-scoped verification
+            tenant_id = payload.get("tenant_id")
+            if not tenant_id:
+                logger.error(f"No tenant_id found in payload for token verification: {payload}")
+                return False
+            
+            from uuid import UUID
+            try:
+                tenant_uuid = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+            except (ValueError, TypeError) as e:
+                logger.error(f"Invalid tenant_id format for token verification: {tenant_id}, error: {e}")
+                return False
+            
             # Check if token exists and is active in database (with row lock to prevent race conditions)
             refresh_token = self.db.query(RefreshToken).with_for_update().filter(
                 and_(
                     RefreshToken.jti == jti,
+                    RefreshToken.tenant_id == tenant_uuid,  # ✅ CRITICAL: Filter by tenant_id for isolation
                     RefreshToken.is_active.is_(True),
                     RefreshToken.expires_at > datetime.now(timezone.utc)
                 )
@@ -303,9 +326,22 @@ class TenantAuthService(AuthService):
                 logger.error(f"Invalid family_id format for reuse handling: {family_id}, error: {e}")
                 return
             
-            # Revoke entire token family
+            # Extract tenant_id from payload for tenant-scoped revocation
+            tenant_id = payload.get("tenant_id")
+            if not tenant_id:
+                logger.error(f"No tenant_id found in payload for token reuse handling: {payload}")
+                return
+            
+            try:
+                tenant_uuid = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+            except (ValueError, TypeError) as e:
+                logger.error(f"Invalid tenant_id format for reuse handling: {tenant_id}, error: {e}")
+                return
+            
+            # Revoke entire token family for the specific tenant
             revoked_count = self.db.query(RefreshToken).filter(
                 RefreshToken.family_id == fam_uuid,
+                RefreshToken.tenant_id == tenant_uuid,  # ✅ CRITICAL: Filter by tenant_id for isolation
                 RefreshToken.is_active.is_(True)
             ).update({
                 "is_active": False,
@@ -452,10 +488,11 @@ class TenantAuthService(AuthService):
                 )
                 return 0
             
-            # Revoke all active tokens for the user
+            # Revoke all active tokens for the user in the specific tenant
             revoked_count = self.db.query(RefreshToken).filter(
                 and_(
                     RefreshToken.user_id == user_id,
+                    RefreshToken.tenant_id == tenant_id,  # ✅ CRITICAL: Filter by tenant_id for isolation
                     RefreshToken.is_active.is_(True)
                 )
             ).update({
@@ -589,6 +626,7 @@ class TenantAuthService(AuthService):
                 recent_count = self.db.query(RefreshToken).filter(
                     and_(
                         RefreshToken.user_id == user_id,
+                        RefreshToken.tenant_id == tenant_id,  # ✅ CRITICAL: Filter by tenant_id for isolation
                         RefreshToken.created_at > window_start
                     )
                 ).count()
@@ -596,6 +634,7 @@ class TenantAuthService(AuthService):
                 recent_count = self.db.query(RefreshToken).filter(
                     and_(
                         RefreshToken.user_id == user_id,
+                        RefreshToken.tenant_id == tenant_id,  # ✅ CRITICAL: Filter by tenant_id for isolation
                         RefreshToken.used_at > window_start
                     )
                 ).count()
@@ -606,6 +645,7 @@ class TenantAuthService(AuthService):
             recent_failed = self.db.query(RefreshToken).filter(
                 and_(
                     RefreshToken.user_id == user_id,
+                    RefreshToken.tenant_id == tenant_id,  # ✅ CRITICAL: Filter by tenant_id for isolation
                     RefreshToken.is_active == False,
                     RefreshToken.created_at > window_start
                 )
@@ -694,14 +734,15 @@ class TenantAuthService(AuthService):
         return True
     
     def revoke_token_family(self, family_id: UUID, tenant_id: UUID) -> bool:
-        """Revoke all tokens in a refresh token family"""
+        """Revoke all tokens in a refresh token family within a specific tenant"""
         
         try:
             from ..models.database import RefreshToken
             
-            # Revoke all tokens in the family
+            # Revoke all tokens in the family for the specific tenant
             revoked_count = self.db.query(RefreshToken).filter(
                 RefreshToken.family_id == family_id,
+                RefreshToken.tenant_id == tenant_id,  # ✅ CRITICAL: Filter by tenant_id for isolation
                 RefreshToken.is_active.is_(True)
             ).update({
                 "is_active": False,
@@ -714,7 +755,7 @@ class TenantAuthService(AuthService):
             return True
             
         except Exception as e:
-            logger.error(f"Failed to revoke token family {family_id}: {e}")
+            logger.error(f"Failed to revoke token family {family_id} for tenant {tenant_id}: {e}")
             self.db.rollback()
             return False
     
@@ -724,9 +765,10 @@ class TenantAuthService(AuthService):
         try:
             from ..models.database import RefreshToken
             
-            # Revoke all active tokens for the user
+            # Revoke all active tokens for the user in the specific tenant
             revoked_count = self.db.query(RefreshToken).filter(
                 RefreshToken.user_id == user_id,
+                RefreshToken.tenant_id == tenant_id,  # ✅ CRITICAL: Filter by tenant_id for isolation
                 RefreshToken.is_active.is_(True)
             ).update({
                 "is_active": False,
@@ -739,7 +781,7 @@ class TenantAuthService(AuthService):
             return True
             
         except Exception as e:
-            logger.error(f"Failed to revoke user tokens for user {user_id}: {e}")
+            logger.error(f"Failed to revoke user tokens for user {user_id} in tenant {tenant_id}: {e}")
             self.db.rollback()
             return False
     
@@ -887,12 +929,13 @@ class TenantAuthService(AuthService):
         # This method should not be used directly - use verify_tenant_token instead
         # But we provide a fallback that tries to extract tenant info from token
         try:
-            # Decode token without verification to get tenant_id
+            # Decode token without verification to get tenant_id and environment
             unverified_payload = jwt.get_unverified_claims(token)
             tenant_id = unverified_payload.get("tenant_id")
+            environment = unverified_payload.get("environment", "development")
             
             if tenant_id:
-                return self.verify_tenant_token(token, UUID(tenant_id), token_type)
+                return self.verify_tenant_token(token, UUID(tenant_id), token_type, environment)
             else:
                 # Fallback to legacy method with warning
                 logger.warning("Using legacy verify_token - consider using verify_tenant_token")

@@ -6,9 +6,7 @@ ALTER TABLE templates
 ADD COLUMN status VARCHAR(20) DEFAULT 'draft' 
 CHECK (status IN ('draft', 'published', 'archived'));
 
--- Add description column to templates table
-ALTER TABLE templates 
-ADD COLUMN description TEXT;
+-- Note: description column already exists in templates table from 003_create_templates_table.sql
 
 -- Update existing templates to be published by default
 UPDATE templates SET status = 'published' WHERE status IS NULL;

@@ -310,6 +310,17 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
             />
             <FormHelpText>Path where the refresh cookie is accessible</FormHelpText>
           </FormGroup>
+
+          <FormGroup>
+            <FormLabel>Cookie Domain (optional)</FormLabel>
+            <FormInput
+              type="text"
+              value={config.refresh_cookie_domain || ''}
+              onChange={(e) => handleFieldChange('refresh_cookie_domain', e.target.value || undefined)}
+              placeholder="Leave empty for current domain"
+            />
+            <FormHelpText>Domain where the cookie is accessible (e.g., .example.com)</FormHelpText>
+          </FormGroup>
         </FormGrid>
 
         <FormGrid>

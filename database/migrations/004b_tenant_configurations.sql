@@ -6,7 +6,7 @@
 CREATE TABLE tenant_configurations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    config_type VARCHAR(50) NOT NULL CHECK (config_type IN ('llm', 'rate_limits')),
+    config_type VARCHAR(50) NOT NULL CHECK (config_type IN ('llm', 'rate_limits', 'auth', 'cors', 'security', 'storage', 'cache', 'message_queue', 'ai_providers', 'language')),
     config_data JSONB NOT NULL,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

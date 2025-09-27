@@ -22,6 +22,38 @@ from ..schemas.tenant_configuration import SecureAuthenticationConfig
 
 logger = logging.getLogger(__name__)
 
+def get_cookie_config(tenant_auth_service, tenant_id: UUID, environment: str, request: Request):
+    """Get tenant-specific cookie configuration with fallback defaults"""
+    auth_config = tenant_auth_service.get_tenant_auth_config(tenant_id, environment)
+    
+    # Derive cookie attributes from tenant config - Pydantic models always have their defined fields
+    # Use tenant-specific values directly since AuthenticationConfig has all fields defined
+    secure = auth_config.refresh_cookie_secure
+    samesite = auth_config.refresh_cookie_samesite
+    httponly = auth_config.refresh_cookie_httponly
+    path = auth_config.refresh_cookie_path
+    domain = auth_config.refresh_cookie_domain
+    max_age = auth_config.refresh_token_expire_days * 24 * 60 * 60
+    
+    # Security validation: SameSite='none' requires secure=True
+    if samesite == 'none' and not secure:
+        logger.warning(f"Invalid cookie config for tenant {tenant_id}: SameSite='none' requires secure=True, "
+                      f"but secure={secure}. Falling back to secure=True.")
+        secure = True
+    
+    # Log the configuration being used for debugging
+    logger.info(f"Using tenant-specific cookie config for tenant {tenant_id} ({environment}): "
+                f"secure={secure}, samesite={samesite}, httponly={httponly}, path={path}, domain={domain}")
+    
+    return {
+        'secure': secure,
+        'samesite': samesite,
+        'httponly': httponly,
+        'path': path,
+        'domain': domain,
+        'max_age': max_age
+    }
+
 router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer()
 
@@ -57,7 +89,7 @@ async def get_current_user(
             # Try to find the tenant from the user's context
             try:
                 user_id = UUID(unverified_payload.get("sub"))
-                user = tenant_auth_service.get_user_by_id(db, user_id)
+                user = tenant_auth_service.get_user_by_id(user_id)
                 if user and user.tenant_id:
                     # Use user's tenant for verification
                     payload = tenant_auth_service.verify_tenant_token(token, user.tenant_id, "access", environment)
@@ -99,7 +131,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
     
-    user = tenant_auth_service.get_user_by_id(db, user_id)
+    user = tenant_auth_service.get_user_by_id(user_id)
     if not user or user.status != UserStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -250,6 +282,14 @@ async def login_user(
         tenant_id = tenant_context.get('tenant_id') or user.tenant_id
         environment = tenant_context.get('environment', 'development')
         
+        # Guard against missing tenant_id before minting tenant-scoped tokens
+        if tenant_id is None:
+            logger.warning("Login attempted without tenant context for user %s", user.id)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tenant context is required to complete login",
+            )
+        
         # Create access token using tenant-specific configuration
         access_token = tenant_auth_service.create_tenant_access_token(
             data={"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None},
@@ -264,18 +304,18 @@ async def login_user(
             environment=environment
         )
         
-        # Derive cookie attributes (secure in HTTPS/prod, SameSite=None when secure)
-        secure = request.url.scheme == "https"
-        samesite = "none" if secure else "lax"
+        # Get tenant-specific cookie configuration
+        cookie_config = get_cookie_config(tenant_auth_service, tenant_id, environment, request)
+        
         response.set_cookie(
             key="refresh_token",
             value=refresh_token,
-            max_age=7 * 24 * 60 * 60,  # 7 days
-            httponly=True,
-            secure=secure,
-            samesite=samesite,  # None requires secure
-            path="/api/auth/refresh",
-            domain=None
+            max_age=cookie_config['max_age'],
+            httponly=cookie_config['httponly'],
+            secure=cookie_config['secure'],
+            samesite=cookie_config['samesite'],
+            path=cookie_config['path'],
+            domain=cookie_config['domain']
         )
         
         return TokenResponse(
@@ -338,7 +378,12 @@ async def refresh_token(
         environment = unverified.get("environment", "development")
 
         # Verify refresh token using tenant-specific configuration
-        payload = tenant_auth_service.verify_tenant_token(refresh_token, tenant_id, "refresh")
+        payload = tenant_auth_service.verify_tenant_token(
+            refresh_token,
+            tenant_id,
+            "refresh",
+            environment=environment,
+        )
         if not payload:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
@@ -358,7 +403,7 @@ async def refresh_token(
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        user = tenant_auth_service.get_user_by_id(db, user_id)
+        user = tenant_auth_service.get_user_by_id(user_id)
         if not user or user.status != UserStatus.ACTIVE:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
@@ -389,18 +434,18 @@ async def refresh_token(
             family_id=family_uuid
         )
         
-        # Derive cookie attributes (secure in HTTPS/prod, SameSite=None when secure)
-        secure = request.url.scheme == "https"
-        samesite = "none" if secure else "lax"
+        # Get tenant-specific cookie configuration
+        cookie_config = get_cookie_config(tenant_auth_service, tenant_id, environment, request)
+        
         response.set_cookie(
             key="refresh_token", 
             value=new_refresh_token, 
-            max_age=7 * 24 * 60 * 60, 
-            httponly=True, 
-            secure=secure,
-            samesite=samesite,  # None requires secure
-            path="/api/auth/refresh",
-            domain=None
+            max_age=cookie_config['max_age'],
+            httponly=cookie_config['httponly'], 
+            secure=cookie_config['secure'],
+            samesite=cookie_config['samesite'],
+            path=cookie_config['path'],
+            domain=cookie_config['domain']
         )
         
         return TokenResponse(
@@ -445,8 +490,20 @@ async def logout_user(
         # Revoke all refresh tokens for the user (tenant-scoped)
         tenant_auth_service.revoke_user_tokens(current_user.id, current_user.tenant_id)
         
-        # Clear refresh token cookie
-        response.delete_cookie("refresh_token", path="/api/auth/refresh")
+        # Get tenant-specific cookie configuration for proper cookie deletion
+        if current_user.tenant_id:
+            tenant_context = tenant_auth_service.get_tenant_context(request)
+            environment = tenant_context.get('environment', 'development')
+            cookie_config = get_cookie_config(tenant_auth_service, current_user.tenant_id, environment, request)
+            cookie_path = cookie_config['path']
+            cookie_domain = cookie_config['domain']
+        else:
+            # Fallback for system admin users without tenant
+            cookie_path = "/api/auth/refresh"
+            cookie_domain = None
+        
+        # Clear refresh token cookie using tenant-specific path
+        response.delete_cookie("refresh_token", path=cookie_path, domain=cookie_domain)
         
         return {"message": "Logged out successfully"}
         

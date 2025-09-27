@@ -95,13 +95,14 @@ class User(Base):
 
 
 class RefreshToken(Base):
-    """Refresh Token model for secure token family tracking"""
+    """Refresh Token model for secure token family tracking with tenant isolation"""
     __tablename__ = "refresh_tokens"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     jti = Column(String(36), nullable=False, unique=True)  # JWT ID
     family_id = Column(UUID(as_uuid=True), nullable=False, index=True)  # Token family ID
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)  # Tenant isolation
     token_hash = Column(String(255), nullable=False)  # Hashed token for storage
     is_active = Column(Boolean, default=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
@@ -111,16 +112,19 @@ class RefreshToken(Base):
     
     # Relationships
     user = relationship("User")
+    tenant = relationship("Tenant")
     
     # Indexes for performance
     __table_args__ = (
-        Index('idx_refresh_tokens_user_family', 'user_id', 'family_id'),
+        Index('idx_refresh_tokens_user_family_tenant', 'user_id', 'family_id', 'tenant_id'),
         Index('idx_refresh_tokens_active_expires', 'is_active', 'expires_at'),
         Index('idx_refresh_tokens_jti', 'jti'),
+        Index('idx_refresh_tokens_tenant_id', 'tenant_id'),
+        Index('idx_refresh_tokens_user_tenant', 'user_id', 'tenant_id'),
     )
     
     def __repr__(self):
-        return f"<RefreshToken(id={self.id}, jti='{self.jti}', family_id={self.family_id}, active={self.is_active})>"
+        return f"<RefreshToken(id={self.id}, jti='{self.jti}', family_id={self.family_id}, tenant_id={self.tenant_id}, active={self.is_active})>"
 
 
 class APIKey(Base):

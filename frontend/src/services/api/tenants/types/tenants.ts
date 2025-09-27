@@ -129,6 +129,7 @@ export interface AuthenticationConfig {
   refresh_cookie_secure: boolean;
   refresh_cookie_samesite: 'strict' | 'lax' | 'none';
   refresh_cookie_path: string;
+  refresh_cookie_domain?: string;
   
   // Security Policies
   max_login_attempts: number;

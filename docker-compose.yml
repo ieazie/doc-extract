@@ -17,6 +17,21 @@ services:
       - backend
     restart: unless-stopped
 
+  # Database migrations service - runs once before backend starts
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python scripts/run_migrations.py
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/docextract
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"  # Run only once
+
   backend:
     build:
       context: ./backend
@@ -48,10 +63,14 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      - db
-      - redis
-      - minio
-      - ollama
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
 
   redis:
@@ -97,10 +116,14 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      - db
-      - redis
-      - minio
-      - ollama
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
 
   celery-beat:
@@ -133,8 +156,10 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      - db
-      - redis
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   db:
