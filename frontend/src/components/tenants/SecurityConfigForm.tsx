@@ -51,6 +51,11 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  
+  // Encryption key state tracking
+  const [hasEncryptionKeyInitially, setHasEncryptionKeyInitially] = useState(false);
+  const [encryptionKeyDirty, setEncryptionKeyDirty] = useState(false);
+  const [localEncryptionKey, setLocalEncryptionKey] = useState<string>('');
 
   const tenantService = serviceFactory.get<TenantService>('tenants');
 
@@ -68,6 +73,10 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
       
       if (securityConfig) {
         setConfig(securityConfig);
+        // Track initial encryption key state
+        setHasEncryptionKeyInitially(securityConfig.has_encryption_key || false);
+        setEncryptionKeyDirty(false);
+        setLocalEncryptionKey(''); // Don't store the actual key locally
       } else {
         // Create default configuration based on environment
         const defaultConfig: SecurityConfig = {
@@ -92,6 +101,10 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
           auto_revoke_on_compromise: environment === 'production'
         };
         setConfig(defaultConfig);
+        // Track initial encryption key state for default config
+        setHasEncryptionKeyInitially(defaultConfig.has_encryption_key || false);
+        setEncryptionKeyDirty(false);
+        setLocalEncryptionKey('');
       }
     } catch (err: any) {
       console.warn('No existing security config found, using defaults:', err);
@@ -116,6 +129,10 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
         auto_revoke_on_compromise: environment === 'production',
       };
       setConfig(defaultSecurityConfig);
+      // Track initial encryption key state for fallback config
+      setHasEncryptionKeyInitially(defaultSecurityConfig.has_encryption_key || false);
+      setEncryptionKeyDirty(false);
+      setLocalEncryptionKey('');
     } finally {
       setLoading(false);
     }
@@ -124,8 +141,22 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
   const handleFieldChange = (field: keyof SecurityConfig, value: any) => {
     if (!config) return;
     
-    const newConfig = { ...config, [field]: value };
-    setConfig(newConfig);
+    // Handle encryption key changes specially
+    if (field === 'encryption_key') {
+      setLocalEncryptionKey(value);
+      setEncryptionKeyDirty(true);
+      // Update has_encryption_key based on whether key is provided
+      const newConfig = { 
+        ...config, 
+        [field]: value,
+        has_encryption_key: !!value 
+      };
+      setConfig(newConfig);
+    } else {
+      const newConfig = { ...config, [field]: value };
+      setConfig(newConfig);
+    }
+    
     setHasChanges(true);
     setError(null);
     setSuccess(null);
@@ -138,7 +169,18 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
       setSaving(true);
       setError(null);
       
-      await tenantService.updateSecurityConfig(config, environment);
+      // Create payload that preserves encryption key unless it was explicitly changed
+      const { encryption_key, has_encryption_key, ...rest } = config;
+      const payload = encryptionKeyDirty && encryption_key
+        ? { ...rest, encryption_key, has_encryption_key: true }
+        : { ...rest, has_encryption_key: hasEncryptionKeyInitially };
+      
+      await tenantService.updateSecurityConfig(payload as SecurityConfig, environment);
+      
+      // Update local state to reflect the saved state
+      setHasEncryptionKeyInitially(payload.has_encryption_key || false);
+      setEncryptionKeyDirty(false);
+      setLocalEncryptionKey('');
       
       setSuccess('Security configuration saved successfully');
       setHasChanges(false);
@@ -155,6 +197,9 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
     setHasChanges(false);
     setError(null);
     setSuccess(null);
+    // Reset encryption key state tracking
+    setEncryptionKeyDirty(false);
+    setLocalEncryptionKey('');
   };
 
   const generateEncryptionKey = () => {
@@ -472,7 +517,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
           <div style={{ display: 'flex', gap: '8px' }}>
             <FormInput
               type="text"
-              value={config.has_encryption_key ? "••••••••••••••••••••••••••••••••" : ""}
+              value={encryptionKeyDirty ? localEncryptionKey : (config.has_encryption_key ? "••••••••••••••••••••••••••••••••" : "")}
               onChange={(e) => handleFieldChange('encryption_key', e.target.value)}
               placeholder={config.has_encryption_key ? "Key is set (hidden for security)" : "No key set - enter or generate one"}
               style={{ 
@@ -481,7 +526,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
                 color: config.has_encryption_key ? '#0369a1' : '#dc2626',
                 borderColor: config.has_encryption_key ? '#0ea5e9' : '#f87171'
               }}
-              readOnly={!!config.has_encryption_key}
+              readOnly={!encryptionKeyDirty && config.has_encryption_key}
             />
             <Button
               onClick={generateEncryptionKey}

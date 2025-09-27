@@ -91,9 +91,17 @@ export class TenantService extends BaseApiClient {
   // New Configuration Types (Auth, CORS, Security)
   async getAuthenticationConfig(environment?: string): Promise<AuthenticationConfig | null> {
     try {
-      // Use the new auth endpoint that returns the current tenant's auth config
-      const response = await this.get<AuthenticationConfig>('/api/auth/auth-config');
-      return response;
+      if (environment) {
+        const response = await this.get<TenantConfigurationRead>(
+          `/api/tenant/configurations/auth/${environment}`
+        );
+        return (response?.config_data as unknown as AuthenticationConfig) ?? null;
+      }
+
+      const response = await this.get<TenantConfigurationRead>(
+        `/api/tenant/configurations/auth`
+      );
+      return (response?.config_data as unknown as AuthenticationConfig) ?? null;
     } catch (error) {
       console.warn('No authentication config found:', error);
       return null;
