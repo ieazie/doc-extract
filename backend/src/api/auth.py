@@ -817,7 +817,9 @@ async def update_tenant(
     db: Session = Depends(get_db)
 ):
     """Update a tenant (admin only)"""
+    # Initialize tenant_auth_service before using it
     tenant_auth_service = get_tenant_auth_service(db)
+    
     # Check if user can access this tenant
     if not tenant_auth_service.can_access_tenant(current_user, tenant_id):
         raise HTTPException(
@@ -863,7 +865,9 @@ async def delete_tenant(
     db: Session = Depends(get_db)
 ):
     """Delete a tenant (admin only)"""
+    # Initialize tenant_auth_service before using it
     tenant_auth_service = get_tenant_auth_service(db)
+    
     # Check if user can access this tenant
     if not tenant_auth_service.can_access_tenant(current_user, tenant_id):
         raise HTTPException(
