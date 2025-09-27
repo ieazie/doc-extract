@@ -220,7 +220,6 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
         .join('');
       
       handleFieldChange('encryption_key', newKey);
-      handleFieldChange('has_encryption_key', true);
     } catch (error) {
       console.error('Failed to generate secure encryption key:', error);
       setError('Failed to generate secure encryption key. Please try again.');
