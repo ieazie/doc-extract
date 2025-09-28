@@ -370,21 +370,25 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
     const loadTenants = async () => {
       if (!user) return;
       
+      console.log('🔄 PageHeader: Loading tenants for user role:', user.role);
       setIsLoadingTenants(true);
       try {
         let tenants;
           if (user.role === 'system_admin') {
             // System admin can see all tenants
+            console.log('🔄 PageHeader: Loading all tenants for system admin');
             const tenantService = serviceFactory.get<TenantService>('tenants');
             tenants = await tenantService.getTenants();
           } else {
             // Regular users see only their assigned tenants
+            console.log('🔄 PageHeader: Loading user tenants for role:', user.role);
             const authService = serviceFactory.get<AuthService>('auth');
             tenants = await authService.getUserTenants();
           }
+        console.log('✅ PageHeader: Loaded tenants:', tenants?.length || 0);
         setAvailableTenants(tenants || []);
       } catch (error) {
-        console.error('Failed to load tenants:', error);
+        console.error('❌ PageHeader: Failed to load tenants:', error);
         setAvailableTenants([]);
       } finally {
         setIsLoadingTenants(false);

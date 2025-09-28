@@ -283,7 +283,8 @@ async def login_user(
         environment = tenant_context.get('environment', 'development')
         
         # Guard against missing tenant_id before minting tenant-scoped tokens
-        if tenant_id is None:
+        # System admins are allowed to login without tenant context
+        if tenant_id is None and user.role != 'system_admin':
             logger.warning("Login attempted without tenant context for user %s", user.id)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -291,21 +292,25 @@ async def login_user(
             )
         
         # Create access token using tenant-specific configuration
+        # For system admins without tenant, use default tenant for token creation
+        token_tenant_id = tenant_id if tenant_id else '00000000-0000-0000-0000-000000000001'
+        token_environment = environment if tenant_id else 'development'
+        
         access_token = tenant_auth_service.create_tenant_access_token(
             data={"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None},
-            tenant_id=tenant_id,
-            environment=environment
+            tenant_id=token_tenant_id,
+            environment=token_environment
         )
         
         # Create refresh token using tenant-specific configuration
         refresh_token = tenant_auth_service.create_tenant_refresh_token(
             user_id=user.id,
-            tenant_id=tenant_id,
-            environment=environment
+            tenant_id=token_tenant_id,
+            environment=token_environment
         )
         
         # Get tenant-specific cookie configuration
-        cookie_config = get_cookie_config(tenant_auth_service, tenant_id, environment, request)
+        cookie_config = get_cookie_config(tenant_auth_service, token_tenant_id, token_environment, request)
         
         response.set_cookie(
             key="refresh_token",

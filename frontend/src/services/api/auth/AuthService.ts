@@ -37,10 +37,10 @@ export class AuthService extends BaseApiClient {
   async silentRefreshToken(): Promise<LoginResponse | null> {
     try {
       // Create a completely separate axios instance to bypass all interceptors
-      const axios = require('axios');
+      const axios = (await import('axios')).default;
       const tempClient = axios.create({
         baseURL: this.client.defaults.baseURL,
-        timeout: 30000,
+        timeout: 10000, // Reduced timeout to 10s to prevent hanging
         headers: { Accept: 'application/json' },
         withCredentials: true
       });
@@ -49,10 +49,12 @@ export class AuthService extends BaseApiClient {
       return response.data;
     } catch (error: any) {
       // For silent refresh, we don't want to throw exceptions
+      console.log('Silent refresh failed:', error.message || error);
       if (error.response?.status === 401) {
         return null; // No valid refresh token
       }
-      throw error; // Re-throw other errors
+      // Return null for any error during silent refresh to prevent blocking
+      return null;
     }
   }
 

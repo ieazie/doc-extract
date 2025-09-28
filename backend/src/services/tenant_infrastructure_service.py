@@ -139,17 +139,29 @@ class TenantInfrastructureService:
         if isinstance(llm_config_data, TenantLLMConfigs):
             # Handle field_extraction config
             if llm_config_data.field_extraction:
+                # First try to get API key from secrets table
                 api_key = self.secret_service.get_secret(tenant_id, environment, 'llm_field_api_key')
+                if not api_key and hasattr(llm_config_data.field_extraction, 'api_key'):
+                    # Fallback to API key stored in config_data
+                    api_key = llm_config_data.field_extraction.api_key
                 if api_key:
                     llm_config_data.field_extraction.api_key = api_key
             
             # Handle document_extraction config
             if llm_config_data.document_extraction:
+                # First try to get API key from secrets table
                 api_key = self.secret_service.get_secret(tenant_id, environment, 'llm_document_api_key')
+                if not api_key and hasattr(llm_config_data.document_extraction, 'api_key'):
+                    # Fallback to API key stored in config_data
+                    api_key = llm_config_data.document_extraction.api_key
                 if api_key:
                     llm_config_data.document_extraction.api_key = api_key
         else: # Old single LLMConfig structure
+            # First try to get API key from secrets table
             api_key = self.secret_service.get_secret(tenant_id, environment, 'llm_api_key')
+            if not api_key and hasattr(llm_config_data, 'api_key'):
+                # Fallback to API key stored in config_data
+                api_key = llm_config_data.api_key
             if api_key:
                 llm_config_data.api_key = api_key
         

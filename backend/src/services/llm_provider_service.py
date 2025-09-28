@@ -231,23 +231,41 @@ class OpenAIProvider(LLMProvider):
             messages.append({"role": "assistant", "content": json.dumps(example.get('extracted_data', {}))})
         
         # Add the actual document
-        user_message = f"""Extract structured data from the following document according to this schema: {json.dumps(schema, indent=2)}
+        # Use different prompts based on model capabilities
+        if self.model in ["gpt-4-turbo", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo-1106"]:
+            # Newer models support structured output
+            user_message = f"""Extract structured data from the following document according to this schema: {json.dumps(schema, indent=2)}
 
 Document:
 {document_text}
 
 Respond with only valid JSON that matches the schema."""
+        else:
+            # Older models need explicit JSON formatting instructions
+            user_message = f"""Extract structured data from the following document according to this schema: {json.dumps(schema, indent=2)}
+
+Document:
+{document_text}
+
+IMPORTANT: Respond with ONLY valid JSON. Do not include any text before or after the JSON. The response must be parseable as JSON and match the provided schema exactly."""
         
         messages.append({"role": "user", "content": user_message})
 
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={"type": "json_object"}
-            )
+            # Build request parameters
+            request_params = {
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature
+            }
+            
+            # Only use response_format for models that support it
+            # Older models like gpt-4 don't support json_object response format
+            if self.model in ["gpt-4-turbo", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo-1106"]:
+                request_params["response_format"] = {"type": "json_object"}
+            
+            response = await self.client.chat.completions.create(**request_params)
             
             content = response.choices[0].message.content
             try:

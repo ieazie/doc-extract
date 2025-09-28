@@ -76,9 +76,16 @@ const createAxiosInstance = (): AxiosInstance => {
     (error) => {
       // Handle 401 (Unauthorized) by dispatching logout event
       const status = error.response?.status;
+      const url = error.config?.url || '';
+      
       if (status === 401 && typeof window !== 'undefined') {
-        // Dispatch auth logout event for graceful handling
-        // The AuthContext will handle clearing all storage (sessionStorage, localStorage, cookies)
+        // For login endpoint, let the error propagate so LoginForm can handle it
+        if (url.includes('/api/auth/login')) {
+          console.warn('Login failed - propagating error for UI handling');
+          return Promise.reject(error);
+        }
+        
+        // For other endpoints (like refresh), dispatch logout event and resolve gracefully
         window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'unauthorized' } }));
         
         console.warn('Authentication failed - logout event dispatched');

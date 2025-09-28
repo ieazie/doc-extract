@@ -958,7 +958,7 @@ class TenantAuthService(AuthService):
         # tenants the user has access to through roles/permissions
         tenant = db.query(Tenant).filter(
             Tenant.id == user.tenant_id,
-            Tenant.status == TenantStatusEnum.ACTIVE
+            Tenant.status == 'active'  # Use string comparison since DB column is VARCHAR
         ).first()
         
         if tenant:

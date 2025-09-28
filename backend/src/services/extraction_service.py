@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..models.database import get_db
 from ..services.tenant_config_service import TenantConfigService, RateLimitService
+from ..services.tenant_infrastructure_service import TenantInfrastructureService
 from ..services.llm_provider_service import LLMProviderService
 from ..schemas.tenant_configuration import LLMConfig
 
@@ -63,6 +64,7 @@ class ExtractionService:
     def __init__(self, db: Session):
         self.db = db
         self.config_service = TenantConfigService(db)
+        self.infrastructure_service = TenantInfrastructureService(db)
         self.rate_limit_service = RateLimitService(db)
     
     async def extract_data(self, request: ExtractionRequest) -> ExtractionResult:
@@ -79,8 +81,8 @@ class ExtractionService:
             if not language_validation_result["is_valid"]:
                 raise LanguageValidationError(language_validation_result['validation_message'])
             
-            # Get tenant's LLM configuration
-            llm_config = self.config_service.get_llm_config(request.tenant_id)
+            # Get tenant's LLM configuration with API keys from secrets
+            llm_config = self.infrastructure_service.get_llm_config(request.tenant_id, "development")
             if not llm_config:
                 raise Exception("No LLM configuration found for tenant")
             

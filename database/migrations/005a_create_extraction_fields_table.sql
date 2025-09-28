@@ -12,7 +12,7 @@ CREATE TABLE extraction_fields (
     extraction_id UUID NOT NULL REFERENCES extractions(id) ON DELETE CASCADE,
     field_name VARCHAR(255) NOT NULL,
     field_value TEXT,
-    confidence_score DECIMAL(5,4), -- 0.0000 to 1.0000
+    confidence_score DECIMAL(5,4) CHECK (confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)), -- 0.0000 to 1.0000
     field_type VARCHAR(50), -- text, number, date, boolean, etc.
     validation_status VARCHAR(20) DEFAULT 'pending' CHECK (validation_status IN ('pending', 'valid', 'invalid', 'warning')),
     validation_message TEXT,

@@ -987,7 +987,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       setGenerationStep('Processing results...');
       setGenerationProgress(90);
       
-      if (response.fields && Object.keys(response.fields).length > 0) {
+      if (response && response.fields && Object.keys(response.fields).length > 0) {
         // Convert generated fields to schema format
         const newFields = Object.values(response.fields).map((field: any) => {
           const baseField = {
@@ -1038,6 +1038,11 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           setGenerationStep('');
           setGenerationProgress(0);
         }, 5000); // Clear after 5 seconds
+      } else {
+        // Handle case where response is null or has no fields (API error)
+        setGenerationError('Failed to generate fields from prompt. Please check your API key configuration.');
+        setGenerationStep('');
+        setGenerationProgress(0);
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
@@ -1141,7 +1146,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       const response = await templateService.generateFieldsFromDocument({
         prompt: templateData.description,
         document_type: templateData.document_type || 'other',
-        sample_document: documentContent
+        document_content: documentContent
       }, 
       templateData.language || 'en',
       templateData.auto_detect_language ?? true,
@@ -1152,7 +1157,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       setGenerationStep('Processing results...');
       setGenerationProgress(90);
       
-      if (response.fields && Object.keys(response.fields).length > 0) {
+      if (response && response.fields && Object.keys(response.fields).length > 0) {
         // Convert generated fields to schema format
         const newFields = Object.values(response.fields).map((field: any) => ({
           id: `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -1183,6 +1188,11 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           setGenerationStep('');
           setGenerationProgress(0);
         }, 5000); // Clear after 5 seconds
+      } else {
+        // Handle case where response is null or has no fields (API error)
+        setGenerationError('Failed to generate fields from document. Please check your API key configuration.');
+        setGenerationStep('');
+        setGenerationProgress(0);
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {

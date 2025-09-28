@@ -27,6 +27,7 @@ services:
       - DATABASE_URL=postgresql://postgres:password@db:5432/docextract
     volumes:
       - ./backend:/app
+      - ./database:/app/database
     depends_on:
       db:
         condition: service_healthy

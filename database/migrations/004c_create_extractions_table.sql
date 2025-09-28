@@ -13,7 +13,7 @@ CREATE TABLE extractions (
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'reviewed')),
-    confidence_score DECIMAL(5,4), -- 0.0000 to 1.0000
+    confidence_score DECIMAL(5,4) CHECK (confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)), -- 0.0000 to 1.0000
     extracted_data JSONB DEFAULT '{}',
     raw_response TEXT,
     error_message TEXT,

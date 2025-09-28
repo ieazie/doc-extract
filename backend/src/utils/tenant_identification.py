@@ -182,7 +182,7 @@ class TenantIdentifier:
                 # Look up tenant by slug (assuming subdomain matches tenant slug)
                 tenant = db.query(Tenant).filter(
                     Tenant.slug == subdomain,
-                    Tenant.status == TenantStatusEnum.ACTIVE  # Only active tenants
+                    Tenant.status == 'active'  # Only active tenants (use string since DB column is VARCHAR)
                 ).first()
                 
                 if tenant:

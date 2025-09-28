@@ -16,7 +16,7 @@ CREATE TABLE template_usage (
     usage_type VARCHAR(20) DEFAULT 'extraction' CHECK (usage_type IN ('extraction', 'test', 'preview', 'training')),
     success BOOLEAN,
     processing_time_seconds INTEGER,
-    confidence_score DECIMAL(5,4), -- 0.0000 to 1.0000
+    confidence_score DECIMAL(5,4) CHECK (confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)), -- 0.0000 to 1.0000
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

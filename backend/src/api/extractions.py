@@ -147,8 +147,31 @@ async def create_extraction(
                 detail="Document text not extracted yet. Please wait for text extraction to complete."
             )
         
+        # Check if extraction already exists for this document-template combination
+        existing_extraction = db.query(Extraction).filter(
+            and_(
+                Extraction.document_id == uuid.UUID(extraction_data.document_id),
+                Extraction.template_id == uuid.UUID(extraction_data.template_id),
+                Extraction.tenant_id == tenant_id
+            )
+        ).first()
+        
+        if existing_extraction:
+            # Return the existing extraction instead of creating a new one
+            return ExtractionResponse(
+                id=str(existing_extraction.id),
+                document_id=str(existing_extraction.document_id),
+                template_id=str(existing_extraction.template_id),
+                status=existing_extraction.status,
+                document_name=document.original_filename,
+                template_name=template.name,
+                created_at=existing_extraction.created_at.isoformat(),
+                updated_at=existing_extraction.updated_at.isoformat()
+            )
+        
         # Create extraction record
         extraction = Extraction(
+            tenant_id=tenant_id,
             document_id=uuid.UUID(extraction_data.document_id),
             template_id=uuid.UUID(extraction_data.template_id),
             status="pending"
@@ -158,13 +181,22 @@ async def create_extraction(
         db.commit()
         db.refresh(extraction)
         
+        # Create prompt configuration from template
+        prompt_config = {
+            "prompt": template.extraction_prompt,
+            "language": template.language,
+            "auto_detect_language": template.auto_detect_language,
+            "require_language_match": template.require_language_match,
+            "validation_rules": template.validation_rules
+        }
+        
         # Start background extraction task
         background_tasks.add_task(
             process_extraction,
             str(extraction.id),
             document.raw_content,
-            template.schema,
-            template.prompt_config
+            template.extraction_schema,
+            prompt_config
         )
         
         # Build response

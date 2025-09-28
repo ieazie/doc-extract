@@ -17,6 +17,7 @@ import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConf
 import { AuthenticationConfigForm } from './AuthenticationConfigForm';
 import { CORSConfigForm } from './CORSConfigForm';
 import { SecurityConfigForm } from './SecurityConfigForm';
+import { ApiKeyInput } from './ApiKeyInput';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
@@ -582,11 +583,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       }
       
       const tenantService = serviceFactory.get<TenantService>('tenants');
-      await tenantService.createTenantConfiguration({
-        tenant_id: tenant.id,
-        config_type: 'llm',
+      await tenantService.updateTenantConfiguration('llm', {
         config_data: llmConfigs,
-        is_active: true
       });
       
       setFieldExtractionMessage({ type: 'success', text: 'Field Extraction configuration saved successfully' });
@@ -639,11 +637,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       }
       
       const tenantService = serviceFactory.get<TenantService>('tenants');
-      await tenantService.createTenantConfiguration({
-        tenant_id: tenant.id,
-        config_type: 'llm',
+      await tenantService.updateTenantConfiguration('llm', {
         config_data: llmConfigs,
-        is_active: true
       });
       
       // Check health after saving if we have API key or using Ollama
@@ -1024,38 +1019,29 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         </FormGroup>
 
         {fieldExtractionConfig?.provider === 'openai' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input
-              type="password"
-              value={fieldExtractionConfig?.api_key || ''}
-              onChange={(e) => setFieldExtractionConfig({
-                ...fieldExtractionConfig,
-                api_key: e.target.value
-              })}
-              placeholder="sk-..."
-            />
-            {!fieldExtractionConfig?.api_key && (
-              <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: '0.25rem' }}>
-                ⚠️ API key required for OpenAI. Get your key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: '#f59e0b', textDecoration: 'underline' }}>OpenAI Platform</a>
-              </div>
-            )}
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={fieldExtractionConfig?.api_key || ''}
+            hasKey={fieldExtractionConfig?.has_api_key || false}
+            onChange={(value) => setFieldExtractionConfig({
+              ...fieldExtractionConfig,
+              api_key: value,
+              has_api_key: value.length > 0
+            })}
+          />
         )}
 
         {fieldExtractionConfig?.provider === 'anthropic' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input
-              type="password"
-              value={fieldExtractionConfig?.api_key || ''}
-              onChange={(e) => setFieldExtractionConfig({
-                ...fieldExtractionConfig,
-                api_key: e.target.value
-              })}
-              placeholder="sk-ant-..."
-            />
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={fieldExtractionConfig?.api_key || ''}
+            hasKey={fieldExtractionConfig?.has_api_key || false}
+            onChange={(value) => setFieldExtractionConfig({
+              ...fieldExtractionConfig,
+              api_key: value,
+              has_api_key: value.length > 0
+            })}
+          />
         )}
 
         {fieldExtractionConfig?.provider === 'ollama' && (
@@ -1213,33 +1199,29 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         </FormGroup>
 
         {documentExtractionConfig?.provider === 'openai' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input
-              type="password"
-              value={documentExtractionConfig?.api_key || ''}
-              onChange={(e) => setDocumentExtractionConfig({
-                ...documentExtractionConfig,
-                api_key: e.target.value
-              })}
-              placeholder="sk-..."
-            />
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={documentExtractionConfig?.api_key || ''}
+            hasKey={documentExtractionConfig?.has_api_key || false}
+            onChange={(value) => setDocumentExtractionConfig({
+              ...documentExtractionConfig,
+              api_key: value,
+              has_api_key: value.length > 0
+            })}
+          />
         )}
 
         {documentExtractionConfig?.provider === 'anthropic' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input
-              type="password"
-              value={documentExtractionConfig?.api_key || ''}
-              onChange={(e) => setDocumentExtractionConfig({
-                ...documentExtractionConfig,
-                api_key: e.target.value
-              })}
-              placeholder="sk-ant-..."
-            />
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={documentExtractionConfig?.api_key || ''}
+            hasKey={documentExtractionConfig?.has_api_key || false}
+            onChange={(value) => setDocumentExtractionConfig({
+              ...documentExtractionConfig,
+              api_key: value,
+              has_api_key: value.length > 0
+            })}
+          />
         )}
 
         {documentExtractionConfig?.provider === 'ollama' && (

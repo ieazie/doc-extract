@@ -7,13 +7,13 @@
 -- ============================================================================
 
 -- Insert default document types for the default tenant
-INSERT INTO document_types (tenant_id, name, description, icon, color, is_active, sort_order) VALUES 
-('00000000-0000-0000-0000-000000000001', 'invoice', 'Invoice documents for billing and payment processing', 'receipt', '#10b981', true, 1),
-('00000000-0000-0000-0000-000000000001', 'contract', 'Legal contracts and agreements', 'file-text', '#3b82f6', true, 2),
-('00000000-0000-0000-0000-000000000001', 'insurance_policy', 'Insurance policy documents', 'shield', '#f59e0b', true, 3),
-('00000000-0000-0000-0000-000000000001', 'receipt', 'Purchase receipts and payment confirmations', 'credit-card', '#8b5cf6', true, 4),
-('00000000-0000-0000-0000-000000000001', 'medical_record', 'Medical records and health documents', 'heart', '#ef4444', true, 5),
-('00000000-0000-0000-0000-000000000001', 'legal_document', 'Legal documents and court papers', 'scale', '#6b7280', true, 6)
+INSERT INTO document_types (tenant_id, name, description, schema_template) VALUES 
+('00000000-0000-0000-0000-000000000001', 'invoice', 'Invoice documents for billing and payment processing', '{}'),
+('00000000-0000-0000-0000-000000000001', 'contract', 'Legal contracts and agreements', '{}'),
+('00000000-0000-0000-0000-000000000001', 'insurance_policy', 'Insurance policy documents', '{}'),
+('00000000-0000-0000-0000-000000000001', 'receipt', 'Purchase receipts and payment confirmations', '{}'),
+('00000000-0000-0000-0000-000000000001', 'medical_record', 'Medical records and health documents', '{}'),
+('00000000-0000-0000-0000-000000000001', 'legal_document', 'Legal documents and court papers', '{}')
 ON CONFLICT (tenant_id, name) DO NOTHING;
 
 -- ============================================================================
@@ -21,7 +21,7 @@ ON CONFLICT (tenant_id, name) DO NOTHING;
 -- ============================================================================
 
 -- Insert default templates for common document types
-INSERT INTO templates (tenant_id, name, description, document_type_id, schema, prompt_config, extraction_settings, is_active, version)
+INSERT INTO templates (tenant_id, name, description, document_type_id, extraction_schema, extraction_prompt, validation_rules, is_active, version)
 SELECT 
     '00000000-0000-0000-0000-000000000001' as tenant_id,
     'Basic ' || dt.name || ' Template' as name,
@@ -97,18 +97,18 @@ SELECT
         'instructions', 'Extract the specified fields from the document. Return the data in valid JSON format. If a field is not found or unclear, return null for that field.',
         'output_format', 'json',
         'confidence_threshold', 0.8
-    ) as prompt_config,
+    ) as extraction_prompt,
     jsonb_build_object(
         'max_chunk_size', 4000,
         'extraction_passes', 1,
         'confidence_threshold', 0.8,
         'enable_validation', true
-    ) as extraction_settings,
+    ) as validation_rules,
     true as is_active,
     1 as version
 FROM document_types dt
 WHERE dt.tenant_id = '00000000-0000-0000-0000-000000000001'
-ON CONFLICT (tenant_id, name) DO NOTHING;
+ON CONFLICT ON CONSTRAINT unique_tenant_template_name_version DO NOTHING;
 
 -- ============================================================================
 -- ADD DEFAULT TEMPLATE EXAMPLES
@@ -218,7 +218,7 @@ Status: Active'
 FROM templates t
 JOIN document_types dt ON t.document_type_id = dt.id
 WHERE t.tenant_id = '00000000-0000-0000-0000-000000000001'
-ON CONFLICT (template_id, name) DO NOTHING;
+ON CONFLICT ON CONSTRAINT unique_template_example_name DO NOTHING;
 
 -- ============================================================================
 -- ADD COMMENTS FOR DOCUMENTATION

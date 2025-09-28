@@ -28,6 +28,7 @@ import { LanguageConfiguration } from '@/components/tenants/LanguageConfiguratio
 import { AuthenticationConfigForm } from '@/components/tenants/AuthenticationConfigForm';
 import { CORSConfigForm } from '@/components/tenants/CORSConfigForm';
 import { SecurityConfigForm } from '@/components/tenants/SecurityConfigForm';
+import { ApiKeyInput } from '@/components/tenants/ApiKeyInput';
 
 const PageContainer = styled.div`
   padding: 2rem;
@@ -329,8 +330,11 @@ const TenantConfigPage: React.FC = () => {
     
     try {
       setLoading(true);
+      console.log('🔄 Loading tenant configurations...');
       const tenantService = serviceFactory.get<TenantService>('tenants');
       const summary = await tenantService.getTenantConfigSummary();
+      
+      console.log('📦 Configuration summary:', summary);
       
       // Check if summary is null (happens when session expires)
       if (!summary) {
@@ -417,9 +421,8 @@ const TenantConfigPage: React.FC = () => {
         document_extraction: tenantConfig.document_extraction
       };
       
-      await serviceFactory.get<TenantService>('tenants').createTenantConfiguration({
-        tenant_id: tenant.id,
-        config_type: 'llm',
+      // Use updateTenantConfiguration instead of createTenantConfiguration
+      await serviceFactory.get<TenantService>('tenants').updateTenantConfiguration('llm', {
         config_data: llmConfigs,
       });
       
@@ -454,9 +457,8 @@ const TenantConfigPage: React.FC = () => {
         document_extraction: tenantConfig.document_extraction
       };
       
-      await serviceFactory.get<TenantService>('tenants').createTenantConfiguration({
-        tenant_id: tenant.id,
-        config_type: 'llm',
+      // Use updateTenantConfiguration instead of createTenantConfiguration
+      await serviceFactory.get<TenantService>('tenants').updateTenantConfiguration('llm', {
         config_data: llmConfigs,
       });
       
@@ -675,59 +677,35 @@ const TenantConfigPage: React.FC = () => {
         </ConfigRow>
         
         {tenantConfig?.field_extraction?.provider === 'openai' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input 
-              type="password"
-              value={tenantConfig?.field_extraction?.has_api_key ? "••••••••••••••••••••••••••••••••" : ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                field_extraction: {
-                  ...prev.field_extraction!,
-                  api_key: e.target.value
-                }
-              } : null)}
-              placeholder={tenantConfig?.field_extraction?.has_api_key ? "Key is set (hidden for security)" : "No key set - enter one"}
-              readOnly={!!tenantConfig?.field_extraction?.has_api_key}
-            />
-            {tenantConfig?.field_extraction?.has_api_key ? (
-              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>
-                ✓ API key is configured and hidden for security
-              </div>
-            ) : (
-              <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
-                ⚠️ No API key set - authentication will not work properly
-              </div>
-            )}
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={tenantConfig?.field_extraction?.api_key || ''}
+            hasKey={!!tenantConfig?.field_extraction?.has_api_key}
+            onChange={(value) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              ...prev,
+              field_extraction: {
+                ...prev.field_extraction!,
+                api_key: value,
+                has_api_key: value.length > 0
+              }
+            } : null)}
+          />
         )}
 
         {tenantConfig?.field_extraction?.provider === 'anthropic' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input 
-              type="password"
-              value={tenantConfig?.field_extraction?.has_api_key ? "••••••••••••••••••••••••••••••••" : ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                field_extraction: {
-                  ...prev.field_extraction!,
-                  api_key: e.target.value
-                }
-              } : null)}
-              placeholder={tenantConfig?.field_extraction?.has_api_key ? "Key is set (hidden for security)" : "No key set - enter one"}
-              readOnly={!!tenantConfig?.field_extraction?.has_api_key}
-            />
-            {tenantConfig?.field_extraction?.has_api_key ? (
-              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>
-                ✓ API key is configured and hidden for security
-              </div>
-            ) : (
-              <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
-                ⚠️ No API key set - authentication will not work properly
-              </div>
-            )}
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={tenantConfig?.field_extraction?.api_key || ''}
+            hasKey={!!tenantConfig?.field_extraction?.has_api_key}
+            onChange={(value) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              ...prev,
+              field_extraction: {
+                ...prev.field_extraction!,
+                api_key: value,
+                has_api_key: value.length > 0
+              }
+            } : null)}
+          />
         )}
         
         <ButtonGroup>
@@ -808,59 +786,35 @@ const TenantConfigPage: React.FC = () => {
         </ConfigRow>
         
         {tenantConfig?.document_extraction?.provider === 'openai' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input 
-              type="password"
-              value={tenantConfig?.document_extraction?.has_api_key ? "••••••••••••••••••••••••••••••••" : ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                document_extraction: {
-                  ...prev.document_extraction!,
-                  api_key: e.target.value
-                }
-              } : null)}
-              placeholder={tenantConfig?.document_extraction?.has_api_key ? "Key is set (hidden for security)" : "No key set - enter one"}
-              readOnly={!!tenantConfig?.document_extraction?.has_api_key}
-            />
-            {tenantConfig?.document_extraction?.has_api_key ? (
-              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>
-                ✓ API key is configured and hidden for security
-              </div>
-            ) : (
-              <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
-                ⚠️ No API key set - authentication will not work properly
-              </div>
-            )}
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={tenantConfig?.document_extraction?.api_key || ''}
+            hasKey={!!tenantConfig?.document_extraction?.has_api_key}
+            onChange={(value) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              ...prev,
+              document_extraction: {
+                ...prev.document_extraction!,
+                api_key: value,
+                has_api_key: value.length > 0
+              }
+            } : null)}
+          />
         )}
 
         {tenantConfig?.document_extraction?.provider === 'anthropic' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input 
-              type="password"
-              value={tenantConfig?.document_extraction?.has_api_key ? "••••••••••••••••••••••••••••••••" : ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                document_extraction: {
-                  ...prev.document_extraction!,
-                  api_key: e.target.value
-                }
-              } : null)}
-              placeholder={tenantConfig?.document_extraction?.has_api_key ? "Key is set (hidden for security)" : "No key set - enter one"}
-              readOnly={!!tenantConfig?.document_extraction?.has_api_key}
-            />
-            {tenantConfig?.document_extraction?.has_api_key ? (
-              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '0.25rem' }}>
-                ✓ API key is configured and hidden for security
-              </div>
-            ) : (
-              <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
-                ⚠️ No API key set - authentication will not work properly
-              </div>
-            )}
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={tenantConfig?.document_extraction?.api_key || ''}
+            hasKey={!!tenantConfig?.document_extraction?.has_api_key}
+            onChange={(value) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              ...prev,
+              document_extraction: {
+                ...prev.document_extraction!,
+                api_key: value,
+                has_api_key: value.length > 0
+              }
+            } : null)}
+          />
         )}
         
         <ButtonGroup>

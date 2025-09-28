@@ -10,15 +10,18 @@
 CREATE TABLE template_examples (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
-    document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
-    example_name VARCHAR(255),
-    input_data TEXT, -- Document content or reference
+    name VARCHAR(255) NOT NULL,
+    document_snippet TEXT NOT NULL,
     expected_output JSONB NOT NULL DEFAULT '{}',
-    is_active BOOLEAN DEFAULT true NOT NULL,
-    sort_order INTEGER DEFAULT 0,
-    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    is_validated BOOLEAN DEFAULT false,
+    validation_notes TEXT,
+    source_document_id UUID,
+    created_by_user VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Ensure unique name per template
+    CONSTRAINT unique_template_example_name UNIQUE (template_id, name)
 );
 
 -- ============================================================================
@@ -28,20 +31,20 @@ CREATE TABLE template_examples (
 -- Index for template_id queries (most common)
 CREATE INDEX idx_template_examples_template_id ON template_examples(template_id);
 
--- Index for document_id queries
-CREATE INDEX idx_template_examples_document_id ON template_examples(document_id);
+-- Index for name queries
+CREATE INDEX idx_template_examples_name ON template_examples(name);
 
--- Index for is_active queries
-CREATE INDEX idx_template_examples_is_active ON template_examples(is_active);
+-- Index for validated examples
+CREATE INDEX idx_template_examples_is_validated ON template_examples(is_validated);
 
--- Index for created_by queries
-CREATE INDEX idx_template_examples_created_by ON template_examples(created_by);
+-- Index for source_document_id queries
+CREATE INDEX idx_template_examples_source_document_id ON template_examples(source_document_id);
 
--- Composite index for template + active queries
-CREATE INDEX idx_template_examples_template_active ON template_examples(template_id, is_active);
+-- Index for created_by_user queries
+CREATE INDEX idx_template_examples_created_by_user ON template_examples(created_by_user);
 
--- Index for sort_order queries
-CREATE INDEX idx_template_examples_sort_order ON template_examples(template_id, sort_order);
+-- Composite index for template + name queries (covers the unique constraint)
+CREATE INDEX idx_template_examples_template_name ON template_examples(template_id, name);
 
 -- Index for created_at (sorting)
 CREATE INDEX idx_template_examples_created_at ON template_examples(created_at DESC);
@@ -53,12 +56,13 @@ CREATE INDEX idx_template_examples_created_at ON template_examples(created_at DE
 COMMENT ON TABLE template_examples IS 'Examples for few-shot learning in templates';
 COMMENT ON COLUMN template_examples.id IS 'Primary key for the template example';
 COMMENT ON COLUMN template_examples.template_id IS 'Template this example belongs to';
-COMMENT ON COLUMN template_examples.document_id IS 'Document used as example (if applicable)';
-COMMENT ON COLUMN template_examples.example_name IS 'Name/description of the example';
-COMMENT ON COLUMN template_examples.input_data IS 'Input document content or reference for the example';
+COMMENT ON COLUMN template_examples.name IS 'Name/identifier for this example';
+COMMENT ON COLUMN template_examples.document_snippet IS 'Document content snippet for this example';
 COMMENT ON COLUMN template_examples.expected_output IS 'Expected JSON output for this example';
-COMMENT ON COLUMN template_examples.is_active IS 'Whether this example is active and should be used';
-COMMENT ON COLUMN template_examples.sort_order IS 'Sort order for displaying examples';
-COMMENT ON COLUMN template_examples.created_by IS 'User who created this example';
+COMMENT ON COLUMN template_examples.is_validated IS 'Whether this example has been validated';
+COMMENT ON COLUMN template_examples.validation_notes IS 'Notes about validation results';
+COMMENT ON COLUMN template_examples.source_document_id IS 'Source document ID this example is based on';
+COMMENT ON COLUMN template_examples.created_by_user IS 'User who created this example';
 COMMENT ON COLUMN template_examples.created_at IS 'When the example was created (UTC timestamp)';
 COMMENT ON COLUMN template_examples.updated_at IS 'When the example was last updated (UTC timestamp)';
+COMMENT ON CONSTRAINT unique_template_example_name ON template_examples IS 'Ensures unique example names per template';

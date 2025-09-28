@@ -97,6 +97,9 @@ export class DocumentService extends BaseApiClient {
     });
 
     // Fetch the full document object using the document_id from upload response
+    if (!uploadResponse || !uploadResponse.document_id) {
+      throw new Error('Upload failed: No document ID returned from server');
+    }
     return this.getDocument(uploadResponse.document_id);
   }
 
@@ -135,7 +138,7 @@ export class DocumentService extends BaseApiClient {
   // Document Content and Preview
   async getDocumentContent(documentId: string): Promise<DocumentContent | null> {
     try {
-      return await this.get<DocumentContent>(`/api/documents/${documentId}/content`);
+      return await this.get<DocumentContent>(`/api/documents/content/${documentId}`);
     } catch (error: any) {
       // Handle 404 gracefully - document content might not exist yet
       if (error instanceof NotFoundError || error?.response?.status === 404 || error?.name === 'NotFoundError') {

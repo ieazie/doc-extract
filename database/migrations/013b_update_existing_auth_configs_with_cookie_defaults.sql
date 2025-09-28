@@ -3,41 +3,48 @@
 -- that may not have these fields set, ensuring backward compatibility
 
 -- Update existing auth configurations that don't have cookie settings
-UPDATE tenant_configurations 
-SET config_data = jsonb_set(
+-- Only set missing keys to preserve existing tenant custom values (prevents data loss)
+UPDATE tenant_configurations
+SET config_data =
+  jsonb_set(
     jsonb_set(
+      jsonb_set(
         jsonb_set(
-            jsonb_set(
-                jsonb_set(
-                    config_data,
-                    '{refresh_cookie_httponly}',
-                    'true'::jsonb
-                ),
-                '{refresh_cookie_secure}',
-                CASE 
-                    WHEN config_data->>'environment' = 'production' THEN 'true'::jsonb
-                    ELSE 'false'::jsonb
-                END
-            ),
-            '{refresh_cookie_samesite}',
-            CASE 
-                WHEN config_data->>'environment' = 'production' THEN '"strict"'::jsonb
-                ELSE '"lax"'::jsonb
-            END
+          jsonb_set(
+            config_data,
+            '{refresh_cookie_httponly}',
+            COALESCE(config_data->'refresh_cookie_httponly', 'true'::jsonb),
+            true
+          ),
+          '{refresh_cookie_secure}',
+          COALESCE(
+            config_data->'refresh_cookie_secure',
+            CASE WHEN config_data->>'environment' = 'production' THEN 'true'::jsonb ELSE 'false'::jsonb END
+          ),
+          true
         ),
-        '{refresh_cookie_path}',
-        '"/api/auth/refresh"'::jsonb
+        '{refresh_cookie_samesite}',
+        COALESCE(
+          config_data->'refresh_cookie_samesite',
+          CASE WHEN config_data->>'environment' = 'production' THEN '"strict"'::jsonb ELSE '"lax"'::jsonb END
+        ),
+        true
+      ),
+      '{refresh_cookie_path}',
+      COALESCE(config_data->'refresh_cookie_path', '"/api/auth/refresh"'::jsonb),
+      true
     ),
     '{refresh_cookie_domain}',
-    'null'::jsonb
-)
-WHERE config_type = 'auth' 
+    COALESCE(config_data->'refresh_cookie_domain', 'null'::jsonb),
+    true
+  )
+WHERE config_type = 'auth'
   AND (
-    config_data ? 'refresh_cookie_httponly' = false 
-    OR config_data ? 'refresh_cookie_secure' = false 
-    OR config_data ? 'refresh_cookie_samesite' = false 
-    OR config_data ? 'refresh_cookie_path' = false 
-    OR config_data ? 'refresh_cookie_domain' = false
+    NOT (config_data ? 'refresh_cookie_httponly') OR
+    NOT (config_data ? 'refresh_cookie_secure') OR
+    NOT (config_data ? 'refresh_cookie_samesite') OR
+    NOT (config_data ? 'refresh_cookie_path') OR
+    NOT (config_data ? 'refresh_cookie_domain')
   );
 
 -- Add comment for documentation

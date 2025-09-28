@@ -151,10 +151,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        console.log('🔄 Initializing auth context...');
         // Restore user/tenant data from localStorage and access token from sessionStorage
         const storedUser = localStorage.getItem('auth_user');
         const storedTenant = localStorage.getItem('auth_tenant');
         const storedAccessToken = getStoredAccessToken();
+
+        console.log('📦 Stored data check:', { 
+          hasStoredUser: !!storedUser, 
+          hasStoredTenant: !!storedTenant, 
+          hasStoredAccessToken: !!storedAccessToken 
+        });
 
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
@@ -171,11 +178,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             if (parsedUser && parsedUser.tenant_id) {
               serviceFactory.setTenantId(parsedUser.tenant_id);
             }
+            
+            // Load tenant data if we have a tenant_id but no tenant data
+            if (parsedUser?.tenant_id && !parsedTenant) {
+              console.log('🔄 Loading tenant data for user...');
+              try {
+                const authService = serviceFactory.get<AuthService>('auth');
+                const tenantData = await authService.getCurrentTenant();
+                if (tenantData) {
+                  setTenant(tenantData);
+                  localStorage.setItem('auth_tenant', JSON.stringify(tenantData));
+                  console.log('✅ Tenant data loaded:', tenantData.name);
+                }
+              } catch (error) {
+                console.warn('⚠️ Failed to load tenant data:', error);
+              }
+            }
           } else {
             // No stored access token, try to refresh silently
+            console.log('🔄 No stored access token, attempting silent refresh...');
             const authService = serviceFactory.get<AuthService>('auth');
             const refreshResult = await authService.silentRefreshToken();
             
+            console.log('🔄 Silent refresh result:', !!refreshResult);
             if (refreshResult) {
               // Valid refresh token - set user data and access token
               setUser(refreshResult.user || parsedUser);
@@ -204,8 +229,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         } else {
           // No stored user – still attempt silent refresh (cookie-based)
+          console.log('🔄 No stored user, attempting cookie-based silent refresh...');
           const authService = serviceFactory.get<AuthService>('auth');
           const refreshResult = await authService.silentRefreshToken();
+          console.log('🔄 Cookie-based refresh result:', !!refreshResult);
           if (refreshResult) {
             setUser(refreshResult.user || null);
             setTenant(null);
@@ -224,6 +251,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.error('Error initializing auth:', error);
         clearAuthData();
       } finally {
+        console.log('✅ Auth initialization complete, setting isLoading to false');
         setIsLoading(false);
       }
     };
@@ -258,12 +286,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const login = async (credentials: LoginCredentials) => {
+  const login = async (credentials: LoginCredentials): Promise<void> => {
     try {
       setIsLoading(true);
       
       const authService = serviceFactory.get<AuthService>('auth');
       const response = await authService.login(credentials);
+      
+      // Check if response is null (401 error handled by global interceptor)
+      if (!response || !response.access_token) {
+        throw new Error('Invalid email or password. Please check your credentials and try again.');
+      }
       
       // Set the auth token in memory and sessionStorage
       setAccessToken(response.access_token);
@@ -304,9 +337,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Redirect to dashboard after successful login using Next.js router
       await router.push('/');
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login failed:', error);
-      throw error;
+      
+      // Extract error message from Axios error response
+      let errorMessage = 'Login failed. Please check your credentials and try again.';
+      
+      if (error?.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
     }
