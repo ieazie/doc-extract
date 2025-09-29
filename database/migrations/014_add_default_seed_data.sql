@@ -7,6 +7,7 @@
 -- ============================================================================
 
 -- Insert default document types for the default tenant
+-- NOTE: This UUID is centralized in backend/src/constants/tenant.py as DEFAULT_TENANT_ID
 INSERT INTO document_types (tenant_id, name, description, schema_template) VALUES 
 ('00000000-0000-0000-0000-000000000001', 'invoice', 'Invoice documents for billing and payment processing', '{}'),
 ('00000000-0000-0000-0000-000000000001', 'contract', 'Legal contracts and agreements', '{}'),

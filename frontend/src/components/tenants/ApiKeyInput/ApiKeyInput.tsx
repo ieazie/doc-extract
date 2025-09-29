@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { 
   FormGroup,
   Label,
@@ -23,15 +23,17 @@ export const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   onChange,
   placeholder
 }) => {
+  const inputId = useId();
   const defaultPlaceholder = hasKey 
     ? "Enter new API key to rotate" 
     : "No key set - enter one";
 
   return (
     <FormGroup>
-      <Label>{label}</Label>
+      <Label htmlFor={inputId}>{label}</Label>
       <InputContainer>
         <Input
+          id={inputId}
           type="password"
           value={value}
           onChange={(e) => onChange(e.target.value)}

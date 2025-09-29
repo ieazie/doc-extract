@@ -232,7 +232,20 @@ class OpenAIProvider(LLMProvider):
         
         # Add the actual document
         # Use different prompts based on model capabilities
-        if self.model in ["gpt-4-turbo", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo-1106"]:
+        # Check for JSON-capable models (same logic as above)
+        JSON_MODELS = {
+            "gpt-4o-2024-08-06", 
+            "gpt-4o-mini-2024-07-18",
+            "gpt-4o",  # Latest gpt-4o model
+            "gpt-4o-mini",  # Latest gpt-4o-mini model
+            "gpt-4-turbo"  # Community reports support
+        }
+        
+        if (self.model in JSON_MODELS or 
+            self.model.startswith("gpt-4o-2024-08-06") or 
+            self.model.startswith("gpt-4o-mini-2024-07-18") or
+            self.model.startswith("gpt-4o:") or
+            self.model.startswith("gpt-4o-mini:")):
             # Newer models support structured output
             user_message = f"""Extract structured data from the following document according to this schema: {json.dumps(schema, indent=2)}
 
@@ -260,12 +273,28 @@ IMPORTANT: Respond with ONLY valid JSON. Do not include any text before or after
                 "temperature": self.temperature
             }
             
-            # Only use response_format for models that support it
-            # Older models like gpt-4 don't support json_object response format
-            if self.model in ["gpt-4-turbo", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo-1106"]:
-                request_params["response_format"] = {"type": "json_object"}
+            # Only use response_format for models that officially support it
+            # Based on OpenAI Structured Outputs documentation:
+            # - gpt-4o-2024-08-06 and gpt-4o-mini-2024-07-18 officially support JSON mode
+            # - Fine-tuned variants of these models also support it
+            JSON_MODELS = {
+                "gpt-4o-2024-08-06", 
+                "gpt-4o-mini-2024-07-18",
+                # Include fine-tuned variants (common naming patterns)
+                "gpt-4o",  # Latest gpt-4o model
+                "gpt-4o-mini",  # Latest gpt-4o-mini model
+                "gpt-4-turbo"  # Community reports support
+            }
             
-            response = await self.client.chat.completions.create(**request_params)
+            # Check for exact match or fine-tuned variants
+            if (self.model in JSON_MODELS or 
+                self.model.startswith("gpt-4o-2024-08-06") or 
+                self.model.startswith("gpt-4o-mini-2024-07-18") or
+                self.model.startswith("gpt-4o:") or  # Fine-tune naming pattern
+                self.model.startswith("gpt-4o-mini:")):  # Fine-tune naming pattern
+                request_params["response_format"] = {"type": "json_object"}
+
+            response = await self.client.chat.completions.create(timeout=60.0, **request_params)
             
             content = response.choices[0].message.content
             try:

@@ -44,5 +44,6 @@ COMMENT ON COLUMN tenants.created_at IS 'When the tenant was created (UTC timest
 COMMENT ON COLUMN tenants.updated_at IS 'When the tenant was last updated (UTC timestamp)';
 
 -- Insert default tenant for system administration
+-- NOTE: This UUID is centralized in backend/src/constants/tenant.py as DEFAULT_TENANT_ID
 INSERT INTO tenants (id, name, status, environment) VALUES 
 ('00000000-0000-0000-0000-000000000001', 'Default Tenant', 'active', 'development');

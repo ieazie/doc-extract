@@ -9,7 +9,13 @@
 -- Add results column (renamed from extracted_data concept)
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'extractions' AND column_name = 'results') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'results'
+    ) THEN
         ALTER TABLE extractions ADD COLUMN results JSONB;
         -- Copy data from extracted_data if it exists
         UPDATE extractions SET results = extracted_data WHERE extracted_data IS NOT NULL;
@@ -19,7 +25,13 @@ END $$;
 -- Add confidence_scores column (plural version)
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'extractions' AND column_name = 'confidence_scores') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'confidence_scores'
+    ) THEN
         ALTER TABLE extractions ADD COLUMN confidence_scores JSONB;
         -- Copy data from confidence_score if it exists
         UPDATE extractions SET confidence_scores = jsonb_build_object('overall', confidence_score) WHERE confidence_score IS NOT NULL;
@@ -29,7 +41,13 @@ END $$;
 -- Add processing_time column (milliseconds, renamed from processing_time_seconds)
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'extractions' AND column_name = 'processing_time') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'processing_time'
+    ) THEN
         ALTER TABLE extractions ADD COLUMN processing_time INTEGER;
         -- Convert seconds to milliseconds if processing_time_seconds exists
         UPDATE extractions SET processing_time = processing_time_seconds * 1000 WHERE processing_time_seconds IS NOT NULL;
@@ -39,42 +57,92 @@ END $$;
 -- Add review workflow columns
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'extractions' AND column_name = 'reviewed_by') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'reviewed_by'
+    ) THEN
         ALTER TABLE extractions ADD COLUMN reviewed_by VARCHAR(100);
     END IF;
 END $$;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'extractions' AND column_name = 'reviewed_at') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'reviewed_at'
+    ) THEN
         ALTER TABLE extractions ADD COLUMN reviewed_at TIMESTAMP WITH TIME ZONE;
     END IF;
 END $$;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'extractions' AND column_name = 'review_status') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'review_status'
+    ) THEN
         ALTER TABLE extractions ADD COLUMN review_status VARCHAR(50) DEFAULT 'pending';
+    END IF;
+END $$;
+
+-- Backfill and enforce NOT NULL on review_status
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'review_status'
+    ) THEN
+        UPDATE extractions SET review_status = 'pending' WHERE review_status IS NULL;
+        ALTER TABLE extractions ALTER COLUMN review_status SET NOT NULL;
     END IF;
 END $$;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'extractions' AND column_name = 'assigned_reviewer') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'assigned_reviewer'
+    ) THEN
         ALTER TABLE extractions ADD COLUMN assigned_reviewer VARCHAR(100);
     END IF;
 END $$;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'extractions' AND column_name = 'review_comments') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'review_comments'
+    ) THEN
         ALTER TABLE extractions ADD COLUMN review_comments TEXT;
     END IF;
 END $$;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'extractions' AND column_name = 'review_completed_at') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'extractions'
+          AND table_schema = current_schema()
+          AND column_name = 'review_completed_at'
+    ) THEN
         ALTER TABLE extractions ADD COLUMN review_completed_at TIMESTAMP WITH TIME ZONE;
     END IF;
 END $$;
@@ -86,7 +154,13 @@ END $$;
 -- Add check constraint for review_status
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'extractions_review_status_check') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_namespace n ON n.oid = c.connamespace
+        WHERE c.conname = 'extractions_review_status_check'
+          AND n.nspname = current_schema()
+    ) THEN
         ALTER TABLE extractions ADD CONSTRAINT extractions_review_status_check CHECK (review_status IN ('pending', 'in_review', 'approved', 'rejected', 'needs_correction'));
     END IF;
 END $$;

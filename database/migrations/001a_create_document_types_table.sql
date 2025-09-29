@@ -29,8 +29,8 @@ CREATE INDEX idx_document_types_tenant_id ON document_types(tenant_id);
 -- Index for name queries
 CREATE INDEX idx_document_types_name ON document_types(name);
 
--- Composite index for tenant + name queries (covers the unique constraint)
-CREATE INDEX idx_document_types_tenant_name ON document_types(tenant_id, name);
+-- Note: UNIQUE constraint on (tenant_id, name) already creates a btree index
+-- No need for explicit idx_document_types_tenant_name index
 
 -- ============================================================================
 -- ADD COMMENTS FOR DOCUMENTATION

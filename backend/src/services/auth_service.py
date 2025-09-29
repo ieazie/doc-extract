@@ -154,9 +154,10 @@ class AuthService:
         if not tenant:
             # Create default tenant if it doesn't exist
             from ..config import settings
+            from ..constants.tenant import DEFAULT_TENANT_ID, DEFAULT_TENANT_NAME
             tenant = Tenant(
-                id=UUID("00000000-0000-0000-0000-000000000001"),
-                name="Default Tenant",
+                id=DEFAULT_TENANT_ID,
+                name=DEFAULT_TENANT_NAME,
                 settings={"max_documents": 1000, "max_templates": 50},
                 status=TenantStatus.ACTIVE,
                 environment=settings.default_environment

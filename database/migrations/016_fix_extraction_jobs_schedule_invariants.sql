@@ -7,6 +7,7 @@
 -- ============================================================================
 
 -- Add comprehensive CHECK constraint to enforce schedule_type invariants
+-- Use NOT VALID to allow constraint creation even if existing data violates it
 ALTER TABLE extraction_jobs 
 ADD CONSTRAINT extraction_jobs_schedule_invariants_check
 CHECK (
@@ -23,7 +24,8 @@ CHECK (
      AND schedule_config ? 'cron'  -- Ensure cron key exists in schedule_config
      AND jsonb_typeof(schedule_config->'cron') = 'string'  -- Ensure cron is a string
     )
-);
+)
+NOT VALID;
 
 -- ============================================================================
 -- VALIDATE EXISTING DATA
@@ -147,6 +149,14 @@ BEGIN
         RAISE NOTICE 'All existing records are valid. No fixes needed.';
     END IF;
 END $$;
+
+-- ============================================================================
+-- VALIDATE CONSTRAINT AFTER DATA IS CLEAN
+-- ============================================================================
+
+-- Validate the constraint now that all data has been cleaned up
+ALTER TABLE extraction_jobs
+VALIDATE CONSTRAINT extraction_jobs_schedule_invariants_check;
 
 -- ============================================================================
 -- ADD COMMENTS FOR DOCUMENTATION

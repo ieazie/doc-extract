@@ -34,34 +34,22 @@ def get_migration_files() -> List[Tuple[str, str]]:
         logger.error(f"Migrations directory not found: {migrations_dir}")
         sys.exit(1)
     
-    # Get all SQL files and sort them by their numeric prefix
+    # Collect files and sort by (numeric prefix, letter suffix)
     migration_files = []
     for file_path in migrations_dir.glob("*.sql"):
         filename = file_path.name
-        
-        # Extract numeric prefix for sorting
-        parts = filename.split('_', 1)
-        if parts[0].isdigit():
-            migration_num = int(parts[0])
-            migration_files.append((migration_num, filename, str(file_path)))
-        else:
-            # Handle files like "001a_", "001b_" etc.
-            num_part = ''.join(filter(str.isdigit, parts[0]))
-            alpha_part = ''.join(filter(str.isalpha, parts[0]))
-            if num_part:
-                migration_num = int(num_part)
-                if alpha_part:
-                    migration_num += ord(alpha_part.lower()) * 0.01  # Handle a, b, c suffixes
-                migration_files.append((migration_num, filename, str(file_path)))
-    
-    # Sort by migration number
-    migration_files.sort(key=lambda x: x[0])
-    
+        prefix = file_path.stem.split('_', 1)[0]
+        num_part = ''.join(filter(str.isdigit, prefix)) or "0"
+        alpha_part = ''.join(filter(str.isalpha, prefix)).lower()
+        migration_files.append((int(num_part), alpha_part, filename, str(file_path)))
+
+    # Sort by tuple (number, suffix)
+    migration_files.sort(key=lambda x: (x[0], x[1]))
+
     logger.info(f"Found {len(migration_files)} migration files:")
-    for num, filename, path in migration_files:
-        logger.info(f"  {num:6.2f}: {filename}")
-    
-    return [(filename, path) for _, filename, path in migration_files]
+    for num, _, filename, path in migration_files:
+        logger.info(f"  {num:04d}: {filename}")
+    return [(filename, path) for _, _, filename, path in migration_files]
 
 def wait_for_database(max_retries: int = 30, delay: int = 2) -> bool:
     """
@@ -153,7 +141,9 @@ def mark_migration_applied(database_url: str, filename: str) -> bool:
     """
     Mark a migration as applied in the tracking table.
     """
-    insert_sql = f"INSERT INTO schema_migrations (filename) VALUES ('{filename}');"
+    # Escape single quotes to prevent SQL injection via crafted filenames
+    safe_filename = filename.replace("'", "''")
+    insert_sql = f"INSERT INTO schema_migrations (filename) VALUES ('{safe_filename}');"
     
     try:
         result = subprocess.run([

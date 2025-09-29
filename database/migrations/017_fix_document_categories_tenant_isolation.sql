@@ -6,8 +6,56 @@
 -- FIX DOCUMENT_CATEGORIES TENANT ISOLATION
 -- ============================================================================
 
+-- Pre-check: will backfill create duplicates when collapsing NULLs into the fallback tenant?
+DO $$
+DECLARE
+  dup_cnt INT;
+BEGIN
+  SELECT COUNT(*) INTO dup_cnt
+  FROM (
+    SELECT name, COUNT(*) 
+    FROM document_categories
+    WHERE tenant_id IS NULL
+    GROUP BY name
+    HAVING COUNT(*) > 1
+  ) s;
+  IF dup_cnt > 0 THEN
+    RAISE EXCEPTION 'Backfill would create % duplicate (tenant_id, name) rows. Resolve or de-duplicate before migration.', dup_cnt;
+  END IF;
+END $$;
+
 -- First, ensure all existing categories have a tenant_id
--- Update any NULL tenant_id records to use the default tenant
+-- Guard: ensure the chosen fallback tenant exists to avoid FK violations.
+DO $$
+DECLARE
+  fallback_tenant CONSTANT uuid := '00000000-0000-0000-0000-000000000001';
+  exists_fk boolean;
+  null_count INTEGER;
+BEGIN
+  -- Check if any NULL tenant_id records exist
+  SELECT COUNT(*) INTO null_count 
+  FROM document_categories 
+  WHERE tenant_id IS NULL;
+  
+  IF null_count > 0 THEN
+    RAISE NOTICE 'Found % categories with NULL tenant_id. Checking fallback tenant...', null_count;
+    
+    -- Verify the fallback tenant exists in the tenants table
+    SELECT EXISTS(SELECT 1 FROM tenants WHERE id = fallback_tenant) INTO exists_fk;
+    IF NOT exists_fk THEN
+      RAISE EXCEPTION 'Fallback tenant % does not exist in tenants table. Create it or pick a valid tenant before backfill.', fallback_tenant;
+    END IF;
+    
+    RAISE NOTICE 'Fallback tenant % exists. Proceeding with backfill...', fallback_tenant;
+  ELSE
+    RAISE NOTICE 'No NULL tenant_id records found. Skipping backfill.';
+  END IF;
+END $$;
+
+-- (Optional but recommended) take a lock to avoid concurrent inserts with NULLs during migration.
+LOCK TABLE document_categories IN SHARE ROW EXCLUSIVE MODE;
+
+-- Update any NULL tenant_id records to use the default tenant (only if NULLs exist)
 UPDATE document_categories 
 SET tenant_id = '00000000-0000-0000-0000-000000000001'
 WHERE tenant_id IS NULL;
@@ -52,7 +100,7 @@ BEGIN
     ) duplicates;
     
     IF duplicate_count > 0 THEN
-        RAISE WARNING 'Found % duplicate (tenant_id, name) combinations:', duplicate_count;
+        RAISE EXCEPTION 'Found % duplicate (tenant_id, name) combinations. Resolve before proceeding.', duplicate_count;
         
         -- Show details of duplicates
         FOR duplicate_records IN
@@ -68,7 +116,8 @@ BEGIN
                 duplicate_records.count;
         END LOOP;
         
-        RAISE WARNING 'The UNIQUE constraint may fail due to existing duplicates.';
+        -- Fail migration rather than proceed with broken state.
+        -- If you intentionally allow duplicates, downgrade to WARNING and handle later.
     ELSE
         RAISE NOTICE 'No duplicate (tenant_id, name) combinations found. Unique constraint is intact.';
     END IF;

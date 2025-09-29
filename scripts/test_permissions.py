@@ -10,7 +10,8 @@ from uuid import UUID
 
 # Configuration
 BASE_URL = "http://localhost:8000"
-TEST_TENANT_ID = "00000000-0000-0000-0000-000000000001"
+# Use the default tenant ID from constants
+TEST_TENANT_ID = "00000000-0000-0000-0000-000000000001"  # TODO: Import from backend constants
 
 def login_user(email, password):
     """Login and get access token"""

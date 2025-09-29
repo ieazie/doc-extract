@@ -916,7 +916,7 @@ class TenantAuthService(AuthService):
     def create_refresh_token(self, db: Session, user_id: UUID, family_id: Optional[UUID] = None) -> str:
         """Override base method to use tenant-specific configuration"""
         # Get user to find their tenant
-        user = self.get_user_by_id(db, user_id)
+        user = self.get_user_by_id(user_id)
         if user and user.tenant_id:
             return self.create_tenant_refresh_token(user_id, user.tenant_id, family_id=family_id)
         else:

@@ -34,17 +34,41 @@ UPDATE documents
 SET s3_key = stored_filename 
 WHERE s3_key IS NULL AND stored_filename IS NOT NULL;
 
+-- Fail early if duplicates would violate uniqueness
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT s3_key
+    FROM documents
+    WHERE s3_key IS NOT NULL
+    GROUP BY s3_key
+    HAVING COUNT(*) > 1
+  ) THEN
+    RAISE EXCEPTION 'Duplicate s3_key values detected; dedupe before adding UNIQUE constraint';
+  END IF;
+END $$;
+
 -- ============================================================================
 -- ADD CONSTRAINTS AND INDEXES
 -- ============================================================================
 
--- Add unique constraint on s3_key (if not exists)
+-- Replace single-column UNIQUE on s3_key with a tenant-scoped UNIQUE
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'documents_s3_key_unique') THEN
-        ALTER TABLE documents ADD CONSTRAINT documents_s3_key_unique UNIQUE (s3_key);
+    -- Drop existing constraint if it exists
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'documents_s3_key_unique') THEN
+        ALTER TABLE documents DROP CONSTRAINT documents_s3_key_unique;
+    END IF;
+    
+    -- Add tenant-scoped unique constraint
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'documents_tenant_s3_key_unique') THEN
+        ALTER TABLE documents ADD CONSTRAINT documents_tenant_s3_key_unique UNIQUE (tenant_id, s3_key);
     END IF;
 END $$;
+
+-- Optional (staged): enforce presence after backfill
+ALTER TABLE documents
+  ALTER COLUMN s3_key SET NOT NULL;
 
 -- Add check constraint for status column (if not exists)
 DO $$

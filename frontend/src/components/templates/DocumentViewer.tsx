@@ -80,22 +80,18 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
     setError(null);
 
     try {
-      console.log('Loading document:', document.original_filename);
-      console.log('Document object:', document);
-      console.log('Document file:', document.file);
-      console.log('Document mime_type:', document.mime_type);
-
       const arrayBuffer = await document.file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      
-      console.log('PDF loaded successfully, pages:', pdf.numPages);
-      
+
+      // Destroy previous to free workers/streams
+      pdfDocument?.destroy?.();
       setPdfDocument(pdf);
       setTotalPages(pdf.numPages);
-      setIsLoading(false);
+      setCurrentPage(1);
     } catch (err) {
       console.error('Error loading PDF:', err);
       setError('Failed to load PDF document');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -209,7 +205,10 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
         
         // Get canvas context
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (!ctx) {
+          isRenderingRef.current = false;
+          return;
+        }
         
         // Reset transform and set scale
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -250,14 +249,23 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
     renderCurrentPage();
   }, [currentPage, zoom, pdfDocument, renderKey]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount and document change
   useEffect(() => {
     return () => {
-      if (renderTaskRef.current) {
-        renderTaskRef.current.cancel();
+      try { 
+        renderTaskRef.current?.cancel?.(); 
+      } catch (e) {
+        // Ignore cancellation errors
+      }
+      renderTaskRef.current = null;
+      isRenderingRef.current = false;
+      try { 
+        pdfDocument?.destroy?.(); 
+      } catch (e) {
+        // Ignore destruction errors
       }
     };
-  }, []);
+  }, [pdfDocument]);
 
   return (
     <ViewerContainer>

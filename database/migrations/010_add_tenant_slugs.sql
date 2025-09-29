@@ -45,12 +45,12 @@ WHERE slug IS NULL OR length(slug) < 3;
 -- Resolve duplicates deterministically
 WITH dups AS (
   SELECT id,
-         ROW_NUMBER() OVER (PARTITION BY slug ORDER BY created_at, id) AS rn
+         ROW_NUMBER() OVER (PARTITION BY slug ORDER BY id) AS rn
   FROM tenants
   WHERE slug IS NOT NULL
 )
 UPDATE tenants t
-SET slug = t.slug || '-' || substring(t.id::text, 1, 8)
+SET slug = left(t.slug, 100 - 1 - 8) || '-' || substring(t.id::text, 1, 8)
 FROM dups d
 WHERE t.id = d.id AND d.rn > 1;
 
@@ -113,56 +113,11 @@ ALTER TABLE tenants
   ALTER COLUMN slug SET NOT NULL;
 
 -- ============================================================================
--- VERIFY CONSTRAINTS WORK
+-- CONSTRAINT VERIFICATION
 -- ============================================================================
 
--- Test that constraints work by trying to insert invalid data
-DO $$
-BEGIN
-    RAISE NOTICE 'Testing constraints...';
-    
-    -- This should fail due to format constraint
-    BEGIN
-        INSERT INTO tenants (id, name, slug, status, environment) 
-        VALUES (gen_random_uuid(), 'Test Tenant', 'Invalid Slug!', 'ACTIVE', 'development');
-        RAISE EXCEPTION '❌ Format constraint failed - invalid slug was accepted';
-    EXCEPTION 
-        WHEN check_violation THEN
-            RAISE NOTICE '✅ Format constraint working - invalid slug rejected';
-    END;
-    
-    -- This should fail due to length constraint
-    BEGIN
-        INSERT INTO tenants (id, name, slug, status, environment) 
-        VALUES (gen_random_uuid(), 'Test Tenant', 'ab', 'ACTIVE', 'development');
-        RAISE EXCEPTION '❌ Length constraint failed - too short slug was accepted';
-    EXCEPTION 
-        WHEN check_violation THEN
-            RAISE NOTICE '✅ Length constraint working - too short slug rejected';
-    END;
-    
-    -- This should fail due to unique constraint
-    BEGIN
-        INSERT INTO tenants (id, name, slug, status, environment) 
-        VALUES (gen_random_uuid(), 'Test Tenant', (SELECT slug FROM tenants LIMIT 1), 'active', 'development');
-        RAISE EXCEPTION '❌ Unique constraint failed - duplicate slug was accepted';
-    EXCEPTION 
-        WHEN unique_violation THEN
-            RAISE NOTICE '✅ Unique constraint working - duplicate slug rejected';
-    END;
-    
-    -- This should fail due to NOT NULL constraint
-    BEGIN
-        INSERT INTO tenants (id, name, slug, status, environment) 
-        VALUES (gen_random_uuid(), 'Test Tenant', NULL, 'active', 'development');
-        RAISE EXCEPTION '❌ NOT NULL constraint failed - NULL slug was accepted';
-    EXCEPTION 
-        WHEN not_null_violation THEN
-            RAISE NOTICE '✅ NOT NULL constraint working - NULL slug rejected';
-    END;
-    
-    RAISE NOTICE '✅ All constraints are working correctly';
-END $$;
+-- Intentionally omit DML-based tests to keep migration deterministic and decoupled from other table constraints/extensions.
+-- Constraint validation should be performed in separate test suites or CI jobs, not in migrations.
 
 -- ============================================================================
 -- CLEANUP
@@ -190,7 +145,7 @@ BEGIN
       AND length(slug) >= 3 
       AND length(slug) <= 100;
     
-    SELECT string_agg(slug, ', ' ORDER BY created_at) INTO sample_slugs
+    SELECT string_agg(slug, ', ' ORDER BY id) INTO sample_slugs
     FROM tenants;
     
     RAISE NOTICE 'Final tenant slugs summary:';

@@ -70,7 +70,8 @@ class AIService:
         for attempt in range(max_retries):
             try:
                 # Get tenant's LLM configuration with API keys from secrets
-                llm_config = self.infrastructure_service.get_llm_config(tenant_id, "development")
+                env = getattr(settings, "default_environment", "development")
+                llm_config = self.infrastructure_service.get_llm_config(tenant_id, env)
                 if not llm_config:
                     # Fallback to global settings if no tenant config
                     logger.warning(f"No LLM configuration found for tenant {tenant_id}, using fallback")

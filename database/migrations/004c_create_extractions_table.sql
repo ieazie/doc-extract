@@ -51,8 +51,8 @@ CREATE INDEX idx_extractions_created_by ON extractions(created_by);
 -- Composite index for tenant + status queries
 CREATE INDEX idx_extractions_tenant_status ON extractions(tenant_id, status);
 
--- Composite index for document + template queries
-CREATE INDEX idx_extractions_document_template ON extractions(document_id, template_id);
+-- Note: UNIQUE constraint on (document_id, template_id) already creates a btree index
+-- No need for explicit idx_extractions_document_template index
 
 -- Index for confidence score (quality filtering)
 CREATE INDEX idx_extractions_confidence_score ON extractions(confidence_score);

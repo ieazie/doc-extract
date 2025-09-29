@@ -107,7 +107,8 @@ CREATE INDEX idx_document_extraction_tracking_triggered_by ON document_extractio
 
 -- Composite indexes for common queries
 CREATE INDEX idx_document_extraction_tracking_job_status ON document_extraction_tracking(job_id, status);
-CREATE INDEX idx_document_extraction_tracking_document_job ON document_extraction_tracking(document_id, job_id);
+-- Note: UNIQUE constraint on (document_id, job_id) already creates a btree index
+-- No need for explicit idx_document_extraction_tracking_document_job index
 CREATE INDEX idx_document_extraction_tracking_created_at ON document_extraction_tracking(created_at DESC);
 
 -- ============================================================================

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import styled from 'styled-components';
+import { DEFAULT_TENANT_ID, DEFAULT_TENANT_NAME } from '../constants/tenant';
 import { 
   Users, 
   Plus, 
@@ -619,7 +620,7 @@ const UsersPage: React.FC = () => {
                     <Select id="tenant_id" name="tenant_id" required>
                       <option value="">Select Tenant</option>
                       {/* TODO: Fetch tenants from API */}
-                      <option value="00000000-0000-0000-0000-000000000001">Default Tenant</option>
+                      <option value={DEFAULT_TENANT_ID}>{DEFAULT_TENANT_NAME}</option>
                     </Select>
                   </FormGroup>
                 )}

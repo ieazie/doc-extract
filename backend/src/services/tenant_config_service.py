@@ -116,17 +116,15 @@ class TenantConfigService:
         config_data: Dict[str, Any]
     ) -> TenantConfigurationResponse:
         """Create or update configuration for specific environment"""
-        # For now, we'll store environment as part of config_data
-        # In the future, we might want to add environment as a separate column
-        env_config_data = {
-            **config_data,
-            "environment": environment
-        }
+        # Defensively remove environment from config_data if it exists
+        # to ensure Pydantic validation doesn't fail
+        clean_config_data = config_data.copy()
+        clean_config_data.pop("environment", None)
         
         return self.create_or_update_config(
             tenant_id=tenant_id,
             config_type=config_type,
-            config_data=env_config_data,
+            config_data=clean_config_data,
             is_active=True,
             environment=environment
         )

@@ -9,6 +9,7 @@ from typing import Optional
 from uuid import UUID
 from fastapi import Request, HTTPException, status
 from jose import jwt
+from jose.exceptions import JWTError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class TenantIdentifier:
                     tenant_id = UUID(tenant_id_str)
                     logger.debug(f"Tenant ID extracted from JWT token: {tenant_id}")
                     return tenant_id, "jwt"
-            except (jwt.JWTError, ValueError, TypeError) as e:
+            except (JWTError, ValueError, TypeError) as e:
                 logger.warning(f"Failed to extract tenant ID from JWT token: {e}")
         
         # Method 3: Subdomain detection

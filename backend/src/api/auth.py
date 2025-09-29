@@ -283,21 +283,19 @@ async def login_user(
         environment = tenant_context.get('environment', 'development')
         
         # Guard against missing tenant_id before minting tenant-scoped tokens
-        # System admins are allowed to login without tenant context
-        if tenant_id is None and user.role != 'system_admin':
+        if tenant_id is None:
             logger.warning("Login attempted without tenant context for user %s", user.id)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Tenant context is required to complete login",
             )
         
-        # Create access token using tenant-specific configuration
-        # For system admins without tenant, use default tenant for token creation
-        token_tenant_id = tenant_id if tenant_id else '00000000-0000-0000-0000-000000000001'
-        token_environment = environment if tenant_id else 'development'
+        # Create tokens using tenant-specific configuration
+        token_tenant_id = tenant_id
+        token_environment = environment
         
         access_token = tenant_auth_service.create_tenant_access_token(
-            data={"sub": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id) if user.tenant_id else None},
+            data={"sub": str(user.id), "email": user.email, "tenant_id": str(token_tenant_id)},
             tenant_id=token_tenant_id,
             environment=token_environment
         )
@@ -960,14 +958,16 @@ async def delete_tenant(
 
 @router.get("/auth-config", response_model=SecureAuthenticationConfig)
 async def get_current_tenant_auth_config(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get current tenant's authentication configuration"""
     tenant_auth_service = get_tenant_auth_service(db)
     
-    # Get the tenant's auth configuration
-    auth_config = tenant_auth_service.get_tenant_auth_config(current_user.tenant_id)
+    # Get the tenant's auth configuration (env-scoped)
+    environment = tenant_auth_service.get_environment_from_request(request)
+    auth_config = tenant_auth_service.get_tenant_auth_config(current_user.tenant_id, environment)
     
     # Convert to secure version
     from ..services.tenant_config_service import TenantConfigService
