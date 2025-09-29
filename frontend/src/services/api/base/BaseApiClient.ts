@@ -101,12 +101,12 @@ export abstract class BaseApiClient {
       // Avoid double-processing handled Axios errors
       // The response interceptor already calls handleError and rejects with the transformed error
       if (error && (error as any)._baseHandled) {
-        throw error;
+        return Promise.reject(error);
       }
-      
+
       const handled = this.handleError(error);
       (handled as any)._baseHandled = true;
-      throw handled;
+      return Promise.reject(handled);
     }
   }
 

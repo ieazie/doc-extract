@@ -14,6 +14,7 @@ import {
   Globe
 } from 'lucide-react';
 import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, ApiTenant } from '@/services/api/index';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import { AuthenticationConfigForm } from './AuthenticationConfigForm';
 import { CORSConfigForm } from './CORSConfigForm';
 import { SecurityConfigForm } from './SecurityConfigForm';
@@ -306,8 +307,11 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
   const [testingDocument, setTestingDocument] = useState(false);
   const [fieldExtractionMessage, setFieldExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [documentExtractionMessage, setDocumentExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
   
   // Tenant editing state
   const [editingTenant, setEditingTenant] = useState<{
@@ -366,7 +370,7 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     
     try {
       setLoading(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       // For now, we'll use the current user's tenant config endpoint
       // In a real implementation, you'd have admin endpoints to get config for any tenant
@@ -502,8 +506,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         }
       }
     } catch (err) {
-      setError('Failed to load configurations');
       console.error('Error loading configurations:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('config_load_failed', 'Failed to load configurations. Please refresh the page.');
+      }
     } finally {
       setLoading(false);
     }
@@ -527,7 +537,7 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
   useEffect(() => {
     setFieldExtractionMessage(null);
     setDocumentExtractionMessage(null);
-    setError(null);
+    clearError(); // Clear any existing errors
     setSuccess(null);
   }, [activeTab]);
 
@@ -632,7 +642,7 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       };
       
       if (!tenant) {
-        setError('No tenant selected');
+        setError('validation_failed', 'No tenant selected');
         return;
       }
       
@@ -666,10 +676,10 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     
     try {
       setSaving(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       if (!tenant) {
-        setError('No tenant selected');
+        setError('validation_failed', 'No tenant selected');
         return;
       }
       
@@ -683,8 +693,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       
       setSuccess('Rate limits configuration saved successfully');
     } catch (err) {
-      setError('Failed to save rate limits configuration');
       console.error('Error saving rate limits:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('rate_limits_save_failed', 'Failed to save rate limits configuration. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -783,8 +799,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       setSuccess('Rate limits reset successfully');
       loadConfigurations();
     } catch (err) {
-      setError('Failed to reset rate limits');
       console.error('Error resetting rate limits:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('rate_limits_reset_failed', 'Failed to reset rate limits. Please try again.');
+      }
     }
   };
 
@@ -793,7 +815,7 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     
     try {
       setSaving(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       const tenantService = serviceFactory.get<TenantService>('tenants');
       await tenantService.updateTenant(tenant.id, {
@@ -808,8 +830,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       setSuccess('Tenant updated successfully');
       onClose(); // Close modal to refresh the table
     } catch (err) {
-      setError('Failed to update tenant');
       console.error('Error updating tenant:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('tenant_update_failed', 'Failed to update tenant. Please try again.');
+      }
     } finally {
       setSaving(false);
     }

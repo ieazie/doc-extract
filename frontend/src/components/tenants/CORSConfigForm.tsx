@@ -7,6 +7,7 @@ import { Save, RefreshCw, Plus, X } from 'lucide-react';
 import { CORSConfig } from '../../services/api/tenants/types/tenants';
 import { serviceFactory } from '../../services/api';
 import { TenantService } from '../../services/api/tenants/TenantService';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import Button from '@/components/ui/Button';
 import ErrorMessage from '@/components/common/ErrorMessage';
 import SuccessMessage from '@/components/common/SuccessMessage';
@@ -50,7 +51,6 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
   const [config, setConfig] = useState<CORSConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -59,6 +59,10 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
   const [newMethod, setNewMethod] = useState('');
   const [newHeader, setNewHeader] = useState('');
   const [newExposedHeader, setNewExposedHeader] = useState('');
+
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
 
   const tenantService = serviceFactory.get<TenantService>('tenants');
 
@@ -70,7 +74,7 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
   const loadConfiguration = async () => {
     try {
       setLoading(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       const corsConfig = await tenantService.getCORSConfig(environment);
       
@@ -113,7 +117,7 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
     const newConfig = { ...config, [field]: value };
     setConfig(newConfig);
     setHasChanges(true);
-    setError(null);
+    clearError(); // Clear any existing errors
     setSuccess(null);
   };
 
@@ -122,7 +126,7 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
     
     try {
       setSaving(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       await tenantService.updateCORSConfig(config, environment);
       
@@ -130,7 +134,14 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
       setHasChanges(false);
       onConfigUpdated?.();
     } catch (err: any) {
-      setError(`Failed to save CORS configuration: ${err.message}`);
+      console.error('Error saving CORS configuration:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('cors_config_save_failed', `Failed to save CORS configuration: ${err.message}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -139,7 +150,7 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
   const handleReset = async () => {
     await loadConfiguration();
     setHasChanges(false);
-    setError(null);
+    clearError(); // Clear any existing errors
     setSuccess(null);
   };
 
@@ -232,7 +243,7 @@ export const CORSConfigForm: React.FC<CORSConfigFormProps> = ({
 
   return (
     <FormContainer>
-      {error && <ErrorMessage message={error} />}
+      {errorState.hasError && <ErrorMessage message={errorState.errorMessage || 'An error occurred'} />}
       {success && <SuccessMessage message={success} />}
 
       {/* Allowed Origins */}

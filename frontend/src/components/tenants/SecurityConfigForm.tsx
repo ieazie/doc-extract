@@ -7,6 +7,7 @@ import { Save, RefreshCw, Shield, AlertTriangle, AlertCircle } from 'lucide-reac
 import { SecurityConfig } from '../../services/api/tenants/types/tenants';
 import { serviceFactory } from '../../services/api';
 import { TenantService } from '../../services/api/tenants/TenantService';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import Button from '@/components/ui/Button';
 import ErrorMessage from '@/components/common/ErrorMessage';
 import SuccessMessage from '@/components/common/SuccessMessage';
@@ -48,7 +49,6 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
   const [config, setConfig] = useState<SecurityConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   
@@ -56,6 +56,10 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
   const [hasEncryptionKeyInitially, setHasEncryptionKeyInitially] = useState(false);
   const [encryptionKeyDirty, setEncryptionKeyDirty] = useState(false);
   const [localEncryptionKey, setLocalEncryptionKey] = useState<string>('');
+
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
 
   const tenantService = serviceFactory.get<TenantService>('tenants');
 
@@ -67,7 +71,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
   const loadConfiguration = async () => {
     try {
       setLoading(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       const securityConfig = await tenantService.getSecurityConfig(environment);
       
@@ -158,7 +162,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
     }
     
     setHasChanges(true);
-    setError(null);
+    clearError(); // Clear any existing errors
     setSuccess(null);
   };
 
@@ -167,7 +171,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
     
     try {
       setSaving(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       // Create payload that preserves encryption key unless it was explicitly changed
       const { encryption_key, has_encryption_key, ...rest } = config;
@@ -188,7 +192,14 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
       setHasChanges(false);
       onConfigUpdated?.();
     } catch (err: any) {
-      setError(`Failed to save security configuration: ${err.message}`);
+      console.error('Error saving security configuration:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('security_config_save_failed', `Failed to save security configuration: ${err.message}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -197,7 +208,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
   const handleReset = async () => {
     await loadConfiguration();
     setHasChanges(false);
-    setError(null);
+    clearError(); // Clear any existing errors
     setSuccess(null);
     // Reset encryption key state tracking
     setEncryptionKeyDirty(false);
@@ -224,8 +235,8 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
       handleFieldChange('encryption_key', newKey);
     } catch (error) {
       console.error('Failed to generate secure encryption key:', error);
-      setError('Failed to generate secure encryption key. Please try again.');
-      setTimeout(() => setError(null), 5000);
+      setError('encryption_key_generation_failed', 'Failed to generate secure encryption key. Please try again.');
+      setTimeout(() => clearError(), 5000);
     }
   };
 
@@ -239,7 +250,7 @@ export const SecurityConfigForm: React.FC<SecurityConfigFormProps> = ({
 
   return (
     <FormContainer>
-      {error && <ErrorMessage message={error} />}
+      {errorState.hasError && <ErrorMessage message={errorState.errorMessage || 'An error occurred'} />}
       {success && <SuccessMessage message={success} />}
 
       {/* CSRF Protection */}

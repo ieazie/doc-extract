@@ -7,6 +7,7 @@ import { Save, RefreshCw, AlertCircle, Eye, EyeOff, Copy } from 'lucide-react';
 import { AuthenticationConfig } from '../../services/api/tenants/types/tenants';
 import { serviceFactory } from '../../services/api';
 import { TenantService } from '../../services/api/tenants/TenantService';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import { Button } from '@/components/ui/Button';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { SuccessMessage } from '@/components/common/SuccessMessage';
@@ -47,10 +48,13 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
   const [config, setConfig] = useState<AuthenticationConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
 
   const tenantService = serviceFactory.get<TenantService>('tenants');
 
@@ -62,7 +66,7 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
   const loadConfiguration = async () => {
     try {
       setLoading(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       const authConfig = await tenantService.getAuthenticationConfig(environment);
       
@@ -120,7 +124,7 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
 
     setConfig(newConfig);
     setHasChanges(true);
-    setError(null);
+    clearError(); // Clear any existing errors
     setSuccess(null);
   };
 
@@ -129,7 +133,7 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
     
     try {
       setSaving(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       await tenantService.updateAuthenticationConfig(config, environment);
       
@@ -137,7 +141,14 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
       setHasChanges(false);
       onConfigUpdated?.();
     } catch (err: any) {
-      setError(`Failed to save authentication configuration: ${err.message}`);
+      console.error('Error saving authentication configuration:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('auth_config_save_failed', `Failed to save authentication configuration: ${err.message}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -146,7 +157,7 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
   const handleReset = async () => {
     await loadConfiguration();
     setHasChanges(false);
-    setError(null);
+    clearError(); // Clear any existing errors
     setSuccess(null);
   };
 
@@ -161,11 +172,11 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
       const newKey = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
       setConfig(prev => prev ? { ...prev, jwt_secret_key: newKey, has_jwt_secret: true } : prev);
       setHasChanges(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       setSuccess(null);
     } catch {
-      setError('Secure random generator unavailable in this environment');
-      setTimeout(() => setError(null), 3000);
+      setError('crypto_unavailable', 'Secure random generator unavailable in this environment');
+      setTimeout(() => clearError(), 3000);
     }
   };
 
@@ -176,8 +187,8 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
         setSuccess('JWT secret copied to clipboard');
         setTimeout(() => setSuccess(null), 3000);
       } catch (err) {
-        setError('Failed to copy to clipboard');
-        setTimeout(() => setError(null), 3000);
+        setError('clipboard_copy_failed', 'Failed to copy to clipboard');
+        setTimeout(() => clearError(), 3000);
       }
     }
   };
@@ -192,7 +203,7 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
 
   return (
     <FormContainer>
-      {error && <ErrorMessage message={error} />}
+      {errorState.hasError && <ErrorMessage message={errorState.errorMessage || 'An error occurred'} />}
       {success && <SuccessMessage message={success} />}
 
       {/* JWT Configuration */}

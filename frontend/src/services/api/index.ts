@@ -4,6 +4,7 @@
  */
 import axios, { AxiosInstance } from 'axios';
 import { ServiceFactory } from './base/ServiceFactory';
+import { useGlobalStore } from '@/stores/globalStore';
 
 /**
  * Transform Axios errors into proper Error objects
@@ -70,7 +71,7 @@ const createAxiosInstance = (): AxiosInstance => {
   // which sets them in the shared Axios defaults. The request interceptor
   // in BaseApiClient will automatically add the Authorization header.
 
-  // Add response interceptor for error handling
+  // Add response interceptor for global error handling
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
@@ -79,42 +80,31 @@ const createAxiosInstance = (): AxiosInstance => {
       const url = error.config?.url || '';
       
       if (status === 401 && typeof window !== 'undefined') {
-        // For login endpoint, let the error propagate so LoginForm can handle it
+        // For login endpoint, set error in global store and reject
         if (url.includes('/api/auth/login')) {
-          console.warn('Login failed - propagating error for UI handling');
+          console.warn('Login failed - setting error in global store');
+          const errorMessage = error.response?.data?.detail || 'Invalid email or password';
+          useGlobalStore.getState().setError('AuthenticationError', errorMessage);
           return Promise.reject(error);
         }
         
-        // For other endpoints (like refresh), dispatch logout event and resolve gracefully
+        // For other endpoints (like refresh), dispatch logout event and set error
         window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'unauthorized' } }));
-        
         console.warn('Authentication failed - logout event dispatched');
+        useGlobalStore.getState().setError('AuthenticationError', 'Authentication failed');
         
-        // For authentication errors, return a resolved promise with null/empty data
-        // This prevents UI crashes and allows components to continue normally
-        // The auth context will handle the logout automatically
-        return Promise.resolve({
-          data: null,
-          status: 401,
-          statusText: 'Unauthorized',
-          headers: {},
-          config: error.config,
-          request: error.request
-        });
+        return Promise.reject(error);
       }
       
-      // For other errors, return a resolved promise with error data
-      // This prevents UI crashes and allows components to handle errors gracefully
+      // For all other errors, set error in global store and reject
       const transformedError = transformAxiosError(error);
-      return Promise.resolve({
-        data: null,
-        status: error.response?.status || 500,
-        statusText: transformedError.message || 'Error occurred',
-        headers: {},
-        config: error.config,
-        request: error.request,
-        error: transformedError // Include the transformed error for component handling
-      });
+      useGlobalStore.getState().setError(
+        transformedError.name || 'ApiError',
+        transformedError.message,
+        error.response?.data
+      );
+      
+      return Promise.reject(transformedError);
     }
   );
 

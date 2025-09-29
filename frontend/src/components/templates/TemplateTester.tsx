@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useMutation } from 'react-query';
 import { TemplateService, DocumentService, serviceFactory } from '../../services/api/index';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 
 interface TemplateTesterProps {
   templateId: string;
@@ -247,7 +248,10 @@ const TemplateTester: React.FC<TemplateTesterProps> = ({ templateId, templateNam
   const [testDocument, setTestDocument] = useState('');
   const [testResults, setTestResults] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
 
   const testMutation = useMutation({
     mutationFn: (documentText: string) => {
@@ -256,22 +260,22 @@ const TemplateTester: React.FC<TemplateTesterProps> = ({ templateId, templateNam
     },
     onSuccess: (data) => {
       setTestResults(data);
-      setError(null);
+      clearError();
     },
     onError: (error: any) => {
-      setError(error.message || 'Failed to test template');
+      setError('template_test_failed', error.message || 'Failed to test template');
       setTestResults(null);
     },
   });
 
   const handleTest = async () => {
     if (!testDocument.trim()) {
-      setError('Please enter some test document content');
+      setError('validation_failed', 'Please enter some test document content');
       return;
     }
 
     setIsTesting(true);
-    setError(null);
+    clearError();
     
     try {
       await testMutation.mutateAsync(testDocument);
@@ -283,7 +287,7 @@ const TemplateTester: React.FC<TemplateTesterProps> = ({ templateId, templateNam
   const handleClose = () => {
     setTestDocument('');
     setTestResults(null);
-    setError(null);
+    clearError();
     onClose();
   };
 
@@ -308,8 +312,8 @@ const TemplateTester: React.FC<TemplateTesterProps> = ({ templateId, templateNam
           {isTesting ? 'Testing...' : 'Test Template'}
         </TestButton>
 
-        {error && (
-          <ErrorMessage>{error}</ErrorMessage>
+        {errorState.hasError && (
+          <ErrorMessage>{errorState.errorMessage}</ErrorMessage>
         )}
 
         {isTesting && (

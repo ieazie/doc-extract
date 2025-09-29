@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { Bell, Globe, Shield, ChevronDown, Users, Settings, ExternalLink, User, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthService, TenantService, serviceFactory } from '@/services/api/index';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 
 const HeaderContainer = styled.header`
   position: fixed;
@@ -360,6 +361,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
   const [isSwitching, setIsSwitching] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
 
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
+
   const getUserInitials = () => {
     if (!user) return 'U';
     return `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase();
@@ -372,6 +377,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
       
       console.log('🔄 PageHeader: Loading tenants for user role:', user.role);
       setIsLoadingTenants(true);
+      clearError(); // Clear any existing errors
+      
       try {
         let tenants;
           if (user.role === 'system_admin') {
@@ -389,6 +396,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
         setAvailableTenants(tenants || []);
       } catch (error) {
         console.error('❌ PageHeader: Failed to load tenants:', error);
+        
+        // Handle authentication errors through global error system
+        if (error && (error as any).name === 'AuthenticationError') {
+          setError('auth_failed', 'Authentication failed. Please log in again.');
+        } else {
+          setError('tenant_load_failed', 'Failed to load tenants. Please refresh the page.');
+        }
+        
         setAvailableTenants([]);
       } finally {
         setIsLoadingTenants(false);
@@ -402,11 +417,20 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
     if (tenantId === tenant?.id || isSwitching) return;
     
     setIsSwitching(true);
+    clearError(); // Clear any existing errors
+    
     try {
       await switchTenant(tenantId);
       setIsDropdownOpen(false);
     } catch (error) {
       console.error('Failed to switch tenant:', error);
+      
+      // Handle authentication errors through global error system
+      if (error && (error as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('tenant_switch_failed', 'Failed to switch tenant. Please try again.');
+      }
     } finally {
       setIsSwitching(false);
     }
@@ -427,6 +451,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
       await logout();
     } catch (error) {
       console.error('Logout failed:', error);
+      setError('logout_failed', 'Failed to logout. Please try again.');
     }
   };
 

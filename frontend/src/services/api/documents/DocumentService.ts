@@ -98,7 +98,9 @@ export class DocumentService extends BaseApiClient {
 
     // Fetch the full document object using the document_id from upload response
     if (!uploadResponse || !uploadResponse.document_id) {
-      throw new Error('Upload failed: No document ID returned from server');
+      const error = new Error('Upload failed: No document ID returned from server');
+      (error as any).name = 'UploadError';
+      throw error;
     }
     return this.getDocument(uploadResponse.document_id);
   }

@@ -288,14 +288,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (credentials: LoginCredentials): Promise<void> => {
     try {
-      setIsLoading(true);
-      
       const authService = serviceFactory.get<AuthService>('auth');
       const response = await authService.login(credentials);
       
-      // Check if response is null (401 error handled by global interceptor)
+      // Check if response is null (shouldn't happen with proper API)
       if (!response || !response.access_token) {
-        throw new Error('Invalid email or password. Please check your credentials and try again.');
+        return; // Error is already handled by global store
       }
       
       // Set the auth token in memory and sessionStorage
@@ -337,21 +335,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Redirect to dashboard after successful login using Next.js router
       await router.push('/');
       
-    } catch (error: any) {
-      console.error('Login failed:', error);
-      
-      // Extract error message from Axios error response
-      let errorMessage = 'Login failed. Please check your credentials and try again.';
-      
-      if (error?.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-      
-      throw new Error(errorMessage);
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      // Error is already handled by global store
+      console.log('Login failed - error handled by global store');
     }
   };
 

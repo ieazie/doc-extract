@@ -3,6 +3,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { DocumentService, CategoryService, serviceFactory, Document, DocumentListResponse, Category } from '../../services/api/index';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import { formatFileSize, formatDate } from '../../utils/apiUtils';
 import {
   Container,
@@ -43,13 +44,16 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 }) => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
 
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
-    setError('');
+    clearError(); // Clear any existing errors
 
     try {
       const documentService = serviceFactory.get<DocumentService>('documents');
@@ -67,7 +71,14 @@ export const DocumentList: React.FC<DocumentListProps> = ({
       const response = await documentService.getDocuments({ page: params.page, per_page: params.per_page, search: params.search, sort_by: params.sort_by, sort_order: params.sort_order });
       setDocuments(response.documents);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load documents');
+      console.error('Error loading documents:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('documents_load_failed', err instanceof Error ? err.message : 'Failed to load documents');
+      }
     } finally {
       setLoading(false);
     }
@@ -134,9 +145,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         />
       </Header>
 
-      {error && (
+      {errorState.hasError && (
         <ErrorState>
-          <strong>Error:</strong> {error}
+          <strong>Error:</strong> {errorState.errorMessage || 'An error occurred'}
         </ErrorState>
       )}
 

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import { CronBuilder } from './CronBuilder';
 import { JobService, CategoryService, TemplateService, serviceFactory, Job, JobCreateRequest, JobUpdateRequest, Category } from '@/services/api/index';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import styled from 'styled-components';
 
 // Styled Components
@@ -306,9 +307,12 @@ export const JobModal: React.FC<JobModalProps> = ({
   job
 }) => {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
+  
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
   
   // Form state
   const [formData, setFormData] = useState<JobCreateRequest>({
@@ -411,7 +415,7 @@ export const JobModal: React.FC<JobModalProps> = ({
             }
           });
         }
-        setError(null);
+        clearError(); // Clear any existing errors
       };
       
       initializeModal();
@@ -491,13 +495,13 @@ export const JobModal: React.FC<JobModalProps> = ({
     e.preventDefault();
     
     if (!formData.name || !formData.execution_config?.template_id || !formData.execution_config?.category_id) {
-      setError('Please fill in all required fields');
+      setError('validation_failed', 'Please fill in all required fields');
       return;
     }
 
     try {
       setLoading(true);
-      setError(null);
+      clearError(); // Clear any existing errors
 
       let savedJob: Job;
       
@@ -523,7 +527,14 @@ export const JobModal: React.FC<JobModalProps> = ({
       onSave(savedJob);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save job');
+      console.error('Error saving job:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('job_save_failed', err instanceof Error ? err.message : 'Failed to save job');
+      }
     } finally {
       setLoading(false);
     }
@@ -544,7 +555,7 @@ export const JobModal: React.FC<JobModalProps> = ({
         </ModalHeader>
 
         <ModalBody>
-          {error && <ErrorMessage>{error}</ErrorMessage>}
+          {errorState.hasError && <ErrorMessage>{errorState.errorMessage || 'An error occurred'}</ErrorMessage>}
 
           <form onSubmit={handleSubmit}>
             {/* Basic Information */}

@@ -13,6 +13,7 @@ import {
   Maximize2
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import {
   ViewerContainer,
   ViewerHeader,
@@ -63,34 +64,53 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
   const [totalPages, setTotalPages] = useState(0);
   const [zoom, setZoom] = useState(1.0);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [pdfDocument, setPdfDocument] = useState<any>(null);
+  
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
   const [textContent, setTextContent] = useState<string>('');
   const [renderKey, setRenderKey] = useState(0);
 
   // Refs for render management
   const renderTaskRef = useRef<any>(null);
   const isRenderingRef = useRef<boolean>(false);
+  const isMountedRef = useRef<boolean>(true);
 
   // Load PDF document
   const loadPDF = async () => {
-    if (!document.file) return;
+    if (!document.file) {
+      return;
+    }
 
     setIsLoading(true);
-    setError(null);
+    clearError();
 
     try {
+      // Cancel any existing render tasks before loading new PDF
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
+      }
+      
+      // Destroy previous PDF document to free workers/streams
+      if (pdfDocument) {
+        try {
+          pdfDocument.destroy();
+        } catch (e) {
+          // Ignore destruction errors
+        }
+        setPdfDocument(null);
+      }
+
       const arrayBuffer = await document.file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-      // Destroy previous to free workers/streams
-      pdfDocument?.destroy?.();
       setPdfDocument(pdf);
       setTotalPages(pdf.numPages);
       setCurrentPage(1);
     } catch (err) {
-      console.error('Error loading PDF:', err);
-      setError('Failed to load PDF document');
+      setError('pdf_load_failed', 'Failed to load PDF document');
     } finally {
       setIsLoading(false);
     }
@@ -136,12 +156,10 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
   // Other controls
   const handleRotate = () => {
     // TODO: Implement rotation
-    console.log('Rotate clicked');
   };
 
   const handleFullscreen = () => {
     // TODO: Implement fullscreen
-    console.log('Fullscreen clicked');
   };
 
   const handleDownload = () => {
@@ -158,23 +176,16 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
   // Render PDF page
   useEffect(() => {
     if (!pdfDocument || !canvasRef.current) {
-      console.log('Render effect triggered - pdfDocument:', !!pdfDocument, 'canvasRef:', !!canvasRef.current);
-      if (!pdfDocument || !canvasRef.current) {
-        console.log('Missing pdfDocument or canvasRef, skipping render');
-        return;
-      }
+      return;
     }
 
     const renderCurrentPage = async () => {
-      // Prevent concurrent renders
-      if (isRenderingRef.current) {
-        console.log('Render already in progress, skipping');
+      // Prevent concurrent renders or rendering on unmounted component
+      if (isRenderingRef.current || !isMountedRef.current) {
         return;
       }
 
       try {
-        console.log(`Starting render: page ${currentPage}, zoom ${zoom}, renderKey ${renderKey}`);
-        
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -190,6 +201,11 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
         const devicePixelRatio = window.devicePixelRatio || 1;
         const scale = zoom;
         
+        // Check if PDF document is still valid before getting page
+        if (!pdfDocument || pdfDocument.destroyed) {
+          return;
+        }
+
         // Get the current page
         const page = await pdfDocument.getPage(currentPage);
         const viewport = page.getViewport({ scale });
@@ -229,20 +245,24 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
         // Mark as complete
         isRenderingRef.current = false;
         
-        console.log(`Successfully rendered page ${currentPage}`);
-        
       } catch (err) {
-        console.error('Page rendering error:', err);
-        
         // Clear references
         renderTaskRef.current = null;
         isRenderingRef.current = false;
         
-        // Only set error for non-cancellation errors
+        // Handle specific error types
         const errorMessage = err instanceof Error ? err.message : String(err);
-        if (!errorMessage.includes('cancelled') && !errorMessage.includes('canvas')) {
-          setError('Failed to render PDF pages');
+        
+        // Don't show errors for expected cancellation/transport issues
+        if (errorMessage.includes('cancelled') || 
+            errorMessage.includes('canvas') ||
+            errorMessage.includes('Transport destroyed') ||
+            errorMessage.includes('transport')) {
+          return;
         }
+        
+        // Only set error for unexpected errors
+        setError('pdf_render_failed', 'Failed to render PDF pages');
       }
     };
 
@@ -252,20 +272,53 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
   // Cleanup on unmount and document change
   useEffect(() => {
     return () => {
+      // Cancel any pending render tasks
       try { 
-        renderTaskRef.current?.cancel?.(); 
+        if (renderTaskRef.current) {
+          renderTaskRef.current.cancel(); 
+        }
       } catch (e) {
         // Ignore cancellation errors
       }
       renderTaskRef.current = null;
       isRenderingRef.current = false;
+      
+      // Destroy PDF document
       try { 
-        pdfDocument?.destroy?.(); 
+        if (pdfDocument && !pdfDocument.destroyed) {
+          pdfDocument.destroy(); 
+        }
       } catch (e) {
         // Ignore destruction errors
       }
     };
   }, [pdfDocument]);
+
+  // Initialize mounted ref
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    return () => {
+      // Mark component as unmounted
+      isMountedRef.current = false;
+      
+      // Final cleanup on unmount
+      try { 
+        if (renderTaskRef.current) {
+          renderTaskRef.current.cancel(); 
+        }
+      } catch (e) {
+        // Ignore cancellation errors
+      }
+      try { 
+        if (pdfDocument && !pdfDocument.destroyed) {
+          pdfDocument.destroy(); 
+        }
+      } catch (e) {
+        // Ignore destruction errors
+      }
+    };
+  }, []);
 
   return (
     <ViewerContainer>
@@ -319,11 +372,11 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
           <LoadingContainer>
             <LoadingText>Loading document...</LoadingText>
           </LoadingContainer>
-        ) : error ? (
+        ) : errorState.hasError ? (
           <ErrorContainer>
             <ErrorIcon>⚠️</ErrorIcon>
             <ErrorText>Error loading document</ErrorText>
-            <ErrorSubtext>{error}</ErrorSubtext>
+            <ErrorSubtext>{errorState.errorMessage}</ErrorSubtext>
           </ErrorContainer>
         ) : textContent ? (
           <TextContent style={{ transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
