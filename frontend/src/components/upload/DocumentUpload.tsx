@@ -282,7 +282,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
     clearError(); // Clear any existing errors
     setSelectedFile(file);
     setUploadResult(null);
-  }, []);
+  }, [setError, clearError]);
 
   // Drag and drop handlers
   const handleDragEnter = useCallback((e: React.DragEvent) => {

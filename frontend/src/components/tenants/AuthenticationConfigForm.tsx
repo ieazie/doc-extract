@@ -73,10 +73,10 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
       if (authConfig) {
         setConfig(authConfig);
       } else {
-        // Create default configuration with has_jwt_secret: true since we have a working system
+        // Create default configuration with has_jwt_secret: false since no key is provided
         const defaultConfig: AuthenticationConfig = {
           jwt_secret_key: '',
-          has_jwt_secret: true, // Set to true since the system is working
+          has_jwt_secret: false,
           access_token_expire_minutes: 30,
           refresh_token_expire_days: 7,
           refresh_cookie_httponly: true,
@@ -92,10 +92,10 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
       }
     } catch (err: any) {
       console.warn('No existing auth config found, using defaults:', err);
-      // Create default configuration with has_jwt_secret: true since we have a working system
+      // Create default configuration with has_jwt_secret: false since no key is provided
       const defaultConfig: AuthenticationConfig = {
         jwt_secret_key: '',
-        has_jwt_secret: true, // Set to true since the system is working
+        has_jwt_secret: false,
         access_token_expire_minutes: 30,
         refresh_token_expire_days: 7,
         refresh_cookie_httponly: true,
@@ -135,7 +135,15 @@ export const AuthenticationConfigForm: React.FC<AuthenticationConfigFormProps> =
       setSaving(true);
       clearError(); // Clear any existing errors
       
-      await tenantService.updateAuthenticationConfig(config, environment);
+      const payload = {
+        ...config,
+      } as AuthenticationConfig & { jwt_secret_key?: string };
+
+      if (payload.has_jwt_secret && !payload.jwt_secret_key) {
+        delete (payload as any).jwt_secret_key;
+      }
+
+      await tenantService.updateAuthenticationConfig(payload, environment);
       
       setSuccess('Authentication configuration saved successfully');
       setHasChanges(false);

@@ -18,12 +18,15 @@ CREATE OR REPLACE FUNCTION generate_tenant_slug(tenant_name TEXT)
 RETURNS TEXT AS $$
 BEGIN
     -- lowercase, allow a-z0-9 and hyphens, collapse spaces to hyphens, trim hyphens
-    RETURN TRIM(BOTH '-' FROM regexp_replace(
+    -- IMPORTANT: Truncate to 100 chars BEFORE final trim to ensure constraint compliance
+    RETURN TRIM(BOTH '-' FROM LEFT(
            regexp_replace(
-             regexp_replace(lower(trim(tenant_name)), '[^a-z0-9\s-]', '', 'g'),
-             '\s+', '-', 'g'
-           ),
-           '-+', '-', 'g'
+             regexp_replace(
+               regexp_replace(lower(trim(tenant_name)), '[^a-z0-9\s-]', '', 'g'),
+               '\s+', '-', 'g'
+             ),
+             '-+', '-', 'g'
+           ), 100
          ));
 END;
 $$ LANGUAGE plpgsql;
@@ -108,7 +111,10 @@ END $$;
 -- Add constraints after data is valid
 ALTER TABLE tenants
   ADD CONSTRAINT valid_tenant_slug
-    CHECK (slug ~ '^[a-z0-9-]+$' AND length(slug) >= 3 AND length(slug) <= 100),
+    CHECK (
+      slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+      AND char_length(slug) BETWEEN 3 AND 100
+    ),
   ADD CONSTRAINT unique_tenant_slug UNIQUE (slug),
   ALTER COLUMN slug SET NOT NULL;
 
@@ -124,7 +130,7 @@ ALTER TABLE tenants
 -- ============================================================================
 
 -- Drop helper function
-DROP FUNCTION generate_tenant_slug(TEXT);
+DROP FUNCTION IF EXISTS public.generate_tenant_slug(TEXT);
 
 -- ============================================================================
 -- FINAL VERIFICATION

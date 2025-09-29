@@ -24,13 +24,35 @@ jest.mock('next/router', () => ({
   },
 }));
 
+// Mock Next.js app router
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+    prefetch: jest.fn(),
+    refresh: jest.fn(),
+    forward: jest.fn(),
+  }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+  useParams: () => ({}),
+  redirect: jest.fn(),
+  notFound: jest.fn(),
+  permanentRedirect: jest.fn(),
+  revalidatePath: jest.fn(),
+  revalidateTag: jest.fn(),
+}));
+
 // Mock styled-components
 jest.mock('styled-components', () => {
   const React = require('react');
   const styled = (tag: any) => (strings: any, ...values: any[]) => {
-    return React.forwardRef((props: any, ref: any) => {
+    const StyledComponent = React.forwardRef((props: any, ref: any) => {
       return React.createElement(tag, { ...props, ref });
     });
+    StyledComponent.displayName = `Styled(${tag})`;
+    return StyledComponent;
   };
   
   styled.div = styled('div');
@@ -55,8 +77,28 @@ jest.mock('styled-components', () => {
   styled.a = styled('a');
   styled.img = styled('img');
   styled.svg = styled('svg');
-  
-  return styled;
+
+  const ThemeProvider = ({ children }: any) =>
+    React.createElement('div', null, children);
+  const css = (...args: any[]) => args;
+  const keyframes = (...args: any[]) => args;
+  const createGlobalStyle = () => () => null;
+  class ServerStyleSheet {
+    collectStyles(n: any) { return n; }
+    getStyleElement() { return null; }
+    seal() {}
+  }
+
+  return {
+    __esModule: true,
+    default: styled,
+    ThemeProvider,
+    css,
+    keyframes,
+    createGlobalStyle,
+    ServerStyleSheet,
+    ...styled,
+  };
 });
 
 // Mock window.matchMedia
@@ -76,11 +118,16 @@ Object.defineProperty(window, 'matchMedia', {
 
 // Mock IntersectionObserver
 global.IntersectionObserver = class IntersectionObserver {
+  root: Element | null = null;
+  rootMargin: string = '';
+  thresholds: ReadonlyArray<number> = [];
+  
   constructor() {}
   disconnect() {}
   observe() {}
   unobserve() {}
-};
+  takeRecords(): IntersectionObserverEntry[] { return []; }
+} as any;
 
 // Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {
@@ -90,28 +137,50 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
 };
 
-// Suppress console warnings in tests
+// Suppress known noisy console messages in tests while preserving real errors
 const originalWarn = console.warn;
 const originalError = console.error;
 
+// Known noisy React messages that are safe to suppress
+const SUPPRESSED_WARNINGS = [
+  'Warning: ReactDOM.render is no longer supported',
+  'Warning: validateDOMNesting',
+  'Warning: Each child in a list should have a unique "key" prop',
+  'Warning: Failed prop type:',
+];
+
+const SUPPRESSED_ERRORS = [
+  'Warning: validateDOMNesting',
+  'Warning: Each child in a list should have a unique "key" prop',
+  'Warning: Failed prop type:',
+];
+
 beforeAll(() => {
   console.warn = (...args: any[]) => {
-    if (
-      typeof args[0] === 'string' &&
-      args[0].includes('Warning: ReactDOM.render is no longer supported')
-    ) {
-      return;
+    if (typeof args[0] === 'string') {
+      const message = args[0];
+      
+      // Only suppress known noisy warnings
+      if (SUPPRESSED_WARNINGS.some(pattern => message.includes(pattern))) {
+        return;
+      }
     }
+    
+    // Log all other warnings
     originalWarn.call(console, ...args);
   };
 
   console.error = (...args: any[]) => {
-    if (
-      typeof args[0] === 'string' &&
-      (args[0].includes('Warning:') || args[0].includes('validateDOMNesting'))
-    ) {
-      return;
+    if (typeof args[0] === 'string') {
+      const message = args[0];
+      
+      // Only suppress known noisy error messages
+      if (SUPPRESSED_ERRORS.some(pattern => message.includes(pattern))) {
+        return;
+      }
     }
+    
+    // Log all other errors (these are likely real failures)
     originalError.call(console, ...args);
   };
 });

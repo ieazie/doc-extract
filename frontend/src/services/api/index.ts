@@ -4,7 +4,6 @@
  */
 import axios, { AxiosInstance } from 'axios';
 import { ServiceFactory } from './base/ServiceFactory';
-import { useGlobalStore } from '@/stores/globalStore';
 
 /**
  * Transform Axios errors into proper Error objects
@@ -66,47 +65,6 @@ const createAxiosInstance = (): AxiosInstance => {
     headers: { Accept: 'application/json' },
     withCredentials: true, // Enable cookie handling for refresh tokens
   });
-
-  // Note: Authentication tokens are now handled by BaseApiClient.setAuthToken()
-  // which sets them in the shared Axios defaults. The request interceptor
-  // in BaseApiClient will automatically add the Authorization header.
-
-  // Add response interceptor for global error handling
-  instance.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      // Handle 401 (Unauthorized) by dispatching logout event
-      const status = error.response?.status;
-      const url = error.config?.url || '';
-      
-      if (status === 401 && typeof window !== 'undefined') {
-        // For login endpoint, set error in global store and reject
-        if (url.includes('/api/auth/login')) {
-          console.warn('Login failed - setting error in global store');
-          const errorMessage = error.response?.data?.detail || 'Invalid email or password';
-          useGlobalStore.getState().setError('AuthenticationError', errorMessage);
-          return Promise.reject(error);
-        }
-        
-        // For other endpoints (like refresh), dispatch logout event and set error
-        window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'unauthorized' } }));
-        console.warn('Authentication failed - logout event dispatched');
-        useGlobalStore.getState().setError('AuthenticationError', 'Authentication failed');
-        
-        return Promise.reject(error);
-      }
-      
-      // For all other errors, set error in global store and reject
-      const transformedError = transformAxiosError(error);
-      useGlobalStore.getState().setError(
-        transformedError.name || 'ApiError',
-        transformedError.message,
-        error.response?.data
-      );
-      
-      return Promise.reject(transformedError);
-    }
-  );
 
   return instance;
 };

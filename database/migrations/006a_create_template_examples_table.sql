@@ -43,11 +43,11 @@ CREATE INDEX idx_template_examples_source_document_id ON template_examples(sourc
 -- Index for created_by_user queries
 CREATE INDEX idx_template_examples_created_by_user ON template_examples(created_by_user);
 
--- Note: UNIQUE constraint on (template_id, name) already creates a btree index
--- No need for explicit idx_template_examples_template_name index
+-- Note: UNIQUE constraint on (tenant_id, template_id, name) already creates a btree index
+-- No need for explicit idx_template_examples_tenant_template_name index
 
 -- Index for created_at (sorting)
-CREATE INDEX idx_template_examples_created_at ON template_examples(created_at DESC);
+CREATE INDEX idx_template_examples_tenant_created_at ON template_examples(tenant_id, created_at DESC);
 
 -- ============================================================================
 -- ADD COMMENTS FOR DOCUMENTATION

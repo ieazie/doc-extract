@@ -26,20 +26,8 @@ export abstract class BaseApiClient {
     // Request interceptor for auth token and tenant ID
     this.client.interceptors.request.use(
       (config) => {
-        // Ensure headers is mutable and support Axios v1 AxiosHeaders
-        const headers = (config.headers ?? {}) as any;
-        const set = typeof headers.set === 'function'
-          ? (k: string, v: string) => headers.set(k, v)
-          : (k: string, v: string) => { headers[k] = v; };
-
-        if (this.authToken) {
-          set('Authorization', `Bearer ${this.authToken}`);
-        }
-        if (this.tenantId) {
-          set('X-Tenant-ID', this.tenantId);
-        }
-
-        config.headers = headers;
+        // Rely on axios merging defaults.headers.* set by setAuthToken/setTenantId
+        // No per-request mutation needed here.
         
         (config as any).metadata = {
           ...(config as any).metadata,
@@ -114,11 +102,33 @@ export abstract class BaseApiClient {
    * Handle API errors consistently - simplified version
    */
   protected handleError(error: any): Error {
+    // Cancellation/abort
+    if (
+      error?.code === 'ERR_CANCELED' ||
+      error?.name === 'CanceledError' ||
+      error?.name === 'AbortError'
+    ) {
+      const canceled = new Error('Request cancelled');
+      (canceled as any).name = 'CancelledError';
+      (canceled as any)._baseHandled = true;
+      (canceled as any).isAxiosError = !!error.isAxiosError;
+      (canceled as any).code = error.code;
+      (canceled as any).config = error.config;
+      (canceled as any).request = error.request;
+      (canceled as any).cause = error;
+      return canceled;
+    }
+
     // Network error
     if (error.request && !error.response) {
       const networkError = new Error('Network error - please check your connection');
       (networkError as any).name = 'NetworkError';
       (networkError as any)._baseHandled = true;
+      (networkError as any).isAxiosError = !!error.isAxiosError;
+      (networkError as any).code = error.code;
+      (networkError as any).config = error.config;
+      (networkError as any).request = error.request;
+      (networkError as any).cause = error;
       return networkError;
     }
 
@@ -130,6 +140,12 @@ export abstract class BaseApiClient {
       
       (apiError as any).status = status;
       (apiError as any).data = data;
+      (apiError as any).isAxiosError = !!error.isAxiosError;
+      (apiError as any).code = error.code;
+      (apiError as any).config = error.config;
+      (apiError as any).request = error.request;
+      (apiError as any).response = error.response;
+      (apiError as any).cause = error;
 
       // Set error type based on status
       switch (status) {
@@ -156,6 +172,11 @@ export abstract class BaseApiClient {
     // Other error
     const unexpectedError = new Error(error.message || 'An unexpected error occurred');
     (unexpectedError as any)._baseHandled = true;
+    (unexpectedError as any).isAxiosError = !!error.isAxiosError;
+    (unexpectedError as any).code = error.code;
+    (unexpectedError as any).config = error.config;
+    (unexpectedError as any).request = error.request;
+    (unexpectedError as any).cause = error;
     return unexpectedError;
   }
 

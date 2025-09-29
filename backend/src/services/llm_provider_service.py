@@ -58,6 +58,21 @@ class LLMProvider(ABC):
         instruction = language_instructions.get(language, "Respond in English.")
         return f"{base_prompt}\n\n{instruction}"
 
+    def _supports_json_mode(self) -> bool:
+        """Check if the model supports JSON response format"""
+        JSON_MODELS = {
+            "gpt-4o-2024-08-06", 
+            "gpt-4o-mini-2024-07-18",
+            "gpt-4o",  # Latest gpt-4o model
+            "gpt-4o-mini",  # Latest gpt-4o-mini model
+            "gpt-4-turbo"  # Community reports support
+        }
+        return (self.model in JSON_MODELS or 
+                self.model.startswith("gpt-4o-2024-08-06") or 
+                self.model.startswith("gpt-4o-mini-2024-07-18") or
+                self.model.startswith("gpt-4o:") or
+                self.model.startswith("gpt-4o-mini:"))
+
 
 class OllamaProvider(LLMProvider):
     """Ollama LLM Provider"""
@@ -232,20 +247,7 @@ class OpenAIProvider(LLMProvider):
         
         # Add the actual document
         # Use different prompts based on model capabilities
-        # Check for JSON-capable models (same logic as above)
-        JSON_MODELS = {
-            "gpt-4o-2024-08-06", 
-            "gpt-4o-mini-2024-07-18",
-            "gpt-4o",  # Latest gpt-4o model
-            "gpt-4o-mini",  # Latest gpt-4o-mini model
-            "gpt-4-turbo"  # Community reports support
-        }
-        
-        if (self.model in JSON_MODELS or 
-            self.model.startswith("gpt-4o-2024-08-06") or 
-            self.model.startswith("gpt-4o-mini-2024-07-18") or
-            self.model.startswith("gpt-4o:") or
-            self.model.startswith("gpt-4o-mini:")):
+        if self._supports_json_mode():
             # Newer models support structured output
             user_message = f"""Extract structured data from the following document according to this schema: {json.dumps(schema, indent=2)}
 
@@ -277,21 +279,7 @@ IMPORTANT: Respond with ONLY valid JSON. Do not include any text before or after
             # Based on OpenAI Structured Outputs documentation:
             # - gpt-4o-2024-08-06 and gpt-4o-mini-2024-07-18 officially support JSON mode
             # - Fine-tuned variants of these models also support it
-            JSON_MODELS = {
-                "gpt-4o-2024-08-06", 
-                "gpt-4o-mini-2024-07-18",
-                # Include fine-tuned variants (common naming patterns)
-                "gpt-4o",  # Latest gpt-4o model
-                "gpt-4o-mini",  # Latest gpt-4o-mini model
-                "gpt-4-turbo"  # Community reports support
-            }
-            
-            # Check for exact match or fine-tuned variants
-            if (self.model in JSON_MODELS or 
-                self.model.startswith("gpt-4o-2024-08-06") or 
-                self.model.startswith("gpt-4o-mini-2024-07-18") or
-                self.model.startswith("gpt-4o:") or  # Fine-tune naming pattern
-                self.model.startswith("gpt-4o-mini:")):  # Fine-tune naming pattern
+            if self._supports_json_mode():
                 request_params["response_format"] = {"type": "json_object"}
 
             response = await self.client.chat.completions.create(timeout=60.0, **request_params)

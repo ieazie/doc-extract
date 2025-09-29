@@ -203,6 +203,8 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
         
         // Check if PDF document is still valid before getting page
         if (!pdfDocument || pdfDocument.destroyed) {
+          renderTaskRef.current = null;
+          isRenderingRef.current = false;
           return;
         }
 

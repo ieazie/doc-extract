@@ -382,6 +382,7 @@ class TemplateExample(Base):
     __tablename__ = "template_examples"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     template_id = Column(UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), nullable=False)
     
     # Example content
@@ -402,6 +403,7 @@ class TemplateExample(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
+    tenant = relationship("Tenant")
     template = relationship("Template", back_populates="template_examples")
     source_document = relationship("Document")
 

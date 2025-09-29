@@ -362,7 +362,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
 
   // Global error handling
-  const errorState = useErrorState();
   const { setError, clearError } = useErrorActions();
 
   const getUserInitials = () => {
@@ -375,7 +374,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
     const loadTenants = async () => {
       if (!user) return;
       
-      console.log('🔄 PageHeader: Loading tenants for user role:', user.role);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('🔄 PageHeader: Loading tenants for user role:', user.role);
+      }
       setIsLoadingTenants(true);
       clearError(); // Clear any existing errors
       
@@ -383,19 +384,27 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
         let tenants;
           if (user.role === 'system_admin') {
             // System admin can see all tenants
-            console.log('🔄 PageHeader: Loading all tenants for system admin');
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('🔄 PageHeader: Loading all tenants for system admin');
+            }
             const tenantService = serviceFactory.get<TenantService>('tenants');
             tenants = await tenantService.getTenants();
           } else {
             // Regular users see only their assigned tenants
-            console.log('🔄 PageHeader: Loading user tenants for role:', user.role);
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('🔄 PageHeader: Loading user tenants for role:', user.role);
+            }
             const authService = serviceFactory.get<AuthService>('auth');
             tenants = await authService.getUserTenants();
           }
-        console.log('✅ PageHeader: Loaded tenants:', tenants?.length || 0);
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('✅ PageHeader: Loaded tenants:', tenants?.length || 0);
+        }
         setAvailableTenants(tenants || []);
-      } catch (error) {
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
         console.error('❌ PageHeader: Failed to load tenants:', error);
+      }
         
         // Handle authentication errors through global error system
         if (error && (error as any).name === 'AuthenticationError') {
@@ -423,7 +432,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
       await switchTenant(tenantId);
       setIsDropdownOpen(false);
     } catch (error) {
-      console.error('Failed to switch tenant:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Failed to switch tenant:', error);
+      }
       
       // Handle authentication errors through global error system
       if (error && (error as any).name === 'AuthenticationError') {
@@ -450,7 +461,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
     try {
       await logout();
     } catch (error) {
-      console.error('Logout failed:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Logout failed:', error);
+      }
       setError('logout_failed', 'Failed to logout. Please try again.');
     }
   };

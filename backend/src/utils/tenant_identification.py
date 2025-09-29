@@ -24,28 +24,18 @@ class TenantIdentifier:
         Extract tenant ID from request using multiple methods.
         
         Priority order:
-        1. X-Tenant-ID header (primary method as requested)
-        2. JWT token (from Authorization header)
+        1. JWT token (from Authorization header)
+        2. X-Tenant-ID header
         3. Subdomain detection
         
         Args:
             request: FastAPI request object
             
         Returns:
-            Tuple of (tenant UUID if found, source method: "header"|"jwt"|"subdomain"|"none")
+            Tuple of (tenant UUID if found, source method: "jwt"|"header"|"subdomain"|"none")
         """
         
-        # Method 1: X-Tenant-ID header (primary method as requested)
-        tenant_header = request.headers.get("X-Tenant-ID")
-        if tenant_header:
-            try:
-                tenant_id = UUID(tenant_header)
-                logger.debug(f"Tenant ID extracted from X-Tenant-ID header: {tenant_id}")
-                return tenant_id, "header"
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Invalid tenant ID in X-Tenant-ID header: {tenant_header}, error: {e}")
-        
-        # Method 2: JWT token (from Authorization header)
+        # Method 1: JWT token (from Authorization header)
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             try:
@@ -59,6 +49,16 @@ class TenantIdentifier:
                     return tenant_id, "jwt"
             except (JWTError, ValueError, TypeError) as e:
                 logger.warning(f"Failed to extract tenant ID from JWT token: {e}")
+        
+        # Method 2: X-Tenant-ID header
+        tenant_header = request.headers.get("X-Tenant-ID")
+        if tenant_header:
+            try:
+                tenant_id = UUID(tenant_header)
+                logger.debug(f"Tenant ID extracted from X-Tenant-ID header: {tenant_id}")
+                return tenant_id, "header"
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid tenant ID in X-Tenant-ID header: {tenant_header}, error: {e}")
         
         # Method 3: Subdomain detection
         tenant_id = TenantIdentifier.identify_from_subdomain(request)
@@ -88,7 +88,7 @@ class TenantIdentifier:
         if not tenant_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Tenant ID is required. Please provide X-Tenant-ID header, valid JWT token, or subdomain."
+                detail="Tenant ID is required. Please provide valid JWT token, X-Tenant-ID header, or subdomain."
             )
         
         return tenant_id
@@ -135,12 +135,13 @@ class TenantIdentifier:
         # Split by dots to get domain parts
         domain_parts = host.split(".")
         
-        # Need at least 3 parts for a subdomain (subdomain.domain.com)
-        if len(domain_parts) < 3:
+        # Determine subdomain
+        if len(domain_parts) >= 3:
+            subdomain = domain_parts[0]
+        elif len(domain_parts) == 2 and domain_parts[1].lower() in {"localhost", "local"}:
+            subdomain = domain_parts[0]
+        else:
             return None
-        
-        # First part is the subdomain
-        subdomain = domain_parts[0]
         
         # Filter out common non-tenant subdomains
         skip_subdomains = ["www", "api", "app", "admin", "staging", "dev", "test", "m", "mobile"]

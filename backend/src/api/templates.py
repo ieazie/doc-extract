@@ -630,6 +630,7 @@ async def create_template_example(
         
         # Create example
         example = TemplateExample(
+            tenant_id=tenant_id,
             template_id=uuid.UUID(template_id),
             name=example_data.name,
             document_snippet=example_data.document_snippet,
@@ -682,7 +683,10 @@ async def list_template_examples(
             raise HTTPException(status_code=404, detail="Template not found")
         
         examples = db.query(TemplateExample).filter(
-            TemplateExample.template_id == uuid.UUID(template_id)
+            and_(
+                TemplateExample.template_id == uuid.UUID(template_id),
+                TemplateExample.tenant_id == tenant_id
+            )
         ).all()
         
         return [
@@ -732,7 +736,8 @@ async def delete_template_example(
         example = db.query(TemplateExample).filter(
             and_(
                 TemplateExample.id == uuid.UUID(example_id),
-                TemplateExample.template_id == uuid.UUID(template_id)
+                TemplateExample.template_id == uuid.UUID(template_id),
+                TemplateExample.tenant_id == tenant_id
             )
         ).first()
         

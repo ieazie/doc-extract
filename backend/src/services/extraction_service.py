@@ -13,7 +13,6 @@ from ..services.tenant_config_service import TenantConfigService, RateLimitServi
 from ..services.tenant_infrastructure_service import TenantInfrastructureService
 from ..config import settings
 from ..services.llm_provider_service import LLMProviderService
-from ..schemas.tenant_configuration import LLMConfig
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +66,15 @@ class ExtractionService:
         self.config_service = TenantConfigService(db)
         self.infrastructure_service = TenantInfrastructureService(db)
         self.rate_limit_service = RateLimitService(db)
+        
+        # Resolve environment once
+        env = getattr(settings, "environment", getattr(settings, "default_environment", None))
+        if not env:
+            raise ValueError("settings.environment/default_environment must be set")
+        env = str(env).lower()
+        if env not in {"development", "staging", "production"}:
+            raise ValueError(f"Invalid environment: {env}")
+        self.environment = env
     
     async def extract_data(self, request: ExtractionRequest) -> ExtractionResult:
         """Extract structured data using tenant-specific LLM provider with rate limiting"""
@@ -83,8 +91,7 @@ class ExtractionService:
                 raise LanguageValidationError(language_validation_result['validation_message'])
             
             # Get tenant's LLM configuration with API keys from secrets
-            env = getattr(settings, "default_environment", "development")
-            llm_config = self.infrastructure_service.get_llm_config(request.tenant_id, env)
+            llm_config = self.infrastructure_service.get_llm_config(request.tenant_id, self.environment)
             if not llm_config:
                 raise Exception("No LLM configuration found for tenant")
             

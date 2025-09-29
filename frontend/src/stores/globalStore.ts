@@ -10,7 +10,7 @@ interface ErrorState {
   hasError: boolean;
   errorType: string | null;
   errorMessage: string | null;
-  errorDetails: any;
+  errorDetails: unknown;
 }
 
 // Global state interface
@@ -19,7 +19,7 @@ interface GlobalState {
   errors: ErrorState;
   
   // Actions
-  setError: (type: string, message: string, details?: any) => void;
+  setError: (type: string, message: string, details?: unknown) => void;
   clearError: () => void;
 }
 
@@ -34,8 +34,8 @@ export const useGlobalStore = create<GlobalState>((set) => ({
   },
   
   // Error actions
-  setError: (type: string, message: string, details?: any) => 
-    set((state) => ({
+  setError: (type: string, message: string, details?: unknown) =>
+    set(() => ({
       errors: {
         hasError: true,
         errorType: type,
@@ -43,9 +43,9 @@ export const useGlobalStore = create<GlobalState>((set) => ({
         errorDetails: details,
       }
     })),
-  
-  clearError: () => 
-    set((state) => ({
+
+  clearError: () =>
+    set(() => ({
       errors: {
         hasError: false,
         errorType: null,

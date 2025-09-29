@@ -3,6 +3,15 @@
 -- Description: Create templates table for data extraction schemas and prompts
 
 -- ============================================================================
+-- ENSURE DEFAULT TENANT EXISTS
+-- ============================================================================
+
+-- Ensure the default tenant exists before creating foreign key references
+INSERT INTO tenants (id, name, status, environment) VALUES 
+('00000000-0000-0000-0000-000000000001', 'Default Tenant', 'active', 'development')
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
 -- CREATE TEMPLATES TABLE
 -- ============================================================================
 
