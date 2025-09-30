@@ -41,18 +41,24 @@ ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'en',
 ADD COLUMN IF NOT EXISTS auto_detect_language BOOLEAN DEFAULT true,
 ADD COLUMN IF NOT EXISTS require_language_match BOOLEAN DEFAULT false;
 
--- Add constraints for template language
-ALTER TABLE templates 
-ADD CONSTRAINT IF NOT EXISTS valid_template_language CHECK (language ~ '^[a-z]{2}(-[A-Z]{2})?$');
+-- Add constraints for template language (only if constraint doesn't exist)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'valid_template_language' 
+        AND conrelid = 'templates'::regclass
+    ) THEN
+        ALTER TABLE templates 
+        ADD CONSTRAINT valid_template_language CHECK (language ~ '^[a-z]{2}(-[A-Z]{2})?$');
+    END IF;
+END $$;
 
 -- Create index for template language queries
 CREATE INDEX IF NOT EXISTS idx_templates_language ON templates(language);
 CREATE INDEX IF NOT EXISTS idx_templates_tenant_language ON templates(tenant_id, language);
 
--- Update existing templates to include language in prompt_config if not present
-UPDATE templates 
-SET prompt_config = prompt_config || '{"language": "en"}'::jsonb
-WHERE prompt_config->>'language' IS NULL;
+-- Note: Templates table doesn't have prompt_config column, language is stored directly
 
 -- ============================================================================
 -- 3. DOCUMENT LANGUAGE DETECTION

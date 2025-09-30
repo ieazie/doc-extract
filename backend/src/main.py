@@ -8,7 +8,8 @@ import uvicorn
 import logging
 
 from .config import settings, get_cors_origins
-from .models.database import create_tables
+from .models.database import create_tables, get_db
+from .middleware import TenantAwareCORSMiddleware
 from .api import health
 from .api import auth
 from .api import documents
@@ -33,13 +34,9 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Document Extraction Platform...")
     
-    # Create database tables
-    try:
-        create_tables()
-        logger.info("Database tables created/verified")
-    except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
-        raise
+    # Database tables are created via migrations only
+    # No SQLAlchemy auto-creation to prevent deployment issues
+    logger.info("Database initialization - tables managed via migrations only")
     
     # Check Ollama model availability
     await check_ollama_model()
@@ -56,19 +53,19 @@ async def check_ollama_model():
     import httpx
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{settings.ollama_url}/api/tags")
+            response = await client.get(f"{settings.ollama_endpoint_url}/api/tags")
             if response.status_code == 200:
                 models = response.json().get("models", [])
                 model_names = [model["name"] for model in models]
                 
-                if settings.ollama_model in model_names:
-                    logger.info(f"Ollama model {settings.ollama_model} is available")
+                if settings.default_ollama_model in model_names:
+                    logger.info(f"Ollama model {settings.default_ollama_model} is available")
                 else:
-                    logger.warning(f"Ollama model {settings.ollama_model} not found. Available models: {model_names}")
-                    logger.info(f"Attempting to pull {settings.ollama_model}...")
+                    logger.warning(f"Ollama model {settings.default_ollama_model} not found. Available models: {model_names}")
+                    logger.info(f"Attempting to pull {settings.default_ollama_model}...")
                     
                     # Try to pull the model (non-blocking)
-                    logger.info(f"Model {settings.ollama_model} will be downloaded in background")
+                    logger.info(f"Model {settings.default_ollama_model} will be downloaded in background")
                     # Note: Model download happens in background via ollama-init service
             else:
                 logger.error(f"Failed to connect to Ollama: {response.status_code}")
@@ -87,12 +84,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware
+# Add tenant-aware CORS middleware
+app.add_middleware(
+    TenantAwareCORSMiddleware,
+    db_session_factory=get_db
+)
+
+# Fallback CORS middleware for requests without tenant context
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
 
@@ -126,7 +129,7 @@ async def get_app_info():
         "debug": settings.debug,
         "allowed_file_types": list(settings.allowed_file_types),
         "max_file_size": settings.max_file_size,
-        "ollama_model": settings.ollama_model
+        "ollama_model": settings.default_ollama_model
     }
 
 

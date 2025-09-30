@@ -51,7 +51,7 @@ class Tenant(Base):
     name = Column(String(255), nullable=False)
     slug = Column(String(100), nullable=False, unique=True)
     settings = Column(JSONB, default={})
-    status = Column(Enum(TenantStatusEnum), default=TenantStatusEnum.ACTIVE)
+    status = Column(String(20), default="active")
     environment = Column(String(50), default="development")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -62,6 +62,7 @@ class Tenant(Base):
     document_categories = relationship("DocumentCategory", back_populates="tenant", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")
     templates = relationship("Template", back_populates="tenant", cascade="all, delete-orphan")
+    extractions = relationship("Extraction", back_populates="tenant", cascade="all, delete-orphan")
     configurations = relationship("TenantConfiguration", back_populates="tenant", cascade="all, delete-orphan")
     rate_limits = relationship("TenantRateLimit", back_populates="tenant", cascade="all, delete-orphan")
     extraction_jobs = relationship("ExtractionJob", back_populates="tenant", cascade="all, delete-orphan")
@@ -80,7 +81,7 @@ class User(Base):
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     role = Column(String(20), default="user", nullable=False)
-    status = Column(Enum(UserStatusEnum), default=UserStatusEnum.ACTIVE)
+    status = Column(String(20), default="active")
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     last_login = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -95,13 +96,14 @@ class User(Base):
 
 
 class RefreshToken(Base):
-    """Refresh Token model for secure token family tracking"""
+    """Refresh Token model for secure token family tracking with tenant isolation"""
     __tablename__ = "refresh_tokens"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     jti = Column(String(36), nullable=False, unique=True)  # JWT ID
     family_id = Column(UUID(as_uuid=True), nullable=False, index=True)  # Token family ID
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)  # Tenant isolation
     token_hash = Column(String(255), nullable=False)  # Hashed token for storage
     is_active = Column(Boolean, default=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
@@ -111,16 +113,19 @@ class RefreshToken(Base):
     
     # Relationships
     user = relationship("User")
+    tenant = relationship("Tenant")
     
     # Indexes for performance
     __table_args__ = (
-        Index('idx_refresh_tokens_user_family', 'user_id', 'family_id'),
+        Index('idx_refresh_tokens_user_family_tenant', 'user_id', 'family_id', 'tenant_id'),
         Index('idx_refresh_tokens_active_expires', 'is_active', 'expires_at'),
         Index('idx_refresh_tokens_jti', 'jti'),
+        Index('idx_refresh_tokens_tenant_id', 'tenant_id'),
+        Index('idx_refresh_tokens_user_tenant', 'user_id', 'tenant_id'),
     )
     
     def __repr__(self):
-        return f"<RefreshToken(id={self.id}, jti='{self.jti}', family_id={self.family_id}, active={self.is_active})>"
+        return f"<RefreshToken(id={self.id}, jti='{self.jti}', family_id={self.family_id}, tenant_id={self.tenant_id}, active={self.is_active})>"
 
 
 class APIKey(Base):
@@ -264,6 +269,7 @@ class Extraction(Base):
     __tablename__ = "extractions"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
     template_id = Column(UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), nullable=False)
     status = Column(String(50), default="pending")
@@ -285,6 +291,7 @@ class Extraction(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
+    tenant = relationship("Tenant", back_populates="extractions")
     document = relationship("Document", back_populates="extractions")
     template = relationship("Template", back_populates="extractions")
     fields = relationship("ExtractionField", back_populates="extraction", cascade="all, delete-orphan")
@@ -332,11 +339,10 @@ class Template(Base):
     status = Column(String(20), default='draft', nullable=False)
     version = Column(Integer, default=1, nullable=False)
     
-    # Template configuration (matching existing schema)
-    schema = Column(JSONB, nullable=False, default={})  # Field definitions
-    prompt_config = Column(JSONB, nullable=False, default={})  # Prompt settings
-    few_shot_examples = Column(JSONB, default=[])  # Examples array
-    extraction_settings = Column(JSONB, default={})  # Processing settings
+    # Template configuration (matching actual database schema)
+    extraction_schema = Column(JSONB, nullable=False, default={})  # Field definitions
+    extraction_prompt = Column(Text, nullable=True)  # Prompt text
+    validation_rules = Column(JSONB, default={})  # Validation rules
     
     # Language configuration
     language = Column(String(10), default="en")
@@ -345,6 +351,8 @@ class Template(Base):
     
     # Status and metadata
     is_active = Column(Boolean, default=True)
+    is_default = Column(Boolean, default=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     test_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -374,6 +382,7 @@ class TemplateExample(Base):
     __tablename__ = "template_examples"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     template_id = Column(UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), nullable=False)
     
     # Example content
@@ -394,6 +403,7 @@ class TemplateExample(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
+    tenant = relationship("Tenant")
     template = relationship("Template", back_populates="template_examples")
     source_document = relationship("Document")
 
@@ -480,7 +490,7 @@ class TenantConfiguration(Base):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint("config_type IN ('llm', 'rate_limits', 'storage', 'cache', 'message_queue', 'ai_providers', 'language')", name="valid_config_type"),
+        CheckConstraint("config_type IN ('llm', 'rate_limits', 'storage', 'cache', 'message_queue', 'ai_providers', 'language', 'auth', 'cors', 'security')", name="valid_config_type"),
         UniqueConstraint("tenant_id", "config_type", "environment", name="unique_active_config", deferrable=True),
     )
 

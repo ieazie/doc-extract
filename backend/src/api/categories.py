@@ -66,7 +66,8 @@ def get_db():
 # Temporary tenant resolution (will be enhanced in Phase 7)
 async def get_current_tenant_id() -> UUID:
     """Get current tenant ID - placeholder for multi-tenancy"""
-    return UUID("00000000-0000-0000-0000-000000000001")
+    from ..constants.tenant import DEFAULT_TENANT_ID
+    return DEFAULT_TENANT_ID
 
 
 @router.get("/", response_model=CategoryListResponse)

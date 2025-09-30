@@ -84,9 +84,10 @@ export class DocumentService extends BaseApiClient {
     formData.append('file', file);
     formData.append('is_test_document', 'true');
 
-    return this.request<Document>({
+    // Upload the document and get the upload response
+    const uploadResponse = await this.request<DocumentUploadResponse>({
       method: 'POST',
-      url: '/api/documents/upload-test',
+      url: '/api/documents/upload',
       data: formData,
       // Do not set Content-Type; the browser will add the correct boundary
       onUploadProgress: options?.onUploadProgress ? (progressEvent) => {
@@ -94,6 +95,14 @@ export class DocumentService extends BaseApiClient {
         options.onUploadProgress!(progress);
       } : undefined
     });
+
+    // Fetch the full document object using the document_id from upload response
+    if (!uploadResponse || !uploadResponse.document_id) {
+      const error = new Error('Upload failed: No document ID returned from server');
+      (error as any).name = 'UploadError';
+      throw error;
+    }
+    return this.getDocument(uploadResponse.document_id);
   }
 
   // Document Updates
@@ -131,7 +140,7 @@ export class DocumentService extends BaseApiClient {
   // Document Content and Preview
   async getDocumentContent(documentId: string): Promise<DocumentContent | null> {
     try {
-      return await this.get<DocumentContent>(`/api/documents/${documentId}/content`);
+      return await this.get<DocumentContent>(`/api/documents/content/${documentId}`);
     } catch (error: any) {
       // Handle 404 gracefully - document content might not exist yet
       if (error instanceof NotFoundError || error?.response?.status === 404 || error?.name === 'NotFoundError') {

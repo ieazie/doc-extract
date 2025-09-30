@@ -25,6 +25,10 @@ import Dropdown from '@/components/ui/Dropdown';
 import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, ApiTenant, TenantEnvironmentInfo } from '@/services/api/index';
 import InfrastructureManagement from '@/components/tenants/InfrastructureManagement';
 import { LanguageConfiguration } from '@/components/tenants/LanguageConfiguration';
+import { AuthenticationConfigForm } from '@/components/tenants/AuthenticationConfigForm';
+import { CORSConfigForm } from '@/components/tenants/CORSConfigForm';
+import { SecurityConfigForm } from '@/components/tenants/SecurityConfigForm';
+import { ApiKeyInput } from '@/components/tenants/ApiKeyInput';
 
 const PageContainer = styled.div`
   padding: 2rem;
@@ -78,6 +82,56 @@ const TabContent = styled.div`
   padding: 2rem;
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
   border: 1px solid #e5e7eb;
+`;
+
+const EnvironmentSelector = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border-radius: 0.375rem;
+  border: 1px solid #e2e8f0;
+`;
+
+const EnvironmentLabel = styled.span`
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+`;
+
+const EnvironmentPills = styled.div`
+  display: flex;
+  gap: 0.25rem;
+`;
+
+const EnvironmentPill = styled.button<{ $isActive: boolean }>`
+  padding: 0.25rem 0.75rem;
+  border: none;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  
+  ${props => props.$isActive ? `
+    background: #3b82f6;
+    color: white;
+    box-shadow: 0 1px 2px 0 rgba(59, 130, 246, 0.3);
+  ` : `
+    background: white;
+    color: #64748b;
+    border: 1px solid #cbd5e1;
+    
+    &:hover {
+      background: #f1f5f9;
+      color: #475569;
+      border-color: #94a3b8;
+    }
+  `}
 `;
 
 const SectionCard = styled.div`
@@ -215,9 +269,31 @@ const ContextualMessage = styled.div<{ $type: 'success' | 'error' }>`
 
 const TenantConfigPage: React.FC = () => {
   const { user, tenant, hasPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'llm' | 'infrastructure' | 'language'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'llm' | 'infrastructure' | 'language' | 'auth' | 'cors' | 'security'>('overview');
+  const [activeEnvironment, setActiveEnvironment] = useState<'development' | 'staging' | 'production'>('development');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  
+  // Cache configurations to prevent unnecessary API calls
+  const [configCache, setConfigCache] = useState<{
+    [key: string]: {
+      auth?: any;
+      cors?: any;
+      security?: any;
+    }
+  }>({});
+
+  // Function to handle configuration updates and cache invalidation
+  const handleConfigUpdated = (configType: 'auth' | 'cors' | 'security') => {
+    const cacheKey = `${activeEnvironment}`;
+    setConfigCache(prev => ({
+      ...prev,
+      [cacheKey]: {
+        ...prev[cacheKey],
+        [configType]: undefined // Invalidate cache for this config type
+      }
+    }));
+  };
   const [fieldExtractionMessage, setFieldExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [documentExtractionMessage, setDocumentExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
@@ -254,23 +330,49 @@ const TenantConfigPage: React.FC = () => {
     
     try {
       setLoading(true);
+      console.log('🔄 Loading tenant configurations...');
       const tenantService = serviceFactory.get<TenantService>('tenants');
       const summary = await tenantService.getTenantConfigSummary();
       
+      console.log('📦 Configuration summary:', summary);
+      
+      // Check if summary is null (happens when session expires)
+      if (!summary) {
+        console.warn('Tenant configuration summary is null - likely due to session expiry');
+        // Initialize with default config when summary is null
+        const defaultConfig: TenantLLMConfigs = {
+          field_extraction: {
+            provider: 'openai',
+            base_url: '',
+            model_name: 'gpt-4',
+            has_api_key: false
+          },
+          document_extraction: {
+            provider: 'ollama',
+            base_url: '',
+            model_name: 'gemma2:2b',
+            has_api_key: false
+          }
+        };
+        setTenantConfig(defaultConfig);
+        setLoading(false);
+        return;
+      }
+      
       // Initialize config structure
       const config: TenantLLMConfigs = {
-        field_extraction: {
-          provider: 'openai',
-          api_key: '',
-          base_url: '',
-          model_name: 'gpt-4'
-        },
-        document_extraction: {
-          provider: 'ollama',
-          api_key: '',
-          base_url: '',
-          model_name: 'gemma2:2b'
-        }
+      field_extraction: {
+        provider: 'openai',
+        base_url: '',
+        model_name: 'gpt-4',
+        has_api_key: false
+      },
+      document_extraction: {
+        provider: 'ollama',
+        base_url: '',
+        model_name: 'gemma2:2b',
+        has_api_key: false
+      }
       };
       
       // Load existing configurations if available
@@ -319,16 +421,15 @@ const TenantConfigPage: React.FC = () => {
         document_extraction: tenantConfig.document_extraction
       };
       
-      await serviceFactory.get<TenantService>('tenants').createTenantConfiguration({
-        tenant_id: tenant.id,
-        config_type: 'llm',
+      // Use updateTenantConfiguration instead of createTenantConfiguration
+      await serviceFactory.get<TenantService>('tenants').updateTenantConfiguration('llm', {
         config_data: llmConfigs,
       });
       
       setFieldExtractionMessage({ type: 'success', text: 'Field Extraction configuration saved successfully' });
       
       // Check health after saving if we have API key or using Ollama
-      if (tenantConfig.field_extraction.api_key || tenantConfig.field_extraction.provider === 'ollama') {
+      if (tenantConfig.field_extraction.has_api_key || tenantConfig.field_extraction.provider === 'ollama') {
         try {
           const health = await serviceFactory.get<HealthService>('health').checkLLMHealth({ config_type: 'field_extraction' });
           setFieldLlmHealth(health.healthy ? 'healthy' : 'unhealthy');
@@ -356,16 +457,15 @@ const TenantConfigPage: React.FC = () => {
         document_extraction: tenantConfig.document_extraction
       };
       
-      await serviceFactory.get<TenantService>('tenants').createTenantConfiguration({
-        tenant_id: tenant.id,
-        config_type: 'llm',
+      // Use updateTenantConfiguration instead of createTenantConfiguration
+      await serviceFactory.get<TenantService>('tenants').updateTenantConfiguration('llm', {
         config_data: llmConfigs,
       });
       
       setDocumentExtractionMessage({ type: 'success', text: 'Document Extraction configuration saved successfully' });
       
       // Check health after saving if we have API key or using Ollama
-      if (tenantConfig.document_extraction.api_key || tenantConfig.document_extraction.provider === 'ollama') {
+      if (tenantConfig.document_extraction.has_api_key || tenantConfig.document_extraction.provider === 'ollama') {
         try {
           const health = await serviceFactory.get<HealthService>('health').checkLLMHealth({ config_type: 'document_extraction' });
           setDocumentLlmHealth(health.healthy ? 'healthy' : 'unhealthy');
@@ -381,23 +481,50 @@ const TenantConfigPage: React.FC = () => {
     }
   };
 
+  // Helper function to handle LLM test responses
+  const handleLLMTestResponse = (
+    response: any,
+    testType: 'Field Extraction' | 'Document Extraction',
+    setMessage: (message: { type: 'success' | 'error'; text: string } | null) => void,
+    setHealth: (health: 'healthy' | 'unhealthy') => void
+  ) => {
+    // Check for HTTP errors first (status >= 400)
+    if (
+      !response ||
+      (typeof response === 'object' && 'status' in response && (response as any).status >= 400)
+    ) {
+      const errorMessage =
+        (response as any)?.error?.message ||
+        (response as any)?.statusText ||
+        'Unknown error occurred';
+      setMessage({ type: 'error', text: `${testType} LLM test failed: ${errorMessage}` });
+      setHealth('unhealthy');
+      return;
+    }
+
+    // Check for API-level failures (success: false in response payload)
+    if ('success' in response && response.success === false) {
+      const errorMessage = response.error || 'LLM test reported failure';
+      setMessage({ type: 'error', text: `${testType} LLM test failed: ${errorMessage}` });
+      setHealth('unhealthy');
+      return;
+    }
+
+    // Success case
+    setMessage({ type: 'success', text: `${testType} LLM test completed successfully` });
+    setHealth('healthy');
+  };
+
   const handleTestFieldExtractionLLM = async () => {
     if (!tenantConfig?.field_extraction) {
       setFieldExtractionMessage({ type: 'error', text: 'No Field Extraction configuration found' });
       return;
     }
 
-    // Check if API key is required but missing
-    if ((tenantConfig.field_extraction.provider === 'openai' || tenantConfig.field_extraction.provider === 'anthropic') && !tenantConfig.field_extraction.api_key) {
-      setFieldExtractionMessage({ type: 'error', text: `Field Extraction LLM test failed: API key is required for ${tenantConfig.field_extraction.provider} but not provided` });
-      return;
-    }
-
+    setTestingField(true);
+    setFieldExtractionMessage(null);
     try {
-      setTestingField(true);
-      setFieldExtractionMessage(null);
-      
-      const testResult = await serviceFactory.get<HealthService>('health').testLLMExtraction({
+      const response = await serviceFactory.get<HealthService>('health').testLLMExtraction({
         config_type: 'field_extraction',
         document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
         schema: { 
@@ -408,11 +535,14 @@ const TenantConfigPage: React.FC = () => {
         prompt_config: {}
       });
       
-      setFieldExtractionMessage({ type: 'success', text: 'Field Extraction LLM test completed successfully' });
-      setFieldLlmHealth('healthy');
-    } catch (error) {
-      console.error('Field extraction LLM test failed:', error);
-      setFieldExtractionMessage({ type: 'error', text: `Field Extraction LLM test failed: ${error}` });
+      handleLLMTestResponse(
+        response,
+        'Field Extraction',
+        setFieldExtractionMessage,
+        setFieldLlmHealth
+      );
+    } catch (err: any) {
+      setFieldExtractionMessage({ type: 'error', text: `Field Extraction LLM test failed: ${err?.message || 'Unknown error'}` });
       setFieldLlmHealth('unhealthy');
     } finally {
       setTestingField(false);
@@ -425,17 +555,10 @@ const TenantConfigPage: React.FC = () => {
       return;
     }
 
-    // Check if API key is required but missing
-    if ((tenantConfig.document_extraction.provider === 'openai' || tenantConfig.document_extraction.provider === 'anthropic') && !tenantConfig.document_extraction.api_key) {
-      setDocumentExtractionMessage({ type: 'error', text: `Document Extraction LLM test failed: API key is required for ${tenantConfig.document_extraction.provider} but not provided` });
-      return;
-    }
-
+    setTestingDocument(true);
+    setDocumentExtractionMessage(null);
     try {
-      setTestingDocument(true);
-      setDocumentExtractionMessage(null);
-      
-      const testResult = await serviceFactory.get<HealthService>('health').testLLMExtraction({
+      const response = await serviceFactory.get<HealthService>('health').testLLMExtraction({
         config_type: 'document_extraction',
         document_text: "Invoice #12345 dated 2024-01-15 for $1,500.00",
         schema: { 
@@ -446,11 +569,14 @@ const TenantConfigPage: React.FC = () => {
         prompt_config: {}
       });
       
-      setDocumentExtractionMessage({ type: 'success', text: 'Document Extraction LLM test completed successfully' });
-      setDocumentLlmHealth('healthy');
-    } catch (error) {
-      console.error('Document extraction LLM test failed:', error);
-      setDocumentExtractionMessage({ type: 'error', text: `Document Extraction LLM test failed: ${error}` });
+      handleLLMTestResponse(
+        response,
+        'Document Extraction',
+        setDocumentExtractionMessage,
+        setDocumentLlmHealth
+      );
+    } catch (err: any) {
+      setDocumentExtractionMessage({ type: 'error', text: `Document Extraction LLM test failed: ${err?.message || 'Unknown error'}` });
       setDocumentLlmHealth('unhealthy');
     } finally {
       setTestingDocument(false);
@@ -551,44 +677,35 @@ const TenantConfigPage: React.FC = () => {
         </ConfigRow>
         
         {tenantConfig?.field_extraction?.provider === 'openai' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input 
-              type="password"
-              value={tenantConfig?.field_extraction?.api_key || ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                field_extraction: {
-                  ...prev.field_extraction!,
-                  api_key: e.target.value
-                }
-              } : null)}
-              placeholder="sk-..."
-            />
-            {!tenantConfig?.field_extraction?.api_key && (
-              <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
-                API key is required for OpenAI
-              </div>
-            )}
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={tenantConfig?.field_extraction?.api_key || ''}
+            hasKey={!!tenantConfig?.field_extraction?.has_api_key}
+            onChange={(value) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              ...prev,
+              field_extraction: {
+                ...prev.field_extraction!,
+                api_key: value,
+                has_api_key: value.length > 0
+              }
+            } : null)}
+          />
         )}
 
         {tenantConfig?.field_extraction?.provider === 'anthropic' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input 
-              type="password"
-              value={tenantConfig?.field_extraction?.api_key || ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                field_extraction: {
-                  ...prev.field_extraction!,
-                  api_key: e.target.value
-                }
-              } : null)}
-              placeholder="sk-ant-..."
-            />
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={tenantConfig?.field_extraction?.api_key || ''}
+            hasKey={!!tenantConfig?.field_extraction?.has_api_key}
+            onChange={(value) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              ...prev,
+              field_extraction: {
+                ...prev.field_extraction!,
+                api_key: value,
+                has_api_key: value.length > 0
+              }
+            } : null)}
+          />
         )}
         
         <ButtonGroup>
@@ -669,39 +786,35 @@ const TenantConfigPage: React.FC = () => {
         </ConfigRow>
         
         {tenantConfig?.document_extraction?.provider === 'openai' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input 
-              type="password"
-              value={tenantConfig?.document_extraction?.api_key || ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                document_extraction: {
-                  ...prev.document_extraction!,
-                  api_key: e.target.value
-                }
-              } : null)}
-              placeholder="sk-..."
-            />
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={tenantConfig?.document_extraction?.api_key || ''}
+            hasKey={!!tenantConfig?.document_extraction?.has_api_key}
+            onChange={(value) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              ...prev,
+              document_extraction: {
+                ...prev.document_extraction!,
+                api_key: value,
+                has_api_key: value.length > 0
+              }
+            } : null)}
+          />
         )}
 
         {tenantConfig?.document_extraction?.provider === 'anthropic' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input 
-              type="password"
-              value={tenantConfig?.document_extraction?.api_key || ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                document_extraction: {
-                  ...prev.document_extraction!,
-                  api_key: e.target.value
-                }
-              } : null)}
-              placeholder="sk-ant-..."
-            />
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={tenantConfig?.document_extraction?.api_key || ''}
+            hasKey={!!tenantConfig?.document_extraction?.has_api_key}
+            onChange={(value) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              ...prev,
+              document_extraction: {
+                ...prev.document_extraction!,
+                api_key: value,
+                has_api_key: value.length > 0
+              }
+            } : null)}
+          />
         )}
         
         <ButtonGroup>
@@ -794,13 +907,79 @@ const TenantConfigPage: React.FC = () => {
         >
           Language
         </TabButton>
+        <TabButton 
+          $isActive={activeTab === 'auth'} 
+          onClick={() => setActiveTab('auth')}
+        >
+          Authentication
+        </TabButton>
+        <TabButton 
+          $isActive={activeTab === 'cors'} 
+          onClick={() => setActiveTab('cors')}
+        >
+          CORS
+        </TabButton>
+        <TabButton 
+          $isActive={activeTab === 'security'} 
+          onClick={() => setActiveTab('security')}
+        >
+          Security
+        </TabButton>
       </TabNavigation>
 
       <TabContent>
+        {/* Environment Selector - Show for configuration tabs only */}
+        {(activeTab === 'auth' || activeTab === 'cors' || activeTab === 'security') && (
+          <EnvironmentSelector>
+            <EnvironmentLabel>Environment:</EnvironmentLabel>
+            <EnvironmentPills>
+              <EnvironmentPill 
+                $isActive={activeEnvironment === 'development'} 
+                onClick={() => setActiveEnvironment('development')}
+              >
+                Development
+              </EnvironmentPill>
+              <EnvironmentPill 
+                $isActive={activeEnvironment === 'staging'} 
+                onClick={() => setActiveEnvironment('staging')}
+              >
+                Staging
+              </EnvironmentPill>
+              <EnvironmentPill 
+                $isActive={activeEnvironment === 'production'} 
+                onClick={() => setActiveEnvironment('production')}
+              >
+                Production
+              </EnvironmentPill>
+            </EnvironmentPills>
+          </EnvironmentSelector>
+        )}
+
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'llm' && renderLLMTab()}
         {activeTab === 'infrastructure' && tenant && renderInfrastructureTab()}
         {activeTab === 'language' && tenant && <LanguageConfiguration tenantId={tenant.id} />}
+        {activeTab === 'auth' && tenant && (
+          <AuthenticationConfigForm 
+            tenantId={tenant.id} 
+            environment={activeEnvironment}
+            onConfigUpdated={() => handleConfigUpdated('auth')}
+          />
+        )}
+        {activeTab === 'cors' && tenant && (
+          <CORSConfigForm 
+            tenantId={tenant.id} 
+            environment={activeEnvironment}
+            onConfigUpdated={() => handleConfigUpdated('cors')}
+          />
+        )}
+        {activeTab === 'security' && tenant && (
+          <SecurityConfigForm 
+            tenantId={tenant.id} 
+            environment={activeEnvironment}
+            onConfigUpdated={() => handleConfigUpdated('security')}
+          />
+        )}
       </TabContent>
     </PageContainer>
   );

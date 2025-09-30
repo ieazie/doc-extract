@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from ..config import settings
 from .tenant_config_service import TenantConfigService
+from .tenant_infrastructure_service import TenantInfrastructureService
 from .llm_provider_service import LLMProviderService
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ class AIService:
     def __init__(self, db: Session):
         self.db = db
         self.config_service = TenantConfigService(db)
+        self.infrastructure_service = TenantInfrastructureService(db)
     
     async def generate_fields_from_prompt(self, prompt: str, document_type: str = "other", template_language: str = "en", tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -67,12 +69,18 @@ class AIService:
         
         for attempt in range(max_retries):
             try:
-                # Get tenant's LLM configuration
-                llm_config = self.config_service.get_llm_config(tenant_id)
+                # Get tenant's LLM configuration with API keys from secrets
+                env = getattr(settings, "default_environment", "development")
+                llm_config = self.infrastructure_service.get_llm_config(tenant_id, env)
                 if not llm_config:
                     # Fallback to global settings if no tenant config
                     logger.warning(f"No LLM configuration found for tenant {tenant_id}, using fallback")
                     return await self._generate_with_fallback(system_prompt, user_prompt, mode)
+                
+                # Debug logging
+                logger.info(f"Retrieved LLM config for tenant {tenant_id}: {type(llm_config)}")
+                if hasattr(llm_config, 'field_extraction') and llm_config.field_extraction:
+                    logger.info(f"Field extraction config: provider={llm_config.field_extraction.provider}, has_api_key={hasattr(llm_config.field_extraction, 'api_key') and bool(llm_config.field_extraction.api_key)}")
                 
                 # Use Field Extraction configuration for schema generation
                 if hasattr(llm_config, 'field_extraction') and llm_config.field_extraction:

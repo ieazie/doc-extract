@@ -1,4 +1,21 @@
+/**
+ * Authentication Context - Secure Token Management
+ * 
+ * SECURITY APPROACH:
+ * - Access tokens are stored in sessionStorage for React navigation compatibility
+ * - Refresh tokens are stored in httpOnly cookies (secure, not accessible to JavaScript)
+ * - Silent refresh on page load to obtain fresh access tokens
+ * - XSS mitigation through proper token handling and httpOnly refresh cookies
+ * 
+ * XSS MITIGATION:
+ * - Primary security comes from httpOnly refresh cookies
+ * - Access tokens are short-lived and rotated frequently
+ * - Clear documentation of XSS risks and mitigation strategies
+ * - Backend enforces proper token validation and rotation
+ */
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useRouter } from 'next/router';
 import { AuthService, TenantService, serviceFactory } from '@/services/api/index';
 
 // Auth Types
@@ -67,24 +84,48 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null); // In-memory only
+  const [accessToken, setAccessToken] = useState<string | null>(null); // Stored in sessionStorage for React navigation compatibility
   const [isLoading, setIsLoading] = useState(true);
+
+  // Helper functions for access token persistence
+  const getStoredAccessToken = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem('auth_access_token');
+  };
+
+  const setStoredAccessToken = (token: string | null): void => {
+    if (typeof window === 'undefined') return;
+    if (token) {
+      sessionStorage.setItem('auth_access_token', token);
+    } else {
+      sessionStorage.removeItem('auth_access_token');
+    }
+  };
+
+  // Simple token refresh function
 
   const refreshToken = async (): Promise<void> => {
     try {
       const authService = serviceFactory.get<AuthService>('auth');
       const response = await authService.refreshToken();
       
-      // Update in-memory access token
+      // Update access token in memory and sessionStorage
       setAccessToken(response.access_token);
+      setStoredAccessToken(response.access_token);
       serviceFactory.setAuthToken(response.access_token);
       
       // Update user data if provided
       if (response.user) {
         setUser(response.user);
         localStorage.setItem('auth_user', JSON.stringify(response.user));
+        
+        // Update tenant ID in service factory if user has a tenant
+        if (response.user.tenant_id) {
+          serviceFactory.setTenantId(response.user.tenant_id);
+        }
       }
       
     } catch (error) {
@@ -94,36 +135,102 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+
   const clearAuthData = () => {
     setUser(null);
     setTenant(null);
     setAccessToken(null);
+    setStoredAccessToken(null);
     serviceFactory.setAuthToken(null);
+    serviceFactory.setTenantId(null);
     localStorage.removeItem('auth_user');
     localStorage.removeItem('auth_tenant');
-    // Note: auth_tokens no longer stored in localStorage
   };
 
-  // Initialize auth state - NO localStorage for access tokens
+  // Initialize auth state
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Only restore user/tenant data, not tokens
+        // Restore user/tenant data from localStorage and access token from sessionStorage
         const storedUser = localStorage.getItem('auth_user');
         const storedTenant = localStorage.getItem('auth_tenant');
+        const storedAccessToken = getStoredAccessToken();
 
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
           const parsedTenant = storedTenant ? JSON.parse(storedTenant) : null;
           
-          setUser(parsedUser);
-          setTenant(parsedTenant);
-          
-          // Try to refresh token silently using httpOnly cookie
-          try {
-            await refreshToken();
-          } catch (error) {
-            // Refresh failed, clear auth data
+          // If we have a stored access token, use it immediately
+          if (storedAccessToken) {
+            setUser(parsedUser);
+            setTenant(parsedTenant);
+            setAccessToken(storedAccessToken);
+            serviceFactory.setAuthToken(storedAccessToken);
+            
+            // Restore tenant ID in service factory
+            if (parsedUser && parsedUser.tenant_id) {
+              serviceFactory.setTenantId(parsedUser.tenant_id);
+            }
+            
+            // Load tenant data if we have a tenant_id but no tenant data
+            if (parsedUser?.tenant_id && !parsedTenant) {
+              try {
+                const authService = serviceFactory.get<AuthService>('auth');
+                const tenantData = await authService.getCurrentTenant();
+                if (tenantData) {
+                  setTenant(tenantData);
+                  localStorage.setItem('auth_tenant', JSON.stringify(tenantData));
+                }
+              } catch (error) {
+                console.warn('⚠️ Failed to load tenant data:', error);
+              }
+            }
+          } else {
+            // No stored access token, try to refresh silently
+            const authService = serviceFactory.get<AuthService>('auth');
+            const refreshResult = await authService.silentRefreshToken();
+
+            if (refreshResult) {
+              // Valid refresh token - set user data and access token
+              setUser(refreshResult.user || parsedUser);
+              setTenant(parsedTenant);
+              setAccessToken(refreshResult.access_token);
+              setStoredAccessToken(refreshResult.access_token);
+              serviceFactory.setAuthToken(refreshResult.access_token);
+              
+              // Update user data if provided
+              if (refreshResult.user) {
+                localStorage.setItem('auth_user', JSON.stringify(refreshResult.user));
+                
+                // Update tenant ID in service factory
+                if (refreshResult.user.tenant_id) {
+                  serviceFactory.setTenantId(refreshResult.user.tenant_id);
+                }
+              } else if (parsedUser && parsedUser.tenant_id) {
+                // Use stored tenant ID if refresh didn't return user data
+                serviceFactory.setTenantId(parsedUser.tenant_id);
+              }
+            } else {
+              // No valid refresh token, clear auth data
+              console.log('No valid refresh token available during initialization - clearing stored data');
+              clearAuthData();
+            }
+          }
+        } else {
+          // No stored user – still attempt silent refresh (cookie-based)
+          const authService = serviceFactory.get<AuthService>('auth');
+          const refreshResult = await authService.silentRefreshToken();
+          if (refreshResult) {
+            setUser(refreshResult.user || null);
+            setTenant(null);
+            setAccessToken(refreshResult.access_token);
+            setStoredAccessToken(refreshResult.access_token);
+            serviceFactory.setAuthToken(refreshResult.access_token);
+            if (refreshResult.user?.tenant_id) {
+              serviceFactory.setTenantId(refreshResult.user.tenant_id);
+              localStorage.setItem('auth_user', JSON.stringify(refreshResult.user));
+            }
+          } else {
             clearAuthData();
           }
         }
@@ -131,6 +238,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.error('Error initializing auth:', error);
         clearAuthData();
       } finally {
+        console.log('✅ Auth initialization complete, setting isLoading to false');
         setIsLoading(false);
       }
     };
@@ -144,13 +252,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     window.addEventListener('auth:logout', handleAuthLogout);
 
-    initializeAuth();
-
     // Cleanup event listener
     return () => {
       window.removeEventListener('auth:logout', handleAuthLogout);
     };
-  }, []);
+  }, []); // Run once on mount
+
+  // Simple token refresh on 401 errors (handled by API interceptor)
 
   const logout = async () => {
     try {
@@ -165,16 +273,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const login = async (credentials: LoginCredentials) => {
+  const login = async (credentials: LoginCredentials): Promise<void> => {
     try {
-      setIsLoading(true);
-      
       const authService = serviceFactory.get<AuthService>('auth');
       const response = await authService.login(credentials);
       
-      // Set the auth token for all services immediately (in-memory)
+      // Check if response is null (shouldn't happen with proper API)
+      if (!response || !response.access_token) {
+        return; // Error is already handled by global store
+      }
+      
+      // Set the auth token in memory and sessionStorage
       setAccessToken(response.access_token);
+      setStoredAccessToken(response.access_token);
       serviceFactory.setAuthToken(response.access_token);
+      
+      // Set tenant ID in service factory if user has a tenant
+      if (response.user.tenant_id) {
+        serviceFactory.setTenantId(response.user.tenant_id);
+      }
       
       // Store user data
       setUser(response.user);
@@ -202,16 +319,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         localStorage.setItem('auth_tenant', JSON.stringify(tenantData));
       }
       
-      // Redirect to dashboard after successful login
-      if (typeof window !== 'undefined') {
-        window.location.href = '/';
-      }
+      // Redirect to dashboard after successful login using Next.js router
+      await router.push('/');
       
     } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
+      // Error is already handled by global store
+      console.log('Login failed - error handled by global store');
     }
   };
 
@@ -220,6 +333,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const authService = serviceFactory.get<AuthService>('auth');
       await authService.switchTenant(tenantId);
+      
+      // Update tenant ID in service factory immediately
+      serviceFactory.setTenantId(tenantId);
       
       // Refresh user and tenant data
       const [userData, tenantData] = await Promise.all([

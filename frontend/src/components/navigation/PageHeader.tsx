@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { Bell, Globe, Shield, ChevronDown, Users, Settings, ExternalLink, User, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthService, TenantService, serviceFactory } from '@/services/api/index';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 
 const HeaderContainer = styled.header`
   position: fixed;
@@ -353,12 +354,15 @@ interface Tenant {
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
-  const { user, tenant, switchTenant, hasPermission, logout } = useAuth();
+  const { user, tenant, switchTenant, hasPermission, logout, isLoading } = useAuth();
   const [availableTenants, setAvailableTenants] = useState<Tenant[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoadingTenants, setIsLoadingTenants] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+
+  // Global error handling
+  const { setError, clearError } = useErrorActions();
 
   const getUserInitials = () => {
     if (!user) return 'U';
@@ -368,23 +372,57 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
   // Load available tenants when component mounts or user changes
   useEffect(() => {
     const loadTenants = async () => {
-      if (!user) return;
+      // Check both user existence and authentication state
+      if (!user || isLoading) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('🔄 PageHeader: Skipping tenant load - no user or still loading:', { user: !!user, isLoading });
+        }
+        return;
+      }
       
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('🔄 PageHeader: Loading tenants for user role:', user.role);
+      }
       setIsLoadingTenants(true);
+      clearError(); // Clear any existing errors
+      
       try {
         let tenants;
-        if (user.role === 'system_admin') {
-          // System admin can see all tenants
-          const tenantService = serviceFactory.get<TenantService>('tenants');
-          tenants = await tenantService.getTenants();
-        } else {
-          // Regular users see only their assigned tenants
-          const authService = serviceFactory.get<AuthService>('auth');
-          tenants = await authService.getUserTenants();
+          if (user.role === 'system_admin') {
+            // System admin can see all tenants
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('🔄 PageHeader: Loading all tenants for system admin');
+            }
+            const tenantService = serviceFactory.get<TenantService>('tenants');
+            tenants = await tenantService.getTenants();
+          } else {
+            // Regular users see only their assigned tenants
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('🔄 PageHeader: Loading user tenants for role:', user.role);
+            }
+            const authService = serviceFactory.get<AuthService>('auth');
+            tenants = await authService.getUserTenants();
+          }
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('✅ PageHeader: Loaded tenants:', tenants?.length || 0);
         }
         setAvailableTenants(tenants || []);
-      } catch (error) {
-        console.error('Failed to load tenants:', error);
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('❌ PageHeader: Failed to load tenants:', error);
+      }
+        
+        // Handle authentication errors by logging out the user
+        if (error && (error as any).name === 'AuthenticationError') {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('🔄 PageHeader: Authentication error detected, logging out');
+          }
+          logout();
+          return; // Don't set error state for auth errors
+        } else {
+          setError('tenant_load_failed', 'Failed to load tenants. Please refresh the page.');
+        }
+        
         setAvailableTenants([]);
       } finally {
         setIsLoadingTenants(false);
@@ -392,17 +430,29 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
     };
 
     loadTenants();
-  }, [user]);
+  }, [user, isLoading]);
 
   const handleTenantSwitch = async (tenantId: string) => {
     if (tenantId === tenant?.id || isSwitching) return;
     
     setIsSwitching(true);
+    clearError(); // Clear any existing errors
+    
     try {
       await switchTenant(tenantId);
       setIsDropdownOpen(false);
     } catch (error) {
-      console.error('Failed to switch tenant:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Failed to switch tenant:', error);
+      }
+      
+      // Handle authentication errors by logging out the user
+      if (error && (error as any).name === 'AuthenticationError') {
+        // Session expired - log out user and redirect to login
+        logout();
+      } else {
+        setError('tenant_switch_failed', 'Failed to switch tenant. Please try again.');
+      }
     } finally {
       setIsSwitching(false);
     }
@@ -422,7 +472,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
     try {
       await logout();
     } catch (error) {
-      console.error('Logout failed:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Logout failed:', error);
+      }
+      setError('logout_failed', 'Failed to logout. Please try again.');
     }
   };
 

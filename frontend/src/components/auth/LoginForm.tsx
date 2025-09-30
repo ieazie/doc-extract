@@ -1,11 +1,25 @@
-import React, { useState } from 'react';
-import styled from 'styled-components';
+import React, { useState, useCallback } from 'react';
+import styled, { keyframes } from 'styled-components';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Shield, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
+
+const spin = keyframes`
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+`;
+
+const InlineSpinner = styled.div`
+  width: 16px;
+  height: 16px;
+  border: 2px solid #f3f4f6;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: ${spin} 1s linear infinite;
+`;
 
 const LoginContainer = styled.div`
   min-height: 100vh;
@@ -160,32 +174,42 @@ const DemoValue = styled.span`
 `;
 
 export const LoginForm: React.FC = () => {
-  const { login, isLoading } = useAuth();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Use global error state
+  const errorState = useErrorState();
+  const { clearError } = useErrorActions();
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
     // Clear error when user starts typing
-    if (error) setError(null);
-  };
+    if (errorState.hasError) {
+      clearError();
+    }
+  }, [errorState.hasError, clearError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    clearError(); // Clear any existing errors
+    setIsSubmitting(true);
 
     try {
       await login(formData);
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+    } catch (error) {
+      // Error is already handled by global store, just ensure we don't crash
+      console.log('Login failed - error handled by global store');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -230,7 +254,7 @@ export const LoginForm: React.FC = () => {
               value={formData.email}
               onChange={handleInputChange}
               required
-              disabled={isLoading}
+              disabled={isSubmitting}
             />
           </InputGroup>
 
@@ -245,24 +269,24 @@ export const LoginForm: React.FC = () => {
               value={formData.password}
               onChange={handleInputChange}
               required
-              disabled={isLoading}
+              disabled={isSubmitting}
             />
             <PasswordToggle
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </PasswordToggle>
           </InputGroup>
 
-          {error && <ErrorMessage message={error} />}
+          {errorState.hasError && <ErrorMessage message={errorState.errorMessage || 'An error occurred'} />}
 
           <LoginButton
             type="submit"
-            disabled={isLoading || !formData.email || !formData.password}
+            disabled={isSubmitting || !formData.email || !formData.password}
           >
-            {isLoading ? <LoadingSpinner size={16} /> : 'Sign In'}
+            {isSubmitting ? <InlineSpinner /> : 'Sign In'}
           </LoginButton>
         </Form>
 
@@ -288,7 +312,7 @@ export const LoginForm: React.FC = () => {
               size="small"
               variant="outline"
               onClick={() => fillDemoCredentials('system_admin')}
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
               Fill System Admin
             </Button>
@@ -296,7 +320,7 @@ export const LoginForm: React.FC = () => {
               size="small"
               variant="outline"
               onClick={() => fillDemoCredentials('admin')}
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
               Fill Tenant Admin
             </Button>
@@ -304,7 +328,7 @@ export const LoginForm: React.FC = () => {
               size="small"
               variant="outline"
               onClick={() => fillDemoCredentials('user')}
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
               Fill User
             </Button>

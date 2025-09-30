@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from uuid import UUID, uuid4
 from passlib.context import CryptContext
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
@@ -23,11 +22,12 @@ logger = logging.getLogger(__name__)
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT settings
-SECRET_KEY = settings.secret_key
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+# JWT settings - These are now tenant-specific via TenantAuthService
+# Legacy constants removed - all authentication now uses tenant-specific configurations
+ALGORITHM = "HS256"  # Algorithm is still consistent across tenants
+
+# Legacy constants are no longer used - all authentication operations
+# must use TenantAuthService for tenant-specific configurations
 
 
 class AuthService:
@@ -43,119 +43,6 @@ class AuthService:
     def get_password_hash(self, password: str) -> str:
         """Hash a password"""
         return self.pwd_context.hash(password)
-    
-    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
-        """Create a JWT access token"""
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.now(timezone.utc) + expires_delta
-        else:
-            expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        
-        to_encode.update({"exp": expire, "type": "access"})
-        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        return encoded_jwt
-    
-    def create_refresh_token(self, db: Session, user_id: UUID, family_id: Optional[UUID] = None) -> str:
-        """Create a JWT refresh token with family tracking"""
-        # Generate unique JTI (JWT ID)
-        jti = str(uuid4())
-        
-        # Create family ID if not provided (new login)
-        if family_id is None:
-            family_id = uuid4()
-        
-        # Calculate expiry
-        expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-        
-        # Create JWT payload
-        to_encode = {
-            "sub": str(user_id),
-            "jti": jti,
-            "family_id": str(family_id),
-            "exp": expire,
-            "type": "refresh"
-        }
-        
-        # Create JWT token
-        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        
-        # Hash the token for secure storage
-        token_hash = hashlib.sha256(encoded_jwt.encode()).hexdigest()
-        
-        # Store refresh token in database
-        refresh_token_record = RefreshToken(
-            jti=jti,
-            family_id=family_id,
-            user_id=user_id,
-            token_hash=token_hash,
-            expires_at=expire,
-            is_active=True
-        )
-        
-        db.add(refresh_token_record)
-        db.commit()
-        
-        return encoded_jwt
-    
-    def verify_token(self, token: str, token_type: str = "access") -> Optional[dict]:
-        """Verify and decode a JWT token"""
-        try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            if payload.get("type") != token_type:
-                return None
-            return payload
-        except JWTError:
-            return None
-    
-    def verify_refresh_token(self, db: Session, token: str) -> Optional[dict]:
-        """Verify refresh token with reuse detection and family tracking"""
-        try:
-            # First verify the JWT structure and signature
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            if payload.get("type") != "refresh":
-                return None
-            
-            jti = payload.get("jti")
-            family_id = payload.get("family_id")
-            user_id = payload.get("sub")
-            
-            if not all([jti, family_id, user_id]):
-                return None
-            
-            # Check if token exists in database and is active (with row lock to prevent race conditions)
-            refresh_token_record = (
-                db.query(RefreshToken)
-                .with_for_update()
-                .filter(
-                    and_(
-                        RefreshToken.jti == jti,
-                        RefreshToken.is_active.is_(True),
-                        RefreshToken.expires_at > datetime.now(timezone.utc),
-                    )
-                )
-                .first()
-            )
-            
-            if not refresh_token_record:
-                return None
-            
-            # Check if token has been used before (reuse detection)
-            if refresh_token_record.used_at is not None:
-                # Token reuse detected - revoke entire family
-                self._revoke_token_family(db, UUID(family_id))
-                logger.warning(f"Refresh token reuse detected for family {family_id} - family revoked")
-                return None
-            
-            # Update token usage timestamp
-            refresh_token_record.used_at = datetime.now(timezone.utc)
-            db.commit()
-            
-            return payload
-            
-        except (JWTError, ValueError, TypeError):
-            logger.exception("Refresh token verification failed")
-            return None
     
     def _revoke_token_family(self, db: Session, family_id: UUID):
         """Revoke all tokens in a family (security measure for reuse detection)"""
@@ -263,13 +150,14 @@ class AuthService:
     
     def get_default_tenant_id(self, db: Session) -> UUID:
         """Get the default tenant ID"""
-        tenant = db.query(Tenant).filter(Tenant.name == "Default Tenant").first()
+        tenant = db.query(Tenant).filter(Tenant.name == "DocExtract Demo").first()
         if not tenant:
             # Create default tenant if it doesn't exist
             from ..config import settings
+            from ..constants.tenant import DEFAULT_TENANT_ID, DEFAULT_TENANT_NAME
             tenant = Tenant(
-                id=UUID("00000000-0000-0000-0000-000000000001"),
-                name="Default Tenant",
+                id=DEFAULT_TENANT_ID,
+                name=DEFAULT_TENANT_NAME,
                 settings={"max_documents": 1000, "max_templates": 50},
                 status=TenantStatus.ACTIVE,
                 environment=settings.default_environment
@@ -358,7 +246,8 @@ class AuthService:
             ]
         }
         
-        return permissions.get(user.role, [])
+        role_key = user.role if isinstance(user.role, UserRole) else UserRole(user.role)
+        return permissions.get(role_key, [])
     
     def has_permission(self, user: User, permission: str) -> bool:
         """Check if user has a specific permission"""
@@ -488,15 +377,18 @@ class AuthService:
     
     def is_system_admin(self, user: User) -> bool:
         """Check if user is a system admin"""
-        return user.role == UserRole.SYSTEM_ADMIN.value
+        role = user.role if isinstance(user.role, UserRole) else UserRole(user.role)
+        return role == UserRole.SYSTEM_ADMIN
     
     def is_tenant_admin(self, user: User) -> bool:
         """Check if user is a tenant admin"""
-        return user.role == UserRole.TENANT_ADMIN.value
+        role = user.role if isinstance(user.role, UserRole) else UserRole(user.role)
+        return role == UserRole.TENANT_ADMIN
     
     def is_admin(self, user: User) -> bool:
         """Check if user has admin privileges (system or tenant)"""
-        return user.role in [UserRole.SYSTEM_ADMIN.value, UserRole.TENANT_ADMIN.value]
+        role = user.role if isinstance(user.role, UserRole) else UserRole(user.role)
+        return role in (UserRole.SYSTEM_ADMIN, UserRole.TENANT_ADMIN)
     
     def can_access_tenant(self, user: User, target_tenant_id: UUID) -> bool:
         """Check if user can access a specific tenant"""
@@ -528,7 +420,10 @@ class AuthService:
                 return False
         
         # Update role
-        user.role = new_role
+        try:
+            user.role = UserRole(new_role) if isinstance(new_role, str) else new_role
+        except ValueError:
+            return False
         db.commit()
         return True
     
@@ -573,7 +468,15 @@ async def get_current_user(
         )
     
     # Get user
-    user_id = UUID(payload.get("sub"))
+    sub = payload.get("sub")
+    try:
+        user_id = UUID(sub)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     user = auth_service.get_user_by_id(db, user_id)
     if not user or user.status != UserStatus.ACTIVE:
         raise HTTPException(
@@ -600,7 +503,8 @@ def require_permission(permission: str):
 def require_role(required_role: UserRole):
     """Create a dependency that requires a specific role"""
     async def role_dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != required_role:
+        role = current_user.role if isinstance(current_user.role, UserRole) else UserRole(current_user.role)
+        if role != required_role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role required: {required_role.value}"
@@ -610,8 +514,17 @@ def require_role(required_role: UserRole):
     return role_dependency
 
 def require_admin():
-    """Create a dependency that requires admin role"""
-    return require_role(UserRole.ADMIN)
+    """Create a dependency that requires admin role (system or tenant)"""
+    async def admin_dependency(current_user: User = Depends(get_current_user)) -> User:
+        role = current_user.role if isinstance(current_user.role, UserRole) else UserRole(current_user.role)
+        if role not in (UserRole.SYSTEM_ADMIN, UserRole.TENANT_ADMIN):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Role required: admin (system or tenant)"
+            )
+        return current_user
+    
+    return admin_dependency
 
 def require_tenant_admin():
     """Create a dependency that requires tenant admin role"""

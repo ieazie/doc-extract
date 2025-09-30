@@ -95,7 +95,7 @@ mockAxiosInstance.request.mockImplementation(({ method, url, data }: { method?: 
   if (method?.toLowerCase() === 'get' && url && /^\/api\/documents\/doc-1$/.test(url)) {
     return Promise.resolve({ data: { id: 'doc-1', original_filename: 'test.pdf' } });
   }
-  if (method?.toLowerCase() === 'get' && url && /^\/api\/documents\/doc-1\/content$/.test(url)) {
+  if (method?.toLowerCase() === 'get' && url && /^\/api\/documents\/content\/doc-1$/.test(url)) {
     return Promise.resolve({ data: { content: '...', metadata: {} } });
   }
   if (method?.toLowerCase() === 'get' && url && /^\/api\/documents\/non-existent-id\/content$/.test(url)) {

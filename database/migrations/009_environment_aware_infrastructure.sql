@@ -117,7 +117,7 @@ SELECT
         'region', 'us-east-1',
         'endpoint_url', 'http://minio:9000',
         'max_storage_gb', 50,
-        'allowed_file_types', '["pdf", "docx", "txt", "png", "jpg"]'
+        'allowed_file_types', '["pdf", "docx", "txt", "png", "jpg"]'::jsonb
     )
 FROM tenants t;
 
@@ -151,7 +151,7 @@ SELECT
         'broker_url', 'redis://redis:6379',
         'result_backend', 'redis://redis:6379',
         'max_workers', 1,
-        'priority_queues', '["high", "normal", "low"]'
+        'priority_queues', '["high", "normal", "low"]'::jsonb
     )
 FROM tenants t;
 
@@ -168,7 +168,7 @@ SELECT
         'region', 'us-east-1',
         'endpoint_url', 'http://minio:9000',
         'max_storage_gb', 100,
-        'allowed_file_types', '["pdf", "docx", "txt", "png", "jpg"]'
+        'allowed_file_types', '["pdf", "docx", "txt", "png", "jpg"]'::jsonb
     )
 FROM tenants t;
 
@@ -202,7 +202,7 @@ SELECT
         'broker_url', 'redis://redis:6379',
         'result_backend', 'redis://redis:6379',
         'max_workers', 2,
-        'priority_queues', '["high", "normal", "low"]'
+        'priority_queues', '["high", "normal", "low"]'::jsonb
     )
 FROM tenants t;
 
@@ -219,7 +219,7 @@ SELECT
         'region', 'us-east-1',
         'endpoint_url', NULL, -- AWS S3 default
         'max_storage_gb', 1000,
-        'allowed_file_types', '["pdf", "docx", "txt", "png", "jpg"]'
+        'allowed_file_types', '["pdf", "docx", "txt", "png", "jpg"]'::jsonb
     )
 FROM tenants t;
 
@@ -253,7 +253,7 @@ SELECT
         'broker_url', 'redis://redis-cloud:6379',
         'result_backend', 'redis://redis-cloud:6379',
         'max_workers', 5,
-        'priority_queues', '["high", "normal", "low", "scheduled"]'
+        'priority_queues', '["high", "normal", "low", "scheduled"]'::jsonb
     )
 FROM tenants t;
 

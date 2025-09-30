@@ -13,6 +13,7 @@ import {
 
 import { DocumentService, CategoryService, serviceFactory, ProcessingStats, Category, DocumentListResponse } from '../../services/api/index';
 import { useAuth } from '../../contexts/AuthContext';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import DocumentList from '../documents/DocumentList';
 
 // Styled Components
@@ -223,9 +224,38 @@ const LoadingState = styled.div`
   color: ${props => props.theme.colors.text.muted};
 `;
 
+const ErrorState = styled.div`
+  text-align: center;
+  padding: 2rem;
+  color: ${props => props.theme.colors.error};
+  
+  h3 {
+    margin-bottom: 1rem;
+    color: ${props => props.theme.colors.error};
+  }
+  
+  p {
+    margin-bottom: 1rem;
+    color: ${props => props.theme.colors.text.muted};
+  }
+  
+  button {
+    background: ${props => props.theme.colors.primary};
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: ${props => props.theme.borderRadius.sm};
+    cursor: pointer;
+    
+    &:hover {
+      background: ${props => props.theme.colors.primaryHover};
+    }
+  }
+`;
+
 // Component
 export const ViewerDashboard: React.FC = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<'documents' | 'extractions'>('documents');
   const [stats, setStats] = useState<ProcessingStats | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -233,9 +263,14 @@ export const ViewerDashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
+
   // Load viewer dashboard data
   const loadViewerData = async () => {
     setLoading(true);
+    clearError(); // Clear any existing errors
     
     try {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -264,6 +299,13 @@ export const ViewerDashboard: React.FC = () => {
       setRecentDocuments(documentsData);
     } catch (error) {
       console.error('Failed to load viewer dashboard data:', error);
+      
+      // Handle authentication errors by logging out the user
+      if (error && (error as any).name === 'AuthenticationError') {
+        logout();
+      } else {
+        setError('dashboard_load_failed', 'Failed to load dashboard data. Please refresh the page.');
+      }
     } finally {
       setLoading(false);
     }
@@ -279,6 +321,18 @@ export const ViewerDashboard: React.FC = () => {
         <LoadingState>
           <div>⏳ Loading dashboard...</div>
         </LoadingState>
+      </ViewerContainer>
+    );
+  }
+
+  if (errorState.hasError) {
+    return (
+      <ViewerContainer>
+        <ErrorState>
+          <h3>Error Loading Dashboard</h3>
+          <p>{errorState.errorMessage || 'An error occurred'}</p>
+          <button type="button" onClick={() => loadViewerData()}>Retry</button>
+        </ErrorState>
       </ViewerContainer>
     );
   }

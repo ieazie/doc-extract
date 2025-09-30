@@ -3,7 +3,7 @@ Configuration management for the Document Extraction Platform
 """
 from pydantic import Field
 from pydantic_settings import BaseSettings
-from typing import Set, Optional
+from typing import Set, Optional, Union
 import os
 
 
@@ -42,17 +42,8 @@ class Settings(BaseSettings):
         'text/plain'
     }
     
-    # Security
-    secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
-    jwt_secret: str = Field(default="dev-jwt-secret-change-in-production", env="JWT_SECRET")
-    access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
-    tenant_secret_encryption_key: str = Field(
-        default="dev-tenant-secret-encryption-key-change-in-production", 
-        env="TENANT_SECRET_ENCRYPTION_KEY"
-    )
-    
-    # CORS Settings
-    cors_origins: list = Field(default=["http://localhost:3000", "http://frontend:3000"])
+    # Security and CORS settings are now tenant-specific via tenant configurations
+    # See TenantAuthService and TenantConfigService for tenant-specific JWT, CORS, and security settings
     
     # Redis and Celery Configuration
     redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
@@ -107,7 +98,6 @@ def is_production() -> bool:
 
 
 def get_cors_origins() -> list:
-    """Get CORS origins list"""
-    if settings.debug:
-        return ["*"]  # Allow all origins in development
-    return settings.cors_origins
+    """Get fallback CORS origins list for requests without tenant context"""
+    # This is used as a fallback by the CORS middleware when tenant-specific CORS is not available
+    return ["http://localhost:3000", "http://frontend:3000"]

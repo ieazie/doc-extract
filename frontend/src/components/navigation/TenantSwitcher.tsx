@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChevronDown, Check, Building2 } from 'lucide-react';
+import { DEFAULT_TENANT_ID, DEFAULT_TENANT_NAME } from '../../constants/tenant';
 
 const SwitcherContainer = styled.div`
   position: relative;
@@ -143,8 +144,8 @@ export const TenantSwitcher: React.FC<TenantSwitcherProps> = ({ isCollapsed }) =
   // Mock tenants for demonstration
   const availableTenants = [
     {
-      id: '00000000-0000-0000-0000-000000000001',
-      name: 'DocExtract Demo',
+      id: DEFAULT_TENANT_ID,
+      name: DEFAULT_TENANT_NAME,
       environment: 'development' as const,
     },
     {

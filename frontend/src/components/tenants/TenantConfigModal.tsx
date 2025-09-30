@@ -10,9 +10,15 @@ import {
   TestTube,
   RefreshCw,
   X,
-  AlertCircle
+  AlertCircle,
+  Globe
 } from 'lucide-react';
 import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, ApiTenant } from '@/services/api/index';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
+import { AuthenticationConfigForm } from './AuthenticationConfigForm';
+import { CORSConfigForm } from './CORSConfigForm';
+import { SecurityConfigForm } from './SecurityConfigForm';
+import { ApiKeyInput } from './ApiKeyInput';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
@@ -288,7 +294,7 @@ interface TenantConfigModalProps {
 }
 
 export default function TenantConfigModal({ tenant, onClose }: TenantConfigModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'general' | 'llm' | 'rate-limits'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'general' | 'llm' | 'rate-limits' | 'authentication' | 'cors' | 'security'>('overview');
   const [fieldExtractionConfig, setFieldExtractionConfig] = useState<LLMConfig | null>(null);
   const [documentExtractionConfig, setDocumentExtractionConfig] = useState<LLMConfig | null>(null);
   const [rateLimitsConfig, setRateLimitsConfig] = useState<RateLimitsConfig | null>(null);
@@ -301,8 +307,11 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
   const [testingDocument, setTestingDocument] = useState(false);
   const [fieldExtractionMessage, setFieldExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [documentExtractionMessage, setDocumentExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
   
   // Tenant editing state
   const [editingTenant, setEditingTenant] = useState<{
@@ -312,6 +321,7 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     max_documents: number;
     max_templates: number;
   } | null>(null);
+
 
   const loadAvailableModels = async (provider: string) => {
     try {
@@ -360,7 +370,7 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     
     try {
       setLoading(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       // For now, we'll use the current user's tenant config endpoint
       // In a real implementation, you'd have admin endpoints to get config for any tenant
@@ -496,8 +506,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         }
       }
     } catch (err) {
-      setError('Failed to load configurations');
       console.error('Error loading configurations:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('config_load_failed', 'Failed to load configurations. Please refresh the page.');
+      }
     } finally {
       setLoading(false);
     }
@@ -521,7 +537,7 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
   useEffect(() => {
     setFieldExtractionMessage(null);
     setDocumentExtractionMessage(null);
-    setError(null);
+    clearError(); // Clear any existing errors
     setSuccess(null);
   }, [activeTab]);
 
@@ -577,11 +593,8 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       }
       
       const tenantService = serviceFactory.get<TenantService>('tenants');
-      await tenantService.createTenantConfiguration({
-        tenant_id: tenant.id,
-        config_type: 'llm',
+      await tenantService.updateTenantConfiguration('llm', {
         config_data: llmConfigs,
-        is_active: true
       });
       
       setFieldExtractionMessage({ type: 'success', text: 'Field Extraction configuration saved successfully' });
@@ -629,16 +642,13 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       };
       
       if (!tenant) {
-        setError('No tenant selected');
+        setError('validation_failed', 'No tenant selected');
         return;
       }
       
       const tenantService = serviceFactory.get<TenantService>('tenants');
-      await tenantService.createTenantConfiguration({
-        tenant_id: tenant.id,
-        config_type: 'llm',
+      await tenantService.updateTenantConfiguration('llm', {
         config_data: llmConfigs,
-        is_active: true
       });
       
       // Check health after saving if we have API key or using Ollama
@@ -666,10 +676,10 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     
     try {
       setSaving(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       if (!tenant) {
-        setError('No tenant selected');
+        setError('validation_failed', 'No tenant selected');
         return;
       }
       
@@ -683,8 +693,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       
       setSuccess('Rate limits configuration saved successfully');
     } catch (err) {
-      setError('Failed to save rate limits configuration');
       console.error('Error saving rate limits:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('rate_limits_save_failed', 'Failed to save rate limits configuration. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -783,8 +799,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       setSuccess('Rate limits reset successfully');
       loadConfigurations();
     } catch (err) {
-      setError('Failed to reset rate limits');
       console.error('Error resetting rate limits:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('rate_limits_reset_failed', 'Failed to reset rate limits. Please try again.');
+      }
     }
   };
 
@@ -793,7 +815,7 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     
     try {
       setSaving(true);
-      setError(null);
+      clearError(); // Clear any existing errors
       
       const tenantService = serviceFactory.get<TenantService>('tenants');
       await tenantService.updateTenant(tenant.id, {
@@ -808,8 +830,14 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
       setSuccess('Tenant updated successfully');
       onClose(); // Close modal to refresh the table
     } catch (err) {
-      setError('Failed to update tenant');
       console.error('Error updating tenant:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('tenant_update_failed', 'Failed to update tenant. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -1019,38 +1047,29 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         </FormGroup>
 
         {fieldExtractionConfig?.provider === 'openai' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input
-              type="password"
-              value={fieldExtractionConfig?.api_key || ''}
-              onChange={(e) => setFieldExtractionConfig({
-                ...fieldExtractionConfig,
-                api_key: e.target.value
-              })}
-              placeholder="sk-..."
-            />
-            {!fieldExtractionConfig?.api_key && (
-              <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: '0.25rem' }}>
-                ⚠️ API key required for OpenAI. Get your key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: '#f59e0b', textDecoration: 'underline' }}>OpenAI Platform</a>
-              </div>
-            )}
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={fieldExtractionConfig?.api_key || ''}
+            hasKey={fieldExtractionConfig?.has_api_key || false}
+            onChange={(value) => setFieldExtractionConfig({
+              ...fieldExtractionConfig,
+              api_key: value,
+              has_api_key: value.length > 0
+            })}
+          />
         )}
 
         {fieldExtractionConfig?.provider === 'anthropic' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input
-              type="password"
-              value={fieldExtractionConfig?.api_key || ''}
-              onChange={(e) => setFieldExtractionConfig({
-                ...fieldExtractionConfig,
-                api_key: e.target.value
-              })}
-              placeholder="sk-ant-..."
-            />
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={fieldExtractionConfig?.api_key || ''}
+            hasKey={fieldExtractionConfig?.has_api_key || false}
+            onChange={(value) => setFieldExtractionConfig({
+              ...fieldExtractionConfig,
+              api_key: value,
+              has_api_key: value.length > 0
+            })}
+          />
         )}
 
         {fieldExtractionConfig?.provider === 'ollama' && (
@@ -1208,33 +1227,29 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
         </FormGroup>
 
         {documentExtractionConfig?.provider === 'openai' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input
-              type="password"
-              value={documentExtractionConfig?.api_key || ''}
-              onChange={(e) => setDocumentExtractionConfig({
-                ...documentExtractionConfig,
-                api_key: e.target.value
-              })}
-              placeholder="sk-..."
-            />
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={documentExtractionConfig?.api_key || ''}
+            hasKey={documentExtractionConfig?.has_api_key || false}
+            onChange={(value) => setDocumentExtractionConfig({
+              ...documentExtractionConfig,
+              api_key: value,
+              has_api_key: value.length > 0
+            })}
+          />
         )}
 
         {documentExtractionConfig?.provider === 'anthropic' && (
-          <FormGroup>
-            <Label>API Key</Label>
-            <Input
-              type="password"
-              value={documentExtractionConfig?.api_key || ''}
-              onChange={(e) => setDocumentExtractionConfig({
-                ...documentExtractionConfig,
-                api_key: e.target.value
-              })}
-              placeholder="sk-ant-..."
-            />
-          </FormGroup>
+          <ApiKeyInput
+            label="API Key"
+            value={documentExtractionConfig?.api_key || ''}
+            hasKey={documentExtractionConfig?.has_api_key || false}
+            onChange={(value) => setDocumentExtractionConfig({
+              ...documentExtractionConfig,
+              api_key: value,
+              has_api_key: value.length > 0
+            })}
+          />
         )}
 
         {documentExtractionConfig?.provider === 'ollama' && (
@@ -1441,6 +1456,49 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     </SectionCard>
   );
 
+  const renderAuthenticationTab = () => {
+    if (!tenant) return <div>No tenant selected</div>;
+    
+    return (
+      <AuthenticationConfigForm
+        tenantId={tenant.id}
+        environment={tenant.environment as 'development' | 'staging' | 'production'}
+        onConfigUpdated={() => {
+          // Optionally reload tenant data or show success message
+          console.log('Authentication configuration updated');
+        }}
+      />
+    );
+  };
+
+  const renderCORSTab = () => {
+    if (!tenant) return <div>No tenant selected</div>;
+    
+    return (
+      <CORSConfigForm
+        tenantId={tenant.id}
+        environment={tenant.environment as 'development' | 'staging' | 'production'}
+        onConfigUpdated={() => {
+          console.log('CORS configuration updated');
+        }}
+      />
+    );
+  };
+
+  const renderSecurityTab = () => {
+    if (!tenant) return <div>No tenant selected</div>;
+    
+    return (
+      <SecurityConfigForm
+        tenantId={tenant.id}
+        environment={tenant.environment as 'development' | 'staging' | 'production'}
+        onConfigUpdated={() => {
+          console.log('Security configuration updated');
+        }}
+      />
+    );
+  };
+
   return (
     <ModalOverlay onClick={onClose}>
       <ModalContent onClick={(e) => e.stopPropagation()}>
@@ -1476,6 +1534,24 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
           >
             Rate Limits
           </TabButton>
+          <TabButton 
+            $isActive={activeTab === 'authentication'} 
+            onClick={() => setActiveTab('authentication')}
+          >
+            Authentication
+          </TabButton>
+          <TabButton 
+            $isActive={activeTab === 'cors'} 
+            onClick={() => setActiveTab('cors')}
+          >
+            CORS
+          </TabButton>
+          <TabButton 
+            $isActive={activeTab === 'security'} 
+            onClick={() => setActiveTab('security')}
+          >
+            Security
+          </TabButton>
         </TabNavigation>
 
         <ModalBody>
@@ -1489,6 +1565,9 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
               {activeTab === 'general' && renderGeneralTab()}
               {activeTab === 'llm' && renderLLMTab()}
               {activeTab === 'rate-limits' && renderRateLimitsTab()}
+              {activeTab === 'authentication' && renderAuthenticationTab()}
+              {activeTab === 'cors' && renderCORSTab()}
+              {activeTab === 'security' && renderSecurityTab()}
             </>
           )}
         </ModalBody>

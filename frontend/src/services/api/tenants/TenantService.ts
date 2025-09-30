@@ -24,7 +24,10 @@ import {
   EnvironmentSecret,
   EnvironmentSecretUpdate,
   EnvironmentConfig,
-  AvailableModelsResponse
+  AvailableModelsResponse,
+  AuthenticationConfig,
+  CORSConfig,
+  SecurityConfig
 } from './types/tenants';
 
 export class TenantService extends BaseApiClient {
@@ -85,6 +88,119 @@ export class TenantService extends BaseApiClient {
     await this.delete<void>(`/api/tenant/configurations/${configType}`);
   }
 
+  // New Configuration Types (Auth, CORS, Security)
+  async getAuthenticationConfig(environment?: string): Promise<AuthenticationConfig | null> {
+    try {
+      if (environment) {
+        const response = await this.get<TenantConfigurationRead>(
+          `/api/tenant/configurations/auth/${environment}`
+        );
+        return (response?.config_data as unknown as AuthenticationConfig) ?? null;
+      }
+
+      const response = await this.get<TenantConfigurationRead>(
+        `/api/tenant/configurations/auth`
+      );
+      return (response?.config_data as unknown as AuthenticationConfig) ?? null;
+    } catch (error) {
+      console.warn('No authentication config found:', error);
+      return null;
+    }
+  }
+
+  async updateAuthenticationConfig(
+    config: AuthenticationConfig,
+    environment?: string
+  ): Promise<TenantConfigurationWrite> {
+    if (environment) {
+      return this.put<TenantConfigurationWrite>(
+        `/api/tenant/configurations/auth/${environment}`,
+        config
+      );
+    }
+
+    return this.createTenantConfiguration({
+      tenant_id: '', // Will be set by backend from JWT
+      config_type: 'auth',
+      config_data: config
+    });
+  }
+
+  async getCORSConfig(environment?: string): Promise<CORSConfig | null> {
+    try {
+      if (environment) {
+        const response = await this.get<TenantConfigurationRead>(
+          `/api/tenant/configurations/cors/${environment}`
+        );
+        return (response?.config_data as unknown as CORSConfig) ?? null;
+      }
+
+      const response = await this.get<TenantConfigurationRead>(
+        '/api/tenant/configurations/cors'
+      );
+      return (response?.config_data as unknown as CORSConfig) ?? null;
+    } catch (error) {
+      console.warn('No CORS config found:', error);
+      return null;
+    }
+  }
+
+  async updateCORSConfig(
+    config: CORSConfig,
+    environment?: string
+  ): Promise<TenantConfigurationWrite> {
+    if (environment) {
+      return this.put<TenantConfigurationWrite>(
+        `/api/tenant/configurations/cors/${environment}`,
+        config
+      );
+    }
+
+    return this.createTenantConfiguration({
+      tenant_id: '', // Will be set by backend from JWT
+      config_type: 'cors',
+      config_data: config
+    });
+  }
+
+  async getSecurityConfig(environment?: string): Promise<SecurityConfig | null> {
+    try {
+      if (environment) {
+        const response = await this.get<TenantConfigurationRead>(
+          `/api/tenant/configurations/security/${environment}`
+        );
+        return (response?.config_data as unknown as SecurityConfig) ?? null;
+      }
+
+      const response = await this.get<TenantConfigurationRead>(
+        '/api/tenant/configurations/security'
+      );
+      return (response?.config_data as unknown as SecurityConfig) ?? null;
+    } catch (error) {
+      console.warn('No security config found:', error);
+      return null;
+    }
+  }
+
+  async updateSecurityConfig(
+    config: SecurityConfig,
+    environment?: string
+  ): Promise<TenantConfigurationWrite> {
+    if (environment) {
+      return this.put<TenantConfigurationWrite>(
+        `/api/tenant/configurations/security/${environment}`,
+        config
+      );
+    }
+
+    return this.createTenantConfiguration({
+      tenant_id: '', // Will be set by backend from JWT
+      config_type: 'security',
+      config_data: config
+    });
+  }
+
+
   // Tenant Information
   async getTenantInfo(): Promise<TenantEnvironmentInfo> {
     return this.get<TenantEnvironmentInfo>('/api/tenant/info');
@@ -138,6 +254,7 @@ export class TenantService extends BaseApiClient {
   async getAvailableModels(): Promise<AvailableModelsResponse[]> {
     return this.get<AvailableModelsResponse[]>('/api/models/available');
   }
+
 
   // Tenant Statistics
   async getTenantStatistics(tenantId: string): Promise<{

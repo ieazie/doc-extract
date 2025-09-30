@@ -105,6 +105,7 @@ def queue_job_execution(self, job_id: str) -> Dict[str, Any]:
             
             # Create extraction record
             extraction = Extraction(
+                tenant_id=job.tenant_id,
                 document_id=document.id,
                 template_id=job.template_id,
                 status='pending'

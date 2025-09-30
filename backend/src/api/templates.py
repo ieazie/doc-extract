@@ -288,10 +288,10 @@ async def create_template(
             language=template.language or "en",
             auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
             require_language_match=template.require_language_match if template.require_language_match is not None else False,
-            schema=template.schema,
-            prompt_config=template.prompt_config,
-            extraction_settings=template.extraction_settings,
-            few_shot_examples=template.few_shot_examples,
+            schema=template.extraction_schema,
+            prompt_config={"instructions": template.extraction_prompt or "", "system_prompt": "", "output_format": "json"},
+            extraction_settings={},
+            few_shot_examples=[],
             is_active=template.is_active,
             status=template.status or "draft",
             version=template.version,
@@ -389,10 +389,10 @@ async def list_templates(
                 language=template.language or "en",
                 auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
                 require_language_match=template.require_language_match if template.require_language_match is not None else False,
-                schema=template.schema,
-                prompt_config=template.prompt_config,
-                extraction_settings=template.extraction_settings,
-                few_shot_examples=template.few_shot_examples,
+                schema=template.extraction_schema,
+                prompt_config={"instructions": template.extraction_prompt or "", "system_prompt": "", "output_format": "json"},
+                extraction_settings={},
+                few_shot_examples=[],
                 is_active=template.is_active,
                 status=template.status or "draft",
                 version=template.version,
@@ -451,10 +451,10 @@ async def get_template(
             language=template.language or "en",
             auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
             require_language_match=template.require_language_match if template.require_language_match is not None else False,
-            schema=template.schema,
-            prompt_config=template.prompt_config,
-            extraction_settings=template.extraction_settings,
-            few_shot_examples=template.few_shot_examples,
+            schema=template.extraction_schema,
+            prompt_config={"instructions": template.extraction_prompt or "", "system_prompt": "", "output_format": "json"},
+            extraction_settings={},
+            few_shot_examples=[],
             is_active=template.is_active,
             status=template.status or "draft",
             version=template.version,
@@ -524,13 +524,12 @@ async def update_template(
         if template_data.require_language_match is not None:
             template.require_language_match = template_data.require_language_match
         if template_data.schema is not None:
-            template.schema = template_data.schema
+            template.extraction_schema = template_data.schema
         if template_data.prompt_config is not None:
-            template.prompt_config = template_data.prompt_config.dict()
-        if template_data.extraction_settings is not None:
-            template.extraction_settings = template_data.extraction_settings.dict()
-        if template_data.few_shot_examples is not None:
-            template.few_shot_examples = template_data.few_shot_examples
+            # Convert PromptConfig to simple text for database storage
+            template.extraction_prompt = template_data.prompt_config.instructions
+        # extraction_settings column doesn't exist in database - skip
+        # few_shot_examples column doesn't exist in database - skip
         if template_data.is_active is not None:
             template.is_active = template_data.is_active
         if template_data.status is not None:
@@ -555,10 +554,10 @@ async def update_template(
             language=template.language or "en",
             auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
             require_language_match=template.require_language_match if template.require_language_match is not None else False,
-            schema=template.schema,
-            prompt_config=template.prompt_config,
-            extraction_settings=template.extraction_settings,
-            few_shot_examples=template.few_shot_examples,
+            schema=template.extraction_schema,
+            prompt_config={"instructions": template.extraction_prompt or "", "system_prompt": "", "output_format": "json"},
+            extraction_settings={},
+            few_shot_examples=[],
             is_active=template.is_active,
             status=template.status or "draft",
             version=template.version,
@@ -631,6 +630,7 @@ async def create_template_example(
         
         # Create example
         example = TemplateExample(
+            tenant_id=tenant_id,
             template_id=uuid.UUID(template_id),
             name=example_data.name,
             document_snippet=example_data.document_snippet,
@@ -683,7 +683,10 @@ async def list_template_examples(
             raise HTTPException(status_code=404, detail="Template not found")
         
         examples = db.query(TemplateExample).filter(
-            TemplateExample.template_id == uuid.UUID(template_id)
+            and_(
+                TemplateExample.template_id == uuid.UUID(template_id),
+                TemplateExample.tenant_id == tenant_id
+            )
         ).all()
         
         return [
@@ -733,7 +736,8 @@ async def delete_template_example(
         example = db.query(TemplateExample).filter(
             and_(
                 TemplateExample.id == uuid.UUID(example_id),
-                TemplateExample.template_id == uuid.UUID(template_id)
+                TemplateExample.template_id == uuid.UUID(template_id),
+                TemplateExample.tenant_id == tenant_id
             )
         ).first()
         
@@ -793,12 +797,12 @@ async def test_template(
             
             extraction_request = ExtractionRequest(
                 document_text=test_document,
-                schema=template.schema,
+                schema=template.extraction_schema,
                 prompt_config={
-                    "system_prompt": template.prompt_config.get("system_prompt", f"Extract data from this {doc_type_name} document according to the schema."),
-                    "instructions": template.prompt_config.get("instructions", ""),
-                    "output_format": template.prompt_config.get("output_format", "json"),
-                    "few_shot_examples": template.prompt_config.get("few_shot_examples", []),
+                    "system_prompt": f"Extract data from this {doc_type_name} document according to the schema.",
+                    "instructions": template.extraction_prompt or "",
+                    "output_format": "json",
+                    "few_shot_examples": [],
                     # Include template language configuration
                     "language": template.language or "en",
                     "auto_detect_language": template.auto_detect_language if template.auto_detect_language is not None else True,
@@ -836,7 +840,7 @@ async def test_template(
             }
             
             # Try to extract some basic fields based on schema
-            for field_name, field_def in template.schema.items():
+            for field_name, field_def in template.extraction_schema.items():
                 if field_def.get('type') == 'text':
                     mock_result['extracted_data'][field_name] = f"Sample {field_name} value"
                 elif field_def.get('type') == 'number':

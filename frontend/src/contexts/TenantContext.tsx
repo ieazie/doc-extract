@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { DEFAULT_TENANT_ID, DEFAULT_TENANT_NAME } from '../constants/tenant';
 
 export interface Tenant {
   id: string;
@@ -42,8 +43,8 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
       try {
         // For now, use a mock tenant. In Phase 7.1, this will be replaced with API call
         const mockTenant: Tenant = {
-          id: '00000000-0000-0000-0000-000000000001',
-          name: 'DocExtract Demo',
+          id: DEFAULT_TENANT_ID,
+          name: DEFAULT_TENANT_NAME,
           logo: undefined,
           settings: {
             theme: {

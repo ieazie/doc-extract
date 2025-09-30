@@ -1,6 +1,5 @@
 -- Migration: Add test-related fields
--- Add is_test_document field to documents table
-ALTER TABLE documents ADD COLUMN is_test_document BOOLEAN DEFAULT FALSE;
+-- Note: is_test_document field already exists in documents table from 002_create_documents_table.sql
 
 -- Add test_document_id field to templates table
 ALTER TABLE templates ADD COLUMN test_document_id UUID REFERENCES documents(id);
@@ -9,7 +8,7 @@ ALTER TABLE templates ADD COLUMN test_document_id UUID REFERENCES documents(id);
 ALTER TABLE extractions ADD COLUMN is_test_extraction BOOLEAN DEFAULT FALSE;
 
 -- Add indexes for better performance
-CREATE INDEX idx_documents_is_test_document ON documents(is_test_document);
+-- Note: idx_documents_is_test_document already exists from 002_create_documents_table.sql
 CREATE INDEX idx_templates_test_document_id ON templates(test_document_id);
 CREATE INDEX idx_extractions_is_test_extraction ON extractions(is_test_extraction);
 

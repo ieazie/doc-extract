@@ -17,6 +17,22 @@ services:
       - backend
     restart: unless-stopped
 
+  # Database migrations service - runs once before backend starts
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python scripts/run_migrations.py
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/docextract
+    volumes:
+      - ./backend:/app
+      - ./database:/app/database
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"  # Run only once
+
   backend:
     build:
       context: ./backend
@@ -34,8 +50,6 @@ services:
       - DEBUG=true
       - MAX_FILE_SIZE=52428800  # 50MB
       
-      # Security
-      - TENANT_SECRET_ENCRYPTION_KEY=dev-tenant-secret-encryption-key-change-in-production
       
       # External Service Endpoints (tenant-agnostic)
       - MINIO_ENDPOINT_URL=http://minio:9000
@@ -50,10 +64,14 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      - db
-      - redis
-      - minio
-      - ollama
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
 
   redis:
@@ -85,8 +103,6 @@ services:
       - DEBUG=true
       - MAX_FILE_SIZE=52428800  # 50MB
       
-      # Security
-      - TENANT_SECRET_ENCRYPTION_KEY=dev-tenant-secret-encryption-key-change-in-production
       
       # External Service Endpoints (tenant-agnostic)
       - MINIO_ENDPOINT_URL=http://minio:9000
@@ -101,10 +117,14 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      - db
-      - redis
-      - minio
-      - ollama
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
 
   celery-beat:
@@ -123,8 +143,6 @@ services:
       - DEBUG=true
       - MAX_FILE_SIZE=52428800  # 50MB
       
-      # Security
-      - TENANT_SECRET_ENCRYPTION_KEY=dev-tenant-secret-encryption-key-change-in-production
       
       # External Service Endpoints (tenant-agnostic)
       - MINIO_ENDPOINT_URL=http://minio:9000
@@ -139,8 +157,10 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      - db
-      - redis
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   db:

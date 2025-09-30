@@ -1,6 +1,7 @@
 """
 Tenant Configuration API Endpoints
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
@@ -24,9 +25,17 @@ from ..schemas.tenant_configuration import (
     LLMConfig,
     TenantLLMConfigs,
     RateLimitsConfig,
-    AvailableModelsResponse
+    AvailableModelsResponse,
+    AuthenticationConfig,
+    CORSConfig,
+    SecurityConfig,
+    SecureAuthenticationConfig,
+    SecureSecurityConfig,
+    SecureLLMConfig,
+    SecureTenantLLMConfigs
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -56,11 +65,11 @@ async def get_tenant_configuration(
     current_user: User = Depends(require_permission("tenant_config:read")),
     db: Session = Depends(get_db)
 ):
-    """Get specific tenant configuration"""
-    if config_type not in ["llm", "rate_limits"]:
+    """Get specific tenant configuration (secure - no sensitive data)"""
+    if config_type not in ["llm", "rate_limits", "auth", "cors", "security"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid config type. Must be 'llm' or 'rate_limits'"
+            detail="Invalid config type. Must be 'llm', 'rate_limits', 'auth', 'cors', or 'security'"
         )
     
     config_service = TenantConfigService(db)
@@ -72,7 +81,84 @@ async def get_tenant_configuration(
             detail=f"Configuration of type '{config_type}' not found"
         )
     
-    return config
+    # Convert to secure version (exclude sensitive data like JWT secrets, API keys, encryption keys)
+    secure_config = config_service._convert_config_to_secure(config, config_type)
+    return secure_config
+
+
+@router.get("/configurations/{config_type}/secret")
+async def get_tenant_config_secret(
+    config_type: str,
+    current_user: User = Depends(require_permission("tenant_config:secret:read")),
+    db: Session = Depends(get_db)
+):
+    """Get sensitive configuration data (JWT secret, encryption keys, API keys) for display purposes
+    
+    SECURITY: This endpoint requires elevated permissions (tenant_config:secret:read) and returns
+    masked values by default. Full secret reveal requires additional authentication.
+    """
+    if config_type not in ["auth", "security", "llm"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid config type for secret access. Must be 'auth', 'security', or 'llm'"
+        )
+    
+    config_service = TenantConfigService(db)
+    config = config_service.get_config(current_user.tenant_id, config_type)
+    
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Configuration of type '{config_type}' not found"
+        )
+    
+    # Log secret access attempt for audit purposes
+    logger.warning(f"Secret access attempt by user {current_user.id} for config type {config_type}")
+    
+    # Return only the sensitive fields; consider masking/partial reveal
+    config_data = config.config_data
+    
+    def mask_secret(secret: str, visible_chars: int = 4) -> str:
+        """Mask secret showing only last few characters"""
+        if not secret or len(secret) <= visible_chars:
+            return "•" * 8  # Show dots for short secrets
+        return "•" * (len(secret) - visible_chars) + secret[-visible_chars:]
+    
+    if config_type == "auth":
+        jwt_secret = config_data.get("jwt_secret_key", "")
+        return {
+            "jwt_secret_key": mask_secret(jwt_secret),
+            "has_jwt_secret": bool(jwt_secret),
+            "masked": True,
+            "note": "Full secret reveal requires additional authentication"
+        }
+    elif config_type == "security":
+        encryption_key = config_data.get("encryption_key", "")
+        return {
+            "encryption_key": mask_secret(encryption_key),
+            "has_encryption_key": bool(encryption_key),
+            "masked": True,
+            "note": "Full secret reveal requires additional authentication"
+        }
+    elif config_type == "llm":
+        # Return API keys for both field and document extraction
+        result = {"masked": True, "note": "Full secret reveal requires additional authentication"}
+        
+        if "field_extraction" in config_data:
+            api_key = config_data["field_extraction"].get("api_key", "")
+            result["field_extraction"] = {
+                "api_key": mask_secret(api_key),
+                "has_api_key": bool(api_key)
+            }
+        if "document_extraction" in config_data:
+            api_key = config_data["document_extraction"].get("api_key", "")
+            result["document_extraction"] = {
+                "api_key": mask_secret(api_key),
+                "has_api_key": bool(api_key)
+            }
+        return result
+    
+    return {}
 
 
 @router.post("/configurations", response_model=TenantConfigurationResponse)
@@ -106,6 +192,33 @@ async def create_tenant_configuration(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid rate limits configuration: {str(e)}"
             )
+    elif config_data.config_type == "auth":
+        try:
+            from ..schemas.tenant_configuration import AuthenticationConfig
+            AuthenticationConfig(**config_data.config_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid authentication configuration: {str(e)}"
+            )
+    elif config_data.config_type == "cors":
+        try:
+            from ..schemas.tenant_configuration import CORSConfig
+            CORSConfig(**config_data.config_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid CORS configuration: {str(e)}"
+            )
+    elif config_data.config_type == "security":
+        try:
+            from ..schemas.tenant_configuration import SecurityConfig
+            SecurityConfig(**config_data.config_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid security configuration: {str(e)}"
+            )
     
     return config_service.create_or_update_config(
         tenant_id=current_user.tenant_id,
@@ -123,10 +236,10 @@ async def update_tenant_configuration(
     db: Session = Depends(get_db)
 ):
     """Update tenant configuration"""
-    if config_type not in ["llm", "rate_limits"]:
+    if config_type not in ["llm", "rate_limits", "auth", "cors", "security"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid config type. Must be 'llm' or 'rate_limits'"
+            detail="Invalid config type. Must be 'llm', 'rate_limits', 'auth', 'cors', or 'security'"
         )
     
     config_service = TenantConfigService(db)
@@ -162,6 +275,33 @@ async def update_tenant_configuration(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid rate limits configuration: {str(e)}"
             )
+    elif config_type == "auth":
+        try:
+            from ..schemas.tenant_configuration import AuthenticationConfig
+            AuthenticationConfig(**updated_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid authentication configuration: {str(e)}"
+            )
+    elif config_type == "cors":
+        try:
+            from ..schemas.tenant_configuration import CORSConfig
+            CORSConfig(**updated_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid CORS configuration: {str(e)}"
+            )
+    elif config_type == "security":
+        try:
+            from ..schemas.tenant_configuration import SecurityConfig
+            SecurityConfig(**updated_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid security configuration: {str(e)}"
+            )
     
     return config_service.create_or_update_config(
         tenant_id=current_user.tenant_id,
@@ -178,10 +318,10 @@ async def delete_tenant_configuration(
     db: Session = Depends(get_db)
 ):
     """Delete tenant configuration"""
-    if config_type not in ["llm", "rate_limits"]:
+    if config_type not in ["llm", "rate_limits", "auth", "cors", "security"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid config type. Must be 'llm' or 'rate_limits'"
+            detail="Invalid config type. Must be 'llm', 'rate_limits', 'auth', 'cors', or 'security'"
         )
     
     config_service = TenantConfigService(db)
@@ -246,8 +386,8 @@ async def check_llm_health(
     db: Session = Depends(get_db)
 ):
     """Check the health of the configured LLM provider"""
-    config_service = TenantConfigService(db)
-    llm_config = config_service.get_llm_config(current_user.tenant_id)
+    infrastructure_service = TenantInfrastructureService(db)
+    llm_config = infrastructure_service.get_llm_config(current_user.tenant_id)
     
     if not llm_config:
         raise HTTPException(
@@ -302,8 +442,8 @@ async def test_llm_extraction(
     db: Session = Depends(get_db)
 ):
     """Test LLM extraction with sample data"""
-    config_service = TenantConfigService(db)
-    llm_config = config_service.get_llm_config(current_user.tenant_id)
+    infrastructure_service = TenantInfrastructureService(db)
+    llm_config = infrastructure_service.get_llm_config(current_user.tenant_id)
     
     if not llm_config:
         raise HTTPException(
@@ -428,7 +568,7 @@ async def get_tenant_config_by_environment(
     current_user: User = Depends(require_permission("tenant_config:read")),
     db: Session = Depends(get_db)
 ):
-    """Get tenant configuration for specific environment"""
+    """Get tenant configuration for specific environment (secure - no sensitive data)"""
     config_service = TenantConfigService(db)
     config = config_service.get_config(current_user.tenant_id, config_type, environment)
     
@@ -438,7 +578,11 @@ async def get_tenant_config_by_environment(
             detail=f"No {config_type} configuration found for {environment} environment"
         )
     
-    return config
+    # Convert to secure version (exclude sensitive data like JWT secrets, API keys, encryption keys)
+    secure_config = config_service._convert_config_to_secure(config, config_type)
+    if secure_config and 'environment' not in secure_config:
+        secure_config['environment'] = environment
+    return secure_config
 
 
 @router.put("/configurations/{config_type}/{environment}")
@@ -667,7 +811,21 @@ async def get_tenant_infrastructure_config_by_slug(
         # Get LLM config
         try:
             llm_config = infrastructure_service.get_llm_config(tenant.id, environment)
-            configs["llm"] = llm_config
+            if isinstance(llm_config, TenantLLMConfigs):
+                configs["llm"] = SecureTenantLLMConfigs(
+                    field_extraction=SecureLLMConfig(
+                        **llm_config.field_extraction.model_dump(exclude={"api_key"})
+                    ) if llm_config.field_extraction else None,
+                    document_extraction=SecureLLMConfig(
+                        **llm_config.document_extraction.model_dump(exclude={"api_key"})
+                    ) if llm_config.document_extraction else None,
+                )
+            elif llm_config:
+                configs["llm"] = SecureLLMConfig(
+                    **llm_config.model_dump(exclude={"api_key"})
+                )
+            else:
+                configs["llm"] = None
         except Exception as e:
             configs["llm"] = {"error": f"LLM config not available: {str(e)}"}
         
@@ -681,3 +839,5 @@ async def get_tenant_infrastructure_config_by_slug(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get infrastructure config: {str(e)}"
         )
+
+

@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from ..models.database import get_db
 from ..services.tenant_config_service import TenantConfigService, RateLimitService
+from ..services.tenant_infrastructure_service import TenantInfrastructureService
+from ..config import settings
 from ..services.llm_provider_service import LLMProviderService
-from ..schemas.tenant_configuration import LLMConfig
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,17 @@ class ExtractionService:
     def __init__(self, db: Session):
         self.db = db
         self.config_service = TenantConfigService(db)
+        self.infrastructure_service = TenantInfrastructureService(db)
         self.rate_limit_service = RateLimitService(db)
+        
+        # Resolve environment once
+        env = getattr(settings, "environment", getattr(settings, "default_environment", None))
+        if not env:
+            raise ValueError("settings.environment/default_environment must be set")
+        env = str(env).lower()
+        if env not in {"development", "staging", "production"}:
+            raise ValueError(f"Invalid environment: {env}")
+        self.environment = env
     
     async def extract_data(self, request: ExtractionRequest) -> ExtractionResult:
         """Extract structured data using tenant-specific LLM provider with rate limiting"""
@@ -79,8 +90,8 @@ class ExtractionService:
             if not language_validation_result["is_valid"]:
                 raise LanguageValidationError(language_validation_result['validation_message'])
             
-            # Get tenant's LLM configuration
-            llm_config = self.config_service.get_llm_config(request.tenant_id)
+            # Get tenant's LLM configuration with API keys from secrets
+            llm_config = self.infrastructure_service.get_llm_config(request.tenant_id, self.environment)
             if not llm_config:
                 raise Exception("No LLM configuration found for tenant")
             
@@ -148,8 +159,7 @@ class ExtractionService:
         if not self.rate_limit_service.check_rate_limit(
             tenant_id=tenant_id,
             limit_type="extractions_per_hour",
-            limit_value=rate_limits_config.extractions_per_hour,
-            window_minutes=60
+            limit_value=rate_limits_config.extractions_per_hour
         ):
             raise Exception(f"Rate limit exceeded: {rate_limits_config.extractions_per_hour} extractions per hour")
         
@@ -164,16 +174,15 @@ class ExtractionService:
         # Increment extraction counter
         self.rate_limit_service.increment_rate_limit(
             tenant_id=tenant_id,
-            limit_type="extractions_per_hour",
-            window_minutes=60
+            limit_type="extractions_per_hour"
         )
     
     def health_check(self, tenant_id: UUID) -> Dict[str, Any]:
         """Check the health of the tenant's LLM provider"""
         
         try:
-            # Get tenant's LLM configuration
-            llm_config = self.config_service.get_llm_config(tenant_id)
+            # Get tenant's LLM configuration with API keys from secrets
+            llm_config = self.infrastructure_service.get_llm_config(tenant_id, self.environment)
             if not llm_config:
                 return {
                     "status": "unhealthy",

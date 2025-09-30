@@ -12,6 +12,7 @@ import {
 
 import { DocumentService, CategoryService, serviceFactory, ProcessingStats, Category, DocumentListResponse } from '../../services/api/index';
 import { useAuth } from '../../contexts/AuthContext';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import DocumentUpload from '../upload/DocumentUpload';
 import DocumentList from '../documents/DocumentList';
 
@@ -179,9 +180,38 @@ const LoadingState = styled.div`
   color: ${props => props.theme.colors.text.muted};
 `;
 
+const ErrorState = styled.div`
+  text-align: center;
+  padding: 2rem;
+  color: ${props => props.theme.colors.error};
+  
+  h3 {
+    margin-bottom: 1rem;
+    color: ${props => props.theme.colors.error};
+  }
+  
+  p {
+    margin-bottom: 1rem;
+    color: ${props => props.theme.colors.text.muted};
+  }
+  
+  button {
+    background: ${props => props.theme.colors.primary};
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: ${props => props.theme.borderRadius.sm};
+    cursor: pointer;
+    
+    &:hover {
+      background: ${props => props.theme.colors.primaryHover};
+    }
+  }
+`;
+
 // Component
 export const UserDashboard: React.FC = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<'upload' | 'documents'>('upload');
   const [stats, setStats] = useState<ProcessingStats | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -189,9 +219,14 @@ export const UserDashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
+
   // Load user dashboard data
   const loadUserData = async () => {
     setLoading(true);
+    clearError(); // Clear any existing errors
     
     try {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -220,6 +255,13 @@ export const UserDashboard: React.FC = () => {
       setRecentDocuments(documentsData);
     } catch (error) {
       console.error('Failed to load user dashboard data:', error);
+      
+      // Handle authentication errors by logging out the user
+      if (error && (error as any).name === 'AuthenticationError') {
+        logout();
+      } else {
+        setError('dashboard_load_failed', 'Failed to load dashboard data. Please refresh the page.');
+      }
     } finally {
       setLoading(false);
     }
@@ -242,6 +284,18 @@ export const UserDashboard: React.FC = () => {
         <LoadingState>
           <div>⏳ Loading dashboard...</div>
         </LoadingState>
+      </UserContainer>
+    );
+  }
+
+  if (errorState.hasError) {
+    return (
+      <UserContainer>
+        <ErrorState>
+          <h3>Error Loading Dashboard</h3>
+          <p>{errorState.errorMessage || 'An error occurred'}</p>
+          <button type="button" onClick={() => loadUserData()}>Retry</button>
+        </ErrorState>
       </UserContainer>
     );
   }

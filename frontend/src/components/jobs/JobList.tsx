@@ -8,6 +8,7 @@ import { Plus, Play, Pause, Edit, Trash2, Clock, BarChart3, Eye } from 'lucide-r
 import { Table, TableFilters, ColumnDefinition, FilterDefinition, PaginationConfig } from '@/components/table';
 import { Button } from '@/components/ui/Button';
 import { JobService, CategoryService, TemplateService, serviceFactory, Job, Category } from '@/services/api/index';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 import styled from 'styled-components';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -171,13 +172,16 @@ export const JobList: React.FC<JobListProps> = ({
   const [categories, setCategories] = useState<Category[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
     per_page: 20,
     total: 0,
     total_pages: 0
   });
+
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
 
   // Filter state management
   const [filterValues, setFilterValues] = useState({
@@ -255,7 +259,14 @@ export const JobList: React.FC<JobListProps> = ({
         total_pages: response.total_pages
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load jobs');
+      console.error('Error loading jobs:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('jobs_load_failed', err instanceof Error ? err.message : 'Failed to load jobs');
+      }
     } finally {
       setLoading(false);
     }
@@ -291,7 +302,14 @@ export const JobList: React.FC<JobListProps> = ({
       // Reload jobs to update status
       loadJobs();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to execute job');
+      console.error('Error executing job:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('job_execute_failed', err instanceof Error ? err.message : 'Failed to execute job');
+      }
     }
   };
 
@@ -305,7 +323,14 @@ export const JobList: React.FC<JobListProps> = ({
       await jobService.deleteJob(job.id);
       loadJobs();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete job');
+      console.error('Error deleting job:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('job_delete_failed', err instanceof Error ? err.message : 'Failed to delete job');
+      }
     }
   };
 
@@ -315,7 +340,14 @@ export const JobList: React.FC<JobListProps> = ({
       await jobService.updateJob(job.id, { is_active: !job.is_active });
       loadJobs();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update job');
+      console.error('Error updating job:', err);
+      
+      // Handle authentication errors through global error system
+      if (err && (err as any).name === 'AuthenticationError') {
+        setError('auth_failed', 'Authentication failed. Please log in again.');
+      } else {
+        setError('job_update_failed', err instanceof Error ? err.message : 'Failed to update job');
+      }
     }
   };
 
@@ -634,12 +666,12 @@ export const JobList: React.FC<JobListProps> = ({
     mode: 'server'
   };
 
-  if (error) {
+  if (errorState.hasError) {
     return (
       <PageContainer>
         <div style={{ padding: '40px', textAlign: 'center' }}>
           <h3>Error Loading Jobs</h3>
-          <p>{error}</p>
+          <p>{errorState.errorMessage || 'An error occurred'}</p>
           <Button onClick={() => loadJobs()}>Retry</Button>
         </div>
       </PageContainer>

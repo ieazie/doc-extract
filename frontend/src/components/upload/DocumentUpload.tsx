@@ -4,6 +4,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import styled from 'styled-components';
 import { DocumentService, serviceFactory, DocumentUploadResponse, Category, formatFileSize } from '../../services/api/index';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 
 const UploadContainer = styled.div`
   max-width: 800px;
@@ -232,7 +233,17 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isDragActive, setIsDragActive] = useState<boolean>(false);
   const [uploadResult, setUploadResult] = useState<DocumentUploadResponse | null>(null);
-  const [error, setError] = useState<string>('');
+  
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
+  
+  // Clear errors when user starts interacting with the form
+  const handleFormInteraction = useCallback(() => {
+    if (errorState.hasError) {
+      clearError();
+    }
+  }, [errorState.hasError, clearError]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -263,15 +274,15 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
   const handleFileSelect = useCallback((file: File) => {
     const validationError = validateFile(file);
     if (validationError) {
-      setError(validationError);
+      setError('file_validation_failed', validationError);
       setSelectedFile(null);
       return;
     }
 
-    setError('');
+    clearError(); // Clear any existing errors
     setSelectedFile(file);
     setUploadResult(null);
-  }, []);
+  }, [setError, clearError]);
 
   // Drag and drop handlers
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -316,7 +327,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
 
     setIsUploading(true);
     setUploadProgress(0);
-    setError('');
+    clearError(); // Clear any existing errors
 
     try {
       const tagsArray = tags
@@ -345,7 +356,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
       onUploadSuccess?.(result);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Upload failed';
-      setError(errorMessage);
+      setError('document_upload_failed', errorMessage);
       onUploadError?.(errorMessage);
     } finally {
       setIsUploading(false);
@@ -368,21 +379,32 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
 
         <DropZone
           isDragActive={isDragActive}
-          hasError={!!error}
+          hasError={errorState.hasError}
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
+          role="button"
+          tabIndex={0}
+          aria-describedby={errorState.hasError ? 'upload-error' : undefined}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
         >
           <DropZoneIcon>
-            {isDragActive ? '⬇️' : error ? '❌' : '📄'}
+            {isDragActive ? '⬇️' : errorState.hasError ? '❌' : '📄'}
           </DropZoneIcon>
           <DropZoneText>
             {isDragActive
               ? 'Drop your file here'
-              : error
-              ? 'Invalid file type or size'
+              : errorState.hasError
+              ? (errorState.errorType === 'file_validation_failed'
+                  ? 'Invalid file type or size'
+                  : 'An error occurred. Try again or choose another file')
               : 'Drag and drop your document here'
             }
           </DropZoneText>
@@ -412,7 +434,10 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
           <Select
             id="category"
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            onChange={(e) => {
+              handleFormInteraction();
+              setSelectedCategory(e.target.value);
+            }}
             disabled={isUploading}
           >
             <option value="">Select a category...</option>
@@ -431,7 +456,10 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
             type="text"
             placeholder="invoice, billing, contract (comma-separated)"
             value={tags}
-            onChange={(e) => setTags(e.target.value)}
+            onChange={(e) => {
+              handleFormInteraction();
+              setTags(e.target.value);
+            }}
             disabled={isUploading}
           />
         </FormGroup>
@@ -462,11 +490,11 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
           </Message>
         )}
 
-        {error && (
-          <Message type="error">
+        {errorState.hasError && (
+          <Message type="error" id="upload-error">
             <strong>❌ Upload Failed</strong>
             <br />
-            {error}
+            {errorState.errorMessage}
           </Message>
         )}
       </UploadCard>

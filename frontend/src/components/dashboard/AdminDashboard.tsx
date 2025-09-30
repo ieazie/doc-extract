@@ -24,6 +24,7 @@ import {
   ProcessingStats
 } from '../../services/api/index';
 import { useAuth } from '../../contexts/AuthContext';
+import { useErrorState, useErrorActions } from '@/stores/globalStore';
 
 // Styled Components
 const AdminContainer = styled.div`
@@ -218,17 +219,51 @@ const LoadingState = styled.div`
   color: ${props => props.theme.colors.text.muted};
 `;
 
+const AdminErrorState = styled.div`
+  text-align: center;
+  padding: 2rem;
+  color: ${props => props.theme.colors.error};
+  
+  h3 {
+    margin-bottom: 1rem;
+    color: ${props => props.theme.colors.error};
+  }
+  
+  p {
+    margin-bottom: 1rem;
+    color: ${props => props.theme.colors.text.muted};
+  }
+  
+  button {
+    background: ${props => props.theme.colors.primary};
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: ${props => props.theme.borderRadius.sm};
+    cursor: pointer;
+    
+    &:hover {
+      background: ${props => props.theme.colors.primaryHover};
+    }
+  }
+`;
+
 // Component
 export const AdminDashboard: React.FC = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const [stats, setStats] = useState<ProcessingStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [health, setHealth] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
+  // Global error handling
+  const errorState = useErrorState();
+  const { setError, clearError } = useErrorActions();
+
   // Load admin dashboard data
   const loadAdminData = async () => {
     setLoading(true);
+    clearError(); // Clear any existing errors
     
     try {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -258,6 +293,13 @@ export const AdminDashboard: React.FC = () => {
       setHealth(healthData);
     } catch (error) {
       console.error('Failed to load admin dashboard data:', error);
+      
+      // Handle authentication errors by logging out the user
+      if (error && (error as any).name === 'AuthenticationError') {
+        logout();
+      } else {
+        setError('dashboard_load_failed', 'Failed to load dashboard data. Please refresh the page.');
+      }
     } finally {
       setLoading(false);
     }
@@ -302,6 +344,18 @@ export const AdminDashboard: React.FC = () => {
         <LoadingState>
           <div>⏳ Loading admin dashboard...</div>
         </LoadingState>
+      </AdminContainer>
+    );
+  }
+
+  if (errorState.hasError) {
+    return (
+      <AdminContainer>
+        <AdminErrorState>
+          <h3>Error Loading Dashboard</h3>
+          <p>{errorState.errorMessage || 'An error occurred'}</p>
+          <button type="button" onClick={() => loadAdminData()}>Retry</button>
+        </AdminErrorState>
       </AdminContainer>
     );
   }

@@ -58,6 +58,33 @@ class LLMProvider(ABC):
         instruction = language_instructions.get(language, "Respond in English.")
         return f"{base_prompt}\n\n{instruction}"
 
+    def _supports_json_mode(self) -> bool:
+        """Check if the model supports JSON response format"""
+        json_exact = {
+            "gpt-4o-2024-08-06",
+            "gpt-4o-2024-11-20",
+            "gpt-4o-mini-2024-07-18",
+            "gpt-4o",  # Latest gpt-4o model
+            "gpt-4o-mini",  # Latest gpt-4o-mini model
+            "gpt-4-turbo",  # Community reports support
+            "gpt-4.1",
+            "gpt-4.1-mini",
+            "gpt-4.1-nano",
+            "gpt-5",
+            "gpt-5-mini",
+            "gpt-5-nano",
+        }
+        json_prefixes = (
+            "gpt-4o-2024-08-06",
+            "gpt-4o-2024-11-20",
+            "gpt-4o-mini-2024-07-18",
+            "gpt-4o:",
+            "gpt-4o-mini:",
+            "gpt-4.1",
+            "gpt-5",
+        )
+        return self.model in json_exact or any(self.model.startswith(prefix) for prefix in json_prefixes)
+
 
 class OllamaProvider(LLMProvider):
     """Ollama LLM Provider"""
@@ -231,23 +258,43 @@ class OpenAIProvider(LLMProvider):
             messages.append({"role": "assistant", "content": json.dumps(example.get('extracted_data', {}))})
         
         # Add the actual document
-        user_message = f"""Extract structured data from the following document according to this schema: {json.dumps(schema, indent=2)}
+        # Use different prompts based on model capabilities
+        if self._supports_json_mode():
+            # Newer models support structured output
+            user_message = f"""Extract structured data from the following document according to this schema: {json.dumps(schema, indent=2)}
 
 Document:
 {document_text}
 
 Respond with only valid JSON that matches the schema."""
+        else:
+            # Older models need explicit JSON formatting instructions
+            user_message = f"""Extract structured data from the following document according to this schema: {json.dumps(schema, indent=2)}
+
+Document:
+{document_text}
+
+IMPORTANT: Respond with ONLY valid JSON. Do not include any text before or after the JSON. The response must be parseable as JSON and match the provided schema exactly."""
         
         messages.append({"role": "user", "content": user_message})
 
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={"type": "json_object"}
-            )
+            # Build request parameters
+            request_params = {
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature
+            }
+            
+            # Only use response_format for models that officially support it
+            # Based on OpenAI Structured Outputs documentation:
+            # - gpt-4o-2024-08-06 and gpt-4o-mini-2024-07-18 officially support JSON mode
+            # - Fine-tuned variants of these models also support it
+            if self._supports_json_mode():
+                request_params["response_format"] = {"type": "json_object"}
+
+            response = await self.client.chat.completions.create(timeout=60.0, **request_params)
             
             content = response.choices[0].message.content
             try:

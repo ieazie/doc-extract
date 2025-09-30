@@ -15,6 +15,9 @@ export interface Tenant {
   updated_at: string;
 }
 
+// Alias for backward compatibility
+export type ApiTenant = Tenant;
+
 export interface TenantCreateRequest {
   name: string;
   slug: string;
@@ -56,8 +59,8 @@ export interface TenantConfigurationRead {
 export interface TenantConfigurationWrite {
   id: string;
   tenant_id: string;
-  config_type: 'llm' | 'rate_limits' | 'storage' | 'cache' | 'message_queue';
-  config_data: LLMConfig | TenantLLMConfigs | RateLimitsConfig | StorageConfigWrite | CacheConfigWrite | MessageQueueConfigWrite;
+  config_type: 'llm' | 'rate_limits' | 'storage' | 'cache' | 'message_queue' | 'auth' | 'cors' | 'security';
+  config_data: LLMConfig | TenantLLMConfigs | RateLimitsConfig | StorageConfigWrite | CacheConfigWrite | MessageQueueConfigWrite | AuthenticationConfig | CORSConfig | SecurityConfig;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -68,13 +71,13 @@ export type TenantConfiguration = TenantConfigurationRead | TenantConfigurationW
 
 export interface TenantConfigurationCreate {
   tenant_id: string;
-  config_type: 'llm' | 'rate_limits' | 'storage' | 'cache' | 'message_queue';
-  config_data: LLMConfig | TenantLLMConfigs | RateLimitsConfig | StorageConfigWrite | CacheConfigWrite | MessageQueueConfigWrite;
+  config_type: 'llm' | 'rate_limits' | 'storage' | 'cache' | 'message_queue' | 'auth' | 'cors' | 'security';
+  config_data: LLMConfig | TenantLLMConfigs | RateLimitsConfig | StorageConfigWrite | CacheConfigWrite | MessageQueueConfigWrite | AuthenticationConfig | CORSConfig | SecurityConfig;
   is_active?: boolean;
 }
 
 export interface TenantConfigurationUpdate {
-  config_data?: LLMConfig | TenantLLMConfigs | RateLimitsConfig | StorageConfigWrite | CacheConfigWrite | MessageQueueConfigWrite;
+  config_data?: LLMConfig | TenantLLMConfigs | RateLimitsConfig | StorageConfigWrite | CacheConfigWrite | MessageQueueConfigWrite | AuthenticationConfig | CORSConfig | SecurityConfig;
   is_active?: boolean;
 }
 
@@ -87,11 +90,12 @@ export interface OllamaConfig {
 export interface LLMConfig {
   provider: 'ollama' | 'openai' | 'anthropic' | 'custom';
   model_name: string;
-  api_key?: string;
+  api_key?: string; // Optional - only used for form input, not returned from backend
   base_url?: string;
   max_tokens?: number;
   temperature?: number;
   ollama_config?: OllamaConfig;
+  has_api_key?: boolean; // Indicates if API key is configured (without exposing the key)
   // Support for dual configuration structure
   field_extraction?: LLMConfig;
   document_extraction?: LLMConfig;
@@ -111,6 +115,109 @@ export interface RateLimitsConfig {
   max_concurrent_extractions: number;
   burst_limit?: number;
 }
+
+// Authentication Configuration
+export interface AuthenticationConfig {
+  // JWT Configuration
+  jwt_secret_key: string;
+  has_jwt_secret: boolean; // Indicates if JWT secret is configured (without exposing the key)
+  access_token_expire_minutes: number;
+  refresh_token_expire_days: number;
+  
+  // Cookie Configuration
+  refresh_cookie_httponly: boolean;
+  refresh_cookie_secure: boolean;
+  refresh_cookie_samesite: 'strict' | 'lax' | 'none';
+  refresh_cookie_path: string;
+  refresh_cookie_domain?: string;
+  
+  // Security Policies
+  max_login_attempts: number;
+  lockout_duration_minutes: number;
+  password_min_length: number;
+  require_2fa: boolean;
+}
+
+// CORS Configuration
+export interface CORSConfig {
+  allowed_origins: string[];
+  allow_credentials: boolean;
+  allowed_methods: string[];
+  allowed_headers: string[];
+  exposed_headers: string[];
+  max_age: number;
+}
+
+// Security Configuration
+export interface SecurityConfig {
+  // CSRF Protection
+  csrf_protection_enabled: boolean;
+  csrf_token_header: string;
+  
+  // Rate Limiting
+  rate_limiting_enabled: boolean;
+  rate_limit_requests_per_minute: number;
+  rate_limit_burst_size: number;
+  
+  // Encryption
+  encryption_key: string;
+  has_encryption_key: boolean; // Indicates if encryption key is configured (without exposing the key)
+  
+  // Security Headers
+  security_headers_enabled: boolean;
+  content_security_policy?: string;
+  strict_transport_security: boolean;
+  x_frame_options: 'DENY' | 'SAMEORIGIN' | 'ALLOW-FROM';
+  x_content_type_options: boolean;
+  referrer_policy: string;
+  
+  // Compromise Detection
+  compromise_detection_enabled: boolean;
+  compromise_detection_threshold: number;
+  rapid_token_threshold: number;
+  auto_revoke_on_compromise: boolean;
+}
+
+// Configuration Form Props
+export interface ConfigFormProps<T> {
+  config: T;
+  onUpdate: (config: T) => void;
+  isLoading?: boolean;
+  errors?: Record<string, string>;
+}
+
+// Environment Options
+export const ENVIRONMENT_OPTIONS = [
+  { value: 'development', label: 'Development' },
+  { value: 'staging', label: 'Staging' },
+  { value: 'production', label: 'Production' }
+] as const;
+
+// SameSite Options
+export const SAMESITE_OPTIONS = [
+  { value: 'strict', label: 'Strict' },
+  { value: 'lax', label: 'Lax' },
+  { value: 'none', label: 'None' }
+] as const;
+
+// X-Frame-Options
+export const X_FRAME_OPTIONS = [
+  { value: 'DENY', label: 'DENY' },
+  { value: 'SAMEORIGIN', label: 'SAMEORIGIN' },
+  { value: 'ALLOW-FROM', label: 'ALLOW-FROM' }
+] as const;
+
+// Referrer Policy Options
+export const REFERRER_POLICY_OPTIONS = [
+  { value: 'no-referrer', label: 'No Referrer' },
+  { value: 'no-referrer-when-downgrade', label: 'No Referrer When Downgrade' },
+  { value: 'origin', label: 'Origin' },
+  { value: 'origin-when-cross-origin', label: 'Origin When Cross-Origin' },
+  { value: 'same-origin', label: 'Same Origin' },
+  { value: 'strict-origin', label: 'Strict Origin' },
+  { value: 'strict-origin-when-cross-origin', label: 'Strict Origin When Cross-Origin' },
+  { value: 'unsafe-url', label: 'Unsafe URL' }
+] as const;
 
 // Infrastructure Configuration Types
 

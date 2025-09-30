@@ -107,7 +107,7 @@ export interface GenerateFieldsRequest {
   document_type: string;
   prompt: string;
   language?: string;
-  sample_document?: string;
+  document_content?: string;
   existing_fields?: Record<string, SchemaField>;
 }
 
