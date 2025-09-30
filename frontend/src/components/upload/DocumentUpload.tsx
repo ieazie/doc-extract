@@ -384,7 +384,16 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
+          role="button"
+          tabIndex={0}
+          aria-describedby={errorState.hasError ? 'upload-error' : undefined}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
         >
           <DropZoneIcon>
             {isDragActive ? '⬇️' : errorState.hasError ? '❌' : '📄'}
@@ -393,7 +402,9 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
             {isDragActive
               ? 'Drop your file here'
               : errorState.hasError
-              ? 'Invalid file type or size'
+              ? (errorState.errorType === 'file_validation_failed'
+                  ? 'Invalid file type or size'
+                  : 'An error occurred. Try again or choose another file')
               : 'Drag and drop your document here'
             }
           </DropZoneText>
@@ -480,7 +491,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
         )}
 
         {errorState.hasError && (
-          <Message type="error">
+          <Message type="error" id="upload-error">
             <strong>❌ Upload Failed</strong>
             <br />
             {errorState.errorMessage}

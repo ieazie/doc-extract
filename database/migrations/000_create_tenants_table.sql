@@ -21,14 +21,31 @@ CREATE TABLE tenants (
 -- CREATE INDEXES FOR PERFORMANCE
 -- ============================================================================
 
--- Index for name lookups (most common query)
-CREATE INDEX idx_tenants_name ON tenants(name);
+-- Index for name lookups with case-insensitive uniqueness
+CREATE UNIQUE INDEX idx_tenants_name_unique ON tenants (LOWER(name));
 
 -- Index for status filtering
 CREATE INDEX idx_tenants_status ON tenants(status);
 
 -- Index for environment filtering
 CREATE INDEX idx_tenants_environment ON tenants(environment);
+
+-- ============================================================================
+-- ADD AUTO-UPDATE TRIGGER FOR updated_at COLUMN
+-- ============================================================================
+
+-- Keep updated_at current
+CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_tenants_set_updated_at
+  BEFORE UPDATE ON tenants
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================================
 -- ADD COMMENTS FOR DOCUMENTATION
@@ -45,5 +62,6 @@ COMMENT ON COLUMN tenants.updated_at IS 'When the tenant was last updated (UTC t
 
 -- Insert default tenant for system administration
 -- NOTE: This UUID is centralized in backend/src/constants/tenant.py as DEFAULT_TENANT_ID
+-- NOTE: The name "DocExtract Demo" matches frontend/src/constants/tenant.ts DEFAULT_TENANT_NAME
 INSERT INTO tenants (id, name, status, environment) VALUES 
-('00000000-0000-0000-0000-000000000001', 'Default Tenant', 'active', 'development');
+('00000000-0000-0000-0000-000000000001', 'DocExtract Demo', 'active', 'development');

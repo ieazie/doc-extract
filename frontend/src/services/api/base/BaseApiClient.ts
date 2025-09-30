@@ -186,8 +186,10 @@ export abstract class BaseApiClient {
 
   setAuthToken(token: string | null): void {
     this.authToken = token;
-    const common = (this.client.defaults.headers as any).common
-      || ((this.client.defaults.headers as any).common = {});
+    const defaults = this.client.defaults as any;
+    // Ensure defaults.headers exists before accessing .common
+    defaults.headers = defaults.headers || {};
+    const common = defaults.headers.common || (defaults.headers.common = {});
     if (token) {
       common['Authorization'] = `Bearer ${token}`;
     } else {
@@ -197,8 +199,10 @@ export abstract class BaseApiClient {
 
   setTenantId(tenantId: string | null): void {
     this.tenantId = tenantId;
-    const common = (this.client.defaults.headers as any).common
-      || ((this.client.defaults.headers as any).common = {});
+    const defaults = this.client.defaults as any;
+    // Ensure defaults.headers exists before accessing .common
+    defaults.headers = defaults.headers || {};
+    const common = defaults.headers.common || (defaults.headers.common = {});
     if (tenantId) {
       common['X-Tenant-ID'] = tenantId;
     } else {

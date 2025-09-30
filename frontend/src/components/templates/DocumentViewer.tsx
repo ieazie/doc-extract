@@ -27,9 +27,7 @@ import {
   ActionButton,
   DocumentCanvas,
   CanvasContainer,
-  CanvasWrapper,
   Canvas,
-  TextContent,
   LoadingContainer,
   LoadingText,
   ErrorContainer,
@@ -69,7 +67,6 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
   // Global error handling
   const errorState = useErrorState();
   const { setError, clearError } = useErrorActions();
-  const [textContent, setTextContent] = useState<string>('');
   const [renderKey, setRenderKey] = useState(0);
 
   // Refs for render management
@@ -380,10 +377,6 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
             <ErrorText>Error loading document</ErrorText>
             <ErrorSubtext>{errorState.errorMessage}</ErrorSubtext>
           </ErrorContainer>
-        ) : textContent ? (
-          <TextContent style={{ transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
-            {textContent}
-          </TextContent>
         ) : pdfDocument ? (
           <CanvasContainer>
             <Canvas

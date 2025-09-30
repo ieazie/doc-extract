@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { TemplateService, LanguageService, DocumentService, serviceFactory, SchemaField as ApiSchemaField, SupportedLanguage } from '../../services/api/index';
 import { useAuth } from '@/contexts/AuthContext';
-import { useErrorState, useErrorActions } from '@/stores/globalStore';
+import { useErrorState, useErrorActions, useScopedErrorState, useScopedErrorActions } from '@/stores/globalStore';
 import { 
   Plus, 
   Trash2, 
@@ -668,18 +668,25 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   
   // Auth context for tenant information
-  const { tenant, user, isLoading: authLoading } = useAuth();
+  const { tenant, user, isLoading: authLoading, logout } = useAuth();
   
   // Global error handling
   const errorState = useErrorState();
-  const { setError, clearError } = useErrorActions();
+  const { clearError } = useErrorActions();
+  
+  // Scoped error handling for template builder
+  const templateBuilderErrorState = useScopedErrorState('template_builder');
+  const { setScopedError, clearScopedError } = useScopedErrorActions();
   
   // Clear errors when user starts interacting with the form
   const handleFormInteraction = useCallback(() => {
     if (errorState.hasError) {
       clearError();
     }
-  }, [errorState.hasError, clearError]);
+    if (templateBuilderErrorState.hasError) {
+      clearScopedError('template_builder');
+    }
+  }, [errorState.hasError, clearError, templateBuilderErrorState.hasError, clearScopedError]);
   
   // Language configuration state
   const [supportedLanguages, setSupportedLanguages] = useState<SupportedLanguage[]>([]);
@@ -694,6 +701,8 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       try {
         setLoadingLanguages(true);
         clearError(); // Clear any existing errors
+    clearScopedError('template_builder'); // Clear any existing scoped errors
+        clearScopedError('template_builder'); // Clear any existing scoped errors
         
         // Get tenant-specific supported language codes
         const languageService = serviceFactory.get<LanguageService>('language');
@@ -739,9 +748,9 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       } catch (error) {
         console.error('Failed to load tenant supported languages:', error);
         
-        // Handle authentication errors through global error system
+        // Handle authentication errors by logging out the user
         if (error && (error as any).name === 'AuthenticationError') {
-          setError('auth_failed', 'Authentication failed. Please log in again.');
+          logout();
           return; // Don't try fallback for auth errors
         }
         
@@ -752,7 +761,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           setSupportedLanguages(allLanguages);
         } catch (fallbackError) {
           console.error('Failed to load fallback languages:', fallbackError);
-          setError('language_load_failed', 'Failed to load supported languages.');
+          setScopedError('template_builder', 'language_load_failed', 'Failed to load supported languages.');
         }
       } finally {
         setLoadingLanguages(false);
@@ -850,7 +859,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       setIsGeneratingFields(false);
       setGenerationStep('');
       setGenerationProgress(0);
-      setError('generation_cancelled', 'Generation cancelled by user');
+      setScopedError('template_builder', 'generation_cancelled', 'Generation cancelled by user');
     }
   };
 
@@ -986,6 +995,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
     
     setIsGeneratingFields(true);
     clearError(); // Clear any existing errors
+    clearScopedError('template_builder'); // Clear any existing scoped errors
     setGenerationSuccess(null);
     setLastGenerationTime(now);
     setGenerationStep('Analyzing prompt...');
@@ -1060,7 +1070,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         }, 5000); // Clear after 5 seconds
       } else {
         // Handle case where response is null or has no fields (API error)
-        setError('field_generation_failed', 'Failed to generate fields from prompt. Please check your API key configuration.');
+        setScopedError('template_builder', 'field_generation_failed', 'Failed to generate fields from prompt. Please check your API key configuration.');
         setGenerationStep('');
         setGenerationProgress(0);
       }
@@ -1070,7 +1080,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         return; // Don't show error for user cancellation
       }
       console.error('Error generating fields from prompt:', error);
-      setError('field_generation_failed', error.response?.data?.detail || 'Failed to generate fields from prompt');
+      setScopedError('template_builder', 'field_generation_failed', error.response?.data?.detail || 'Failed to generate fields from prompt');
       setGenerationStep('');
       setGenerationProgress(0);
     } finally {
@@ -1095,6 +1105,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
     
     setIsGeneratingFields(true);
     clearError(); // Clear any existing errors
+    clearScopedError('template_builder'); // Clear any existing scoped errors
     setGenerationSuccess(null);
     setLastGenerationTime(now);
     setGenerationStep('Extracting document content...');
@@ -1118,12 +1129,12 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           if (contentResponse) {
             documentContent = contentResponse.content;
           } else {
-            setError('document_content_unavailable', 'Document content not available. Please try again.');
+            setScopedError('template_builder', 'document_content_unavailable', 'Document content not available. Please try again.');
             return;
           }
         } catch (error) {
           console.error('Failed to fetch document content:', error);
-          setError('document_content_fetch_failed', 'Failed to fetch document content. Please try again.');
+          setScopedError('template_builder', 'document_content_fetch_failed', 'Failed to fetch document content. Please try again.');
           return;
         }
       } else if (selectedDocument.file) {
@@ -1140,11 +1151,11 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           }
         } catch (error) {
           console.error('Failed to extract text from local file:', error);
-          setError('text_extraction_failed', 'Failed to extract text from document. Please try uploading the document first.');
+          setScopedError('template_builder', 'text_extraction_failed', 'Failed to extract text from document. Please try uploading the document first.');
           return;
         }
       } else {
-        setError('no_document_content', 'No document content available. Please upload a document first.');
+        setScopedError('template_builder', 'no_document_content', 'No document content available. Please upload a document first.');
         return;
       }
       
@@ -1153,7 +1164,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       
       // Validate document content length
       if (documentContent.length < 50) {
-        setError('document_content_too_short', 'Document content is too short. Please ensure the document contains sufficient text.');
+        setScopedError('template_builder', 'document_content_too_short', 'Document content is too short. Please ensure the document contains sufficient text.');
         setGenerationStep('');
         setGenerationProgress(0);
         return;
@@ -1210,7 +1221,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         }, 5000); // Clear after 5 seconds
       } else {
         // Handle case where response is null or has no fields (API error)
-        setError('document_field_generation_failed', 'Failed to generate fields from document. Please check your API key configuration.');
+        setScopedError('template_builder', 'document_field_generation_failed', 'Failed to generate fields from document. Please check your API key configuration.');
         setGenerationStep('');
         setGenerationProgress(0);
       }
@@ -1220,7 +1231,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         return; // Don't show error for user cancellation
       }
       console.error('Error generating fields from document:', error);
-      setError('document_field_generation_failed', error.response?.data?.detail || 'Failed to generate fields from document');
+      setScopedError('template_builder', 'document_field_generation_failed', error.response?.data?.detail || 'Failed to generate fields from document');
       setGenerationStep('');
       setGenerationProgress(0);
     } finally {
@@ -1515,9 +1526,9 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                 </ButtonGroup>
               )}
               
-              {errorState.hasError && (
+              {templateBuilderErrorState.hasError && (
                 <div style={{ color: '#ef4444', fontSize: '14px', marginTop: '8px' }}>
-                  {errorState.errorMessage}
+                  {templateBuilderErrorState.errorMessage}
                 </div>
               )}
               

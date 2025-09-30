@@ -6,6 +6,9 @@
 -- FIX DOCUMENT_CATEGORIES TENANT ISOLATION
 -- ============================================================================
 
+-- Take a lock early to avoid concurrent writes during pre-checks and backfill.
+LOCK TABLE document_categories IN SHARE ROW EXCLUSIVE MODE;
+
 -- Pre-check: will backfill create duplicates when collapsing NULLs into the fallback tenant?
 DO $$
 DECLARE
@@ -21,6 +24,23 @@ BEGIN
   ) s;
   IF dup_cnt > 0 THEN
     RAISE EXCEPTION 'Backfill would create % duplicate (tenant_id, name) rows. Resolve or de-duplicate before migration.', dup_cnt;
+  END IF;
+END $$;
+
+-- Pre-check: would backfill collide with existing rows for the fallback tenant?
+DO $$
+DECLARE
+  fallback_tenant CONSTANT uuid := '00000000-0000-0000-0000-000000000001';
+  conflict_cnt INT;
+BEGIN
+  SELECT COUNT(*) INTO conflict_cnt
+  FROM document_categories c_null
+  JOIN document_categories c_fb
+    ON c_fb.tenant_id = fallback_tenant
+   AND c_fb.name = c_null.name
+  WHERE c_null.tenant_id IS NULL;
+  IF conflict_cnt > 0 THEN
+    RAISE EXCEPTION 'Backfill would collide with % existing (tenant_id, name) rows on fallback tenant %.', conflict_cnt, fallback_tenant;
   END IF;
 END $$;
 
@@ -52,8 +72,9 @@ BEGIN
   END IF;
 END $$;
 
--- (Optional but recommended) take a lock to avoid concurrent inserts with NULLs during migration.
-LOCK TABLE document_categories IN SHARE ROW EXCLUSIVE MODE;
+-- Ensure new inserts get a tenant_id during the window
+ALTER TABLE document_categories
+  ALTER COLUMN tenant_id SET DEFAULT '00000000-0000-0000-0000-000000000001';
 
 -- Update any NULL tenant_id records to use the default tenant (only if NULLs exist)
 UPDATE document_categories 
@@ -80,6 +101,10 @@ END $$;
 -- Now make tenant_id NOT NULL
 ALTER TABLE document_categories 
     ALTER COLUMN tenant_id SET NOT NULL;
+
+-- Drop temporary default
+ALTER TABLE document_categories
+  ALTER COLUMN tenant_id DROP DEFAULT;
 
 -- ============================================================================
 -- VERIFY UNIQUE CONSTRAINT INTEGRITY
@@ -122,6 +147,10 @@ BEGIN
         RAISE NOTICE 'No duplicate (tenant_id, name) combinations found. Unique constraint is intact.';
     END IF;
 END $$;
+
+-- Enforce uniqueness going forward
+ALTER TABLE document_categories
+  ADD CONSTRAINT uq_document_categories_tenant_name UNIQUE (tenant_id, name);
 
 -- ============================================================================
 -- ADD COMMENTS FOR DOCUMENTATION

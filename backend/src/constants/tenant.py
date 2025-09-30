@@ -12,7 +12,8 @@ from uuid import UUID
 DEFAULT_TENANT_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 # Default tenant name
-DEFAULT_TENANT_NAME = "Default Tenant"
+# TODO: Consider moving this to a shared package to avoid frontend/backend inconsistency
+DEFAULT_TENANT_NAME = "DocExtract Demo"
 
 # Default environment for the default tenant
 DEFAULT_TENANT_ENVIRONMENT = "development"

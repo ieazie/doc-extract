@@ -373,6 +373,21 @@ class TenantConfigService:
             security_config=secure_security_config
         )
     
+    def to_secure_auth_config(self, auth_config: AuthenticationConfig) -> 'SecureAuthenticationConfig':
+        """
+        Convert AuthenticationConfig to SecureAuthenticationConfig (exclude JWT secret).
+        
+        This is the public API for converting authentication configuration to a secure
+        version that excludes sensitive data like JWT secrets.
+        
+        Args:
+            auth_config: The authentication configuration to convert
+            
+        Returns:
+            SecureAuthenticationConfig with sensitive data excluded
+        """
+        return self._convert_to_secure_auth_config(auth_config)
+    
     def _convert_to_secure_auth_config(self, auth_config: AuthenticationConfig) -> SecureAuthenticationConfig:
         """Convert AuthenticationConfig to SecureAuthenticationConfig (exclude JWT secret)"""
         from ..schemas.tenant_configuration import SecureAuthenticationConfig

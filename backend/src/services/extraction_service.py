@@ -181,8 +181,8 @@ class ExtractionService:
         """Check the health of the tenant's LLM provider"""
         
         try:
-            # Get tenant's LLM configuration
-            llm_config = self.config_service.get_llm_config(tenant_id)
+            # Get tenant's LLM configuration with API keys from secrets
+            llm_config = self.infrastructure_service.get_llm_config(tenant_id, self.environment)
             if not llm_config:
                 return {
                     "status": "unhealthy",

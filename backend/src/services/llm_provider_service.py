@@ -60,18 +60,30 @@ class LLMProvider(ABC):
 
     def _supports_json_mode(self) -> bool:
         """Check if the model supports JSON response format"""
-        JSON_MODELS = {
-            "gpt-4o-2024-08-06", 
+        json_exact = {
+            "gpt-4o-2024-08-06",
+            "gpt-4o-2024-11-20",
             "gpt-4o-mini-2024-07-18",
             "gpt-4o",  # Latest gpt-4o model
             "gpt-4o-mini",  # Latest gpt-4o-mini model
-            "gpt-4-turbo"  # Community reports support
+            "gpt-4-turbo",  # Community reports support
+            "gpt-4.1",
+            "gpt-4.1-mini",
+            "gpt-4.1-nano",
+            "gpt-5",
+            "gpt-5-mini",
+            "gpt-5-nano",
         }
-        return (self.model in JSON_MODELS or 
-                self.model.startswith("gpt-4o-2024-08-06") or 
-                self.model.startswith("gpt-4o-mini-2024-07-18") or
-                self.model.startswith("gpt-4o:") or
-                self.model.startswith("gpt-4o-mini:"))
+        json_prefixes = (
+            "gpt-4o-2024-08-06",
+            "gpt-4o-2024-11-20",
+            "gpt-4o-mini-2024-07-18",
+            "gpt-4o:",
+            "gpt-4o-mini:",
+            "gpt-4.1",
+            "gpt-5",
+        )
+        return self.model in json_exact or any(self.model.startswith(prefix) for prefix in json_prefixes)
 
 
 class OllamaProvider(LLMProvider):

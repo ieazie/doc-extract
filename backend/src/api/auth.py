@@ -71,8 +71,8 @@ async def get_current_user(
     tenant_auth_service = get_tenant_auth_service(db)
     
     # Detect environment from request
-    from ..utils.environment_detection import get_environment_from_request
-    environment = get_environment_from_request(request)
+    from ..utils.environment_detection import EnvironmentDetector
+    environment = EnvironmentDetector.detect_environment(request)
     
     # Extract tenant ID from token payload for verification
     try:
@@ -972,6 +972,6 @@ async def get_current_tenant_auth_config(
     # Convert to secure version
     from ..services.tenant_config_service import TenantConfigService
     config_service = TenantConfigService(db)
-    secure_config = config_service._convert_to_secure_auth_config(auth_config)
+    secure_config = config_service.to_secure_auth_config(auth_config)
     
     return secure_config

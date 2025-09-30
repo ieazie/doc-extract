@@ -150,7 +150,7 @@ class AuthService:
     
     def get_default_tenant_id(self, db: Session) -> UUID:
         """Get the default tenant ID"""
-        tenant = db.query(Tenant).filter(Tenant.name == "Default Tenant").first()
+        tenant = db.query(Tenant).filter(Tenant.name == "DocExtract Demo").first()
         if not tenant:
             # Create default tenant if it doesn't exist
             from ..config import settings

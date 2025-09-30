@@ -54,7 +54,7 @@ DO $$
 DECLARE
     default_tenant_id UUID;
 BEGIN
-    SELECT id INTO default_tenant_id FROM tenants WHERE name = 'Default Tenant';
+    SELECT id INTO default_tenant_id FROM tenants WHERE name = 'DocExtract Demo';
     
     IF default_tenant_id IS NOT NULL THEN
         INSERT INTO document_categories (tenant_id, name, description, color) VALUES 

@@ -142,17 +142,11 @@ const originalWarn = console.warn;
 const originalError = console.error;
 
 // Known noisy React messages that are safe to suppress
-const SUPPRESSED_WARNINGS = [
+const SUPPRESSED_WARNINGS: string[] = [
   'Warning: ReactDOM.render is no longer supported',
-  'Warning: validateDOMNesting',
-  'Warning: Each child in a list should have a unique "key" prop',
-  'Warning: Failed prop type:',
 ];
 
-const SUPPRESSED_ERRORS = [
-  'Warning: validateDOMNesting',
-  'Warning: Each child in a list should have a unique "key" prop',
-  'Warning: Failed prop type:',
+const SUPPRESSED_ERRORS: string[] = [
 ];
 
 beforeAll(() => {

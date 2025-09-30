@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useMutation } from 'react-query';
-import { TemplateService, DocumentService, serviceFactory } from '../../services/api/index';
-import { useErrorState, useErrorActions } from '@/stores/globalStore';
+import { TemplateService, serviceFactory } from '../../services/api/index';
+import { useErrorActions, useScopedErrorState, useScopedErrorActions } from '@/stores/globalStore';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 
 interface TemplateTesterProps {
   templateId: string;
@@ -235,14 +236,7 @@ const LoadingSpinner = styled.div`
   color: #6c757d;
 `;
 
-const ErrorMessage = styled.div`
-  color: #e74c3c;
-  background: #fdf2f2;
-  border: 1px solid #fecaca;
-  border-radius: 6px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-`;
+// Local ErrorMessage removed; using shared ErrorMessage component
 
 const TemplateTester: React.FC<TemplateTesterProps> = ({ templateId, templateName, onClose }) => {
   const [testDocument, setTestDocument] = useState('');
@@ -250,8 +244,11 @@ const TemplateTester: React.FC<TemplateTesterProps> = ({ templateId, templateNam
   const [isTesting, setIsTesting] = useState(false);
   
   // Global error handling
-  const errorState = useErrorState();
-  const { setError, clearError } = useErrorActions();
+  const { clearError } = useErrorActions();
+  
+  // Scoped error handling for template tester
+  const templateTesterErrorState = useScopedErrorState('template_tester');
+  const { setScopedError, clearScopedError } = useScopedErrorActions();
 
   const testMutation = useMutation({
     mutationFn: (documentText: string) => {
@@ -261,16 +258,17 @@ const TemplateTester: React.FC<TemplateTesterProps> = ({ templateId, templateNam
     onSuccess: (data) => {
       setTestResults(data);
       clearError();
+      clearScopedError('template_tester');
     },
     onError: (error: any) => {
-      setError('template_test_failed', error.message || 'Failed to test template');
+      setScopedError('template_tester', 'template_test_failed', error.message || 'Failed to test template');
       setTestResults(null);
     },
   });
 
   const handleTest = async () => {
     if (!testDocument.trim()) {
-      setError('validation_failed', 'Please enter some test document content');
+      setScopedError('template_tester', 'validation_failed', 'Please enter some test document content');
       return;
     }
 
@@ -312,8 +310,8 @@ const TemplateTester: React.FC<TemplateTesterProps> = ({ templateId, templateNam
           {isTesting ? 'Testing...' : 'Test Template'}
         </TestButton>
 
-        {errorState.hasError && (
-          <ErrorMessage>{errorState.errorMessage}</ErrorMessage>
+        {templateTesterErrorState.hasError && templateTesterErrorState.errorMessage && (
+          <ErrorMessage message={templateTesterErrorState.errorMessage} />
         )}
 
         {isTesting && (

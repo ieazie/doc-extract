@@ -178,12 +178,11 @@ def run_migration(migration_file: str, migration_path: str) -> bool:
         
         if result.returncode == 0:
             # Mark migration as applied only after successful completion
-            if mark_migration_applied(database_url, migration_file):
-                logger.info(f"✅ Migration completed: {migration_file}")
-                return True
-            else:
-                logger.warning(f"⚠️ Migration succeeded but failed to mark as applied: {migration_file}")
-                return True  # Still consider it successful
+            if not mark_migration_applied(database_url, migration_file):
+                logger.error(f"❌ Migration succeeded but failed to mark as applied: {migration_file}")
+                return False
+            logger.info(f"✅ Migration completed: {migration_file}")
+            return True
         else:
             logger.error(f"❌ Migration failed: {migration_file}")
             logger.error(f"Error output: {result.stderr}")

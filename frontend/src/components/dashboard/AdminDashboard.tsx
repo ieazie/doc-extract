@@ -219,7 +219,7 @@ const LoadingState = styled.div`
   color: ${props => props.theme.colors.text.muted};
 `;
 
-const ErrorState = styled.div`
+const AdminErrorState = styled.div`
   text-align: center;
   padding: 2rem;
   color: ${props => props.theme.colors.error};
@@ -250,7 +250,7 @@ const ErrorState = styled.div`
 
 // Component
 export const AdminDashboard: React.FC = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const [stats, setStats] = useState<ProcessingStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [health, setHealth] = useState<any>(null);
@@ -294,9 +294,9 @@ export const AdminDashboard: React.FC = () => {
     } catch (error) {
       console.error('Failed to load admin dashboard data:', error);
       
-      // Handle authentication errors through global error system
+      // Handle authentication errors by logging out the user
       if (error && (error as any).name === 'AuthenticationError') {
-        setError('auth_failed', 'Authentication failed. Please log in again.');
+        logout();
       } else {
         setError('dashboard_load_failed', 'Failed to load dashboard data. Please refresh the page.');
       }
@@ -351,11 +351,11 @@ export const AdminDashboard: React.FC = () => {
   if (errorState.hasError) {
     return (
       <AdminContainer>
-        <ErrorState>
+        <AdminErrorState>
           <h3>Error Loading Dashboard</h3>
           <p>{errorState.errorMessage || 'An error occurred'}</p>
-          <button onClick={() => loadAdminData()}>Retry</button>
-        </ErrorState>
+          <button type="button" onClick={() => loadAdminData()}>Retry</button>
+        </AdminErrorState>
       </AdminContainer>
     );
   }

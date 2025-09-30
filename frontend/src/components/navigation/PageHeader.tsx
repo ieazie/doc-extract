@@ -354,7 +354,7 @@ interface Tenant {
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
-  const { user, tenant, switchTenant, hasPermission, logout } = useAuth();
+  const { user, tenant, switchTenant, hasPermission, logout, isLoading } = useAuth();
   const [availableTenants, setAvailableTenants] = useState<Tenant[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoadingTenants, setIsLoadingTenants] = useState(false);
@@ -372,7 +372,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
   // Load available tenants when component mounts or user changes
   useEffect(() => {
     const loadTenants = async () => {
-      if (!user) return;
+      // Check both user existence and authentication state
+      if (!user || isLoading) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('🔄 PageHeader: Skipping tenant load - no user or still loading:', { user: !!user, isLoading });
+        }
+        return;
+      }
       
       if (process.env.NODE_ENV !== 'production') {
         console.log('🔄 PageHeader: Loading tenants for user role:', user.role);
@@ -406,9 +412,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
         console.error('❌ PageHeader: Failed to load tenants:', error);
       }
         
-        // Handle authentication errors through global error system
+        // Handle authentication errors by logging out the user
         if (error && (error as any).name === 'AuthenticationError') {
-          setError('auth_failed', 'Authentication failed. Please log in again.');
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('🔄 PageHeader: Authentication error detected, logging out');
+          }
+          logout();
+          return; // Don't set error state for auth errors
         } else {
           setError('tenant_load_failed', 'Failed to load tenants. Please refresh the page.');
         }
@@ -420,7 +430,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
     };
 
     loadTenants();
-  }, [user]);
+  }, [user, isLoading]);
 
   const handleTenantSwitch = async (tenantId: string) => {
     if (tenantId === tenant?.id || isSwitching) return;
@@ -436,9 +446,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ className }) => {
         console.error('Failed to switch tenant:', error);
       }
       
-      // Handle authentication errors through global error system
+      // Handle authentication errors by logging out the user
       if (error && (error as any).name === 'AuthenticationError') {
-        setError('auth_failed', 'Authentication failed. Please log in again.');
+        // Session expired - log out user and redirect to login
+        logout();
       } else {
         setError('tenant_switch_failed', 'Failed to switch tenant. Please try again.');
       }
