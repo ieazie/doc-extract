@@ -245,6 +245,12 @@ export abstract class BaseApiClient {
 
   setAuthToken(token: string | null): void {
     this.authToken = token;
+    
+    // Reset logout flag when a new token is set
+    if (token) {
+      this.logoutDispatched = false;
+    }
+    
     const defaults = this.client.defaults as any;
     // Ensure defaults.headers exists before accessing .common
     defaults.headers = defaults.headers || {};
