@@ -1,5 +1,7 @@
 ---
 alwaysApply: true
+globs:
+description: Frontend development guidelines
 ---
 
 # Document Extraction Platform - Development Rules
