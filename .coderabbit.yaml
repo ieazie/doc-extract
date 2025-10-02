@@ -23,9 +23,8 @@ reviews:
 chat:
   auto_reply: true
 
-# knowledge_base:
-#  code_guidelines:
-#    enabled: true
-#    filePatterns:
-#      - "**/.cursor"
-#      - "**/CODING_STANDARDS.md"
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/.cursor"
