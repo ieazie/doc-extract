@@ -8,6 +8,8 @@ export abstract class BaseApiClient {
   protected client: AxiosInstance;
   protected authToken: string | null = null;
   protected tenantId: string | null = null; // Add tenant tracking
+  private refreshPromise: Promise<any> | null = null; // Global refresh lock
+  private logoutDispatched = false; // Prevent multiple logout events
 
   constructor(client: AxiosInstance) {
     this.client = client;
@@ -60,8 +62,19 @@ export abstract class BaseApiClient {
             const { serviceFactory } = await import('../index');
             const authService = serviceFactory.get<any>('auth');
             
-            // Attempt silent token refresh
-            const refreshResult = await authService.silentRefreshToken();
+            // Reuse existing refresh promise if one is in flight
+            if (!this.refreshPromise) {
+              this.refreshPromise = (async () => {
+                try {
+                  const refreshResult = await authService.silentRefreshToken();
+                  return refreshResult;
+                } finally {
+                  this.refreshPromise = null;
+                }
+              })();
+            }
+            
+            const refreshResult = await this.refreshPromise;
             
             if (refreshResult && refreshResult.access_token) {
               // Update token in all services
@@ -71,6 +84,9 @@ export abstract class BaseApiClient {
               if (typeof window !== 'undefined') {
                 sessionStorage.setItem('auth_access_token', refreshResult.access_token);
               }
+              
+              // Reset logout flag since we successfully got a new token
+              this.logoutDispatched = false;
               
               // Retry the original request with new token
               const retryConfig = {
@@ -86,8 +102,11 @@ export abstract class BaseApiClient {
             }
           } catch (refreshError) {
             console.warn('Token refresh failed:', refreshError);
-            // If refresh fails, trigger logout
-            if (typeof window !== 'undefined') {
+            // Clear the refresh promise on failure
+            this.refreshPromise = null;
+            // If refresh fails, trigger logout (only once)
+            if (typeof window !== 'undefined' && !this.logoutDispatched) {
+              this.logoutDispatched = true;
               window.dispatchEvent(new CustomEvent('auth:logout'));
             }
           }

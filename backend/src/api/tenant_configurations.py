@@ -419,13 +419,13 @@ async def check_llm_health(
     
     try:
         # Debug logging
-        print(f"🔍 Health check for {config_type}: provider={config_to_check.provider}, model={config_to_check.model_name}")
-        print(f"🔍 API key present: {hasattr(config_to_check, 'api_key') and bool(config_to_check.api_key)}")
+        logger.debug(f"Health check for {config_type}: provider={config_to_check.provider}, model={config_to_check.model_name}")
+        logger.debug(f"API key present: {hasattr(config_to_check, 'api_key') and bool(config_to_check.api_key)}")
         
         llm_service = LLMProviderService.from_config(config_to_check)
         is_healthy = llm_service.health_check()
         
-        print(f"🔍 Health check result: {is_healthy}")
+        logger.debug(f"Health check result: {is_healthy}")
         
         return {
             "provider": config_to_check.provider,
@@ -434,7 +434,7 @@ async def check_llm_health(
             "checked_at": datetime.utcnow().isoformat()
         }
     except Exception as e:
-        print(f"🔍 Health check error: {str(e)}")
+        logger.exception(f"Health check error for {config_type}")
         return {
             "provider": config_to_check.provider,
             "model": config_to_check.model_name,

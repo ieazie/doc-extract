@@ -313,11 +313,6 @@ const TenantConfigPage: React.FC = () => {
       }));
     } catch (error) {
       console.error(`Failed to load models for ${provider}:`, error);
-      // Set empty array as fallback
-      setAvailableModels(prev => ({
-        ...prev,
-        [provider]: []
-      }));
     } finally {
       setLoadingModels(prev => ({ ...prev, [provider]: false }));
     }

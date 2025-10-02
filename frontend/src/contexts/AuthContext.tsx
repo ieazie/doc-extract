@@ -14,7 +14,7 @@
  * - Backend enforces proper token validation and rotation
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { useRouter } from 'next/router';
 import { AuthService, TenantService, serviceFactory } from '@/services/api/index';
 
@@ -106,8 +106,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Simple token refresh function
+  const clearAuthData = useCallback(() => {
+    setUser(null);
+    setTenant(null);
+    setAccessToken(null);
+    setStoredAccessToken(null);
+    serviceFactory.setAuthToken(null);
+    serviceFactory.setTenantId(null);
+    localStorage.removeItem('auth_user');
+    localStorage.removeItem('auth_tenant');
+  }, []);
 
-  const refreshToken = async (): Promise<void> => {
+  const refreshToken = useCallback(async (): Promise<void> => {
     try {
       const authService = serviceFactory.get<AuthService>('auth');
       const response = await authService.refreshToken();
@@ -133,19 +143,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearAuthData();
       throw error;
     }
-  };
-
-
-  const clearAuthData = () => {
-    setUser(null);
-    setTenant(null);
-    setAccessToken(null);
-    setStoredAccessToken(null);
-    serviceFactory.setAuthToken(null);
-    serviceFactory.setTenantId(null);
-    localStorage.removeItem('auth_user');
-    localStorage.removeItem('auth_tenant');
-  };
+  }, [clearAuthData]);
 
   // Initialize auth state
   useEffect(() => {
@@ -260,7 +258,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Simple token refresh on 401 errors (handled by API interceptor)
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       const authService = serviceFactory.get<AuthService>('auth');
       await authService.logout();
@@ -271,9 +269,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearAuthData();
       // Don't redirect - the _app.tsx will show the login form when user is not authenticated
     }
-  };
+  }, [clearAuthData]);
 
-  const login = async (credentials: LoginCredentials): Promise<void> => {
+  const login = useCallback(async (credentials: LoginCredentials): Promise<void> => {
     try {
       const authService = serviceFactory.get<AuthService>('auth');
       const response = await authService.login(credentials);
@@ -326,10 +324,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Error is already handled by global store
       console.log('Login failed - error handled by global store');
     }
-  };
+  }, [router]);
 
 
-  const switchTenant = async (tenantId: string) => {
+  const switchTenant = useCallback(async (tenantId: string) => {
     try {
       const authService = serviceFactory.get<AuthService>('auth');
       await authService.switchTenant(tenantId);
@@ -354,9 +352,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Failed to switch tenant:', error);
       throw error;
     }
-  };
+  }, []);
 
-  const hasPermission = (permission: string): boolean => {
+  const hasPermission = useCallback((permission: string): boolean => {
     if (!user) return false;
     
     // Get user permissions based on role
@@ -430,28 +428,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     const userPermissions = permissions[user.role as keyof typeof permissions] || [];
     return userPermissions.includes(permission);
-  };
+  }, [user]);
 
-  const hasRole = (role: string): boolean => {
+  const hasRole = useCallback((role: string): boolean => {
     return user?.role === role;
-  };
+  }, [user]);
 
-  const isSystemAdmin = (): boolean => {
+  const isSystemAdmin = useCallback((): boolean => {
     return user?.role === 'system_admin';
-  };
+  }, [user]);
 
-  const isTenantAdmin = (): boolean => {
+  const isTenantAdmin = useCallback((): boolean => {
     return user?.role === 'tenant_admin';
-  };
+  }, [user]);
 
-  const isAdmin = (): boolean => {
+  const isAdmin = useCallback((): boolean => {
     return user?.role === 'system_admin' || user?.role === 'tenant_admin';
-  };
+  }, [user]);
 
   const isAuthenticated = !!user && !!accessToken;
   
 
-  const value: AuthContextType = {
+  const value: AuthContextType = useMemo(() => ({
     user,
     tenant,
     accessToken,
@@ -466,7 +464,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isSystemAdmin,
     isTenantAdmin,
     isAdmin
-  };
+  }), [
+    user,
+    tenant,
+    accessToken,
+    isAuthenticated,
+    isLoading,
+    login,
+    logout,
+    refreshToken,
+    switchTenant,
+    hasPermission,
+    hasRole,
+    isSystemAdmin,
+    isTenantAdmin,
+    isAdmin
+  ]);
 
   return (
     <AuthContext.Provider value={value}>

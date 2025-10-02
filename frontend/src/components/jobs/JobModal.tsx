@@ -510,6 +510,20 @@ export const JobModal: React.FC<JobModalProps> = ({
     }));
   };
 
+  // Helper functions for timezone handling
+  const toLocalDateTimeInput = (isoString?: string) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const offsetMs = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  };
+
+  const getMinDateTimeLocal = () => {
+    const now = new Date();
+    const offsetMs = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+  };
+
   const handleScheduleTypeChange = (scheduleType: 'immediate' | 'scheduled' | 'recurring') => {
     setFormData(prev => ({
       ...prev,
@@ -719,11 +733,11 @@ export const JobModal: React.FC<JobModalProps> = ({
                   <FormLabel>Schedule Date & Time *</FormLabel>
                   <DateTimeInput
                     type="datetime-local"
-                    value={formData.schedule_config?.run_at ? new Date(formData.schedule_config.run_at).toISOString().slice(0, 16) : ''}
+                    value={toLocalDateTimeInput(formData.schedule_config?.run_at)}
                     onChange={(e) => {
                       const datetimeValue = e.target.value;
                       if (datetimeValue) {
-                        // Convert to ISO string for backend
+                        // Convert to UTC ISO string for backend
                         const isoDateTime = new Date(datetimeValue).toISOString();
                         handleInputChange('schedule_config', {
                           ...formData.schedule_config,
@@ -738,7 +752,7 @@ export const JobModal: React.FC<JobModalProps> = ({
                         });
                       }
                     }}
-                    min={new Date().toISOString().slice(0, 16)} // Prevent scheduling in the past
+                    min={getMinDateTimeLocal()} // Prevent scheduling in the past (local)
                     required
                   />
                   <FormHelpText>

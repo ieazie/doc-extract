@@ -410,59 +410,19 @@ const UsersPage: React.FC = () => {
       width: '3fr',
       align: 'left' as const,
       render: (_, user) => (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          width: '100%',
-          minWidth: 0,
-          overflow: 'hidden'
-        }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '50%',
-            background: '#3b82f6',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontWeight: 500,
-            flexShrink: 0
-          }}>
+        <UserInfo>
+          <UserAvatar style={{ flexShrink: 0 }}>
             {getUserInitials(user.first_name, user.last_name)}
-          </div>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            flex: 1,
-            minWidth: 0,
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              fontWeight: 500,
-              color: '#1f2937',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              width: '100%',
-              minWidth: 0
-            }}>
+          </UserAvatar>
+          <UserDetails>
+            <UserName title={`${user.first_name} ${user.last_name}`}>
               {user.first_name} {user.last_name}
-            </div>
-            <div style={{
-              fontSize: '0.875rem',
-              color: '#6b7280',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              width: '100%',
-              minWidth: 0
-            }}>
+            </UserName>
+            <UserEmail title={user.email}>
               {user.email}
-            </div>
-          </div>
-        </div>
+            </UserEmail>
+          </UserDetails>
+        </UserInfo>
       )
     },
     {
