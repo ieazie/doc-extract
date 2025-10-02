@@ -71,6 +71,52 @@ const StatusBadge = styled.span<{ $status: 'active' | 'inactive' | 'expired' }>`
   }};
 `;
 
+const EmptyState = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+`;
+
+const EmptyStateIcon = styled.div`
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  
+  svg {
+    width: 32px;
+    height: 32px;
+    color: #6b7280;
+  }
+`;
+
+const EmptyStateTitle = styled.h3`
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 0.5rem 0;
+`;
+
+const EmptyStateDescription = styled.p`
+  font-size: 1rem;
+  color: #6b7280;
+  margin: 0 0 2rem 0;
+  max-width: 400px;
+`;
+
+const EmptyStateButton = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
 const ModalOverlay = styled.div`
   position: fixed;
   top: 0;
@@ -203,33 +249,12 @@ const ApiKeysPage: React.FC = () => {
   const loadApiKeys = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with actual API call
+      // TODO: Replace with actual API call when backend is ready
       // const response = await apiClient.getApiKeys();
       // setApiKeys(response.data);
       
-      // Mock data for now
-      setApiKeys([
-        {
-          id: '1',
-          name: 'Production API Key',
-          key: 'sk-proj-1234567890abcdef',
-          status: 'active',
-          created_at: '2024-01-15T10:00:00Z',
-          expires_at: null,
-          last_used: '2024-01-20T15:30:00Z',
-          permissions: ['read', 'write']
-        },
-        {
-          id: '2',
-          name: 'Development Key',
-          key: 'sk-dev-abcdef1234567890',
-          status: 'inactive',
-          created_at: '2024-01-10T09:00:00Z',
-          expires_at: '2024-12-31T23:59:59Z',
-          last_used: '2024-01-18T12:00:00Z',
-          permissions: ['read']
-        }
-      ]);
+      // For now, return empty array to show proper empty state
+      setApiKeys([]);
     } catch (error) {
       console.error('Failed to load API keys:', error);
       setMessage({ type: 'error', text: 'Failed to load API keys' });
@@ -417,15 +442,23 @@ const ApiKeysPage: React.FC = () => {
         </div>
       )}
 
-      <Table
-        data={apiKeys}
-        columns={columns}
-        loading={false}
-        emptyState={{
-          title: "No API keys found",
-          description: "Create your first API key to get started."
-        }}
-      />
+      {apiKeys.length === 0 ? (
+        <EmptyState>
+          <EmptyStateIcon>
+            <Key size={32} />
+          </EmptyStateIcon>
+          <EmptyStateTitle>Create an API Key</EmptyStateTitle>
+          <EmptyStateDescription>
+            Create an API key to access the Document Extraction API.
+          </EmptyStateDescription>
+        </EmptyState>
+      ) : (
+        <Table
+          data={apiKeys}
+          columns={columns}
+          loading={false}
+        />
+      )}
 
       {/* Create API Key Modal */}
       {showCreateModal && (

@@ -55,6 +55,39 @@ const HeaderActions = styled.div`
   align-items: center;
 `;
 
+// Styled components for table cell content
+const CellContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+`;
+
+const CellText = styled.div`
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+`;
+
+const CellSubText = styled.div`
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.2;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+`;
+
 const RefreshButton = styled.button`
   display: flex;
   align-items: center;
@@ -304,12 +337,14 @@ const ExtractionsPage: React.FC = () => {
       width: '2fr',
       align: 'left',
       render: (value, row) => (
-        <div>
-          <div style={{ fontWeight: 500, lineHeight: '1.2' }}>{value}</div>
-          <div style={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: '1.2' }}>
+        <CellContainer>
+          <CellText>
+            {value}
+          </CellText>
+          <CellSubText>
             {row.document_id.slice(0, 8)}...
-          </div>
-        </div>
+          </CellSubText>
+        </CellContainer>
       )
     },
     {
@@ -319,12 +354,14 @@ const ExtractionsPage: React.FC = () => {
       width: '1.5fr',
       align: 'left',
       render: (value, row) => (
-        <div>
-          <div style={{ fontWeight: 500, lineHeight: '1.2' }}>{value}</div>
-          <div style={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: '1.2' }}>
+        <CellContainer>
+          <CellText>
+            {value}
+          </CellText>
+          <CellSubText>
             {row.template_id.slice(0, 8)}...
-          </div>
-        </div>
+          </CellSubText>
+        </CellContainer>
       )
     },
     {

@@ -52,7 +52,47 @@ export abstract class BaseApiClient {
         };
         return response;
       },
-      (error) => {
+      async (error) => {
+        // Handle 401 errors with token refresh
+        if (error.response?.status === 401 && !error.config?._retry) {
+          try {
+            // Import service factory dynamically to avoid circular dependency
+            const { serviceFactory } = await import('../index');
+            const authService = serviceFactory.get<any>('auth');
+            
+            // Attempt silent token refresh
+            const refreshResult = await authService.silentRefreshToken();
+            
+            if (refreshResult && refreshResult.access_token) {
+              // Update token in all services
+              serviceFactory.setAuthToken(refreshResult.access_token);
+              
+              // Update stored token
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem('auth_access_token', refreshResult.access_token);
+              }
+              
+              // Retry the original request with new token
+              const retryConfig = {
+                ...error.config,
+                _retry: true,
+                headers: {
+                  ...error.config.headers,
+                  'Authorization': `Bearer ${refreshResult.access_token}`
+                }
+              };
+              
+              return this.client.request(retryConfig);
+            }
+          } catch (refreshError) {
+            console.warn('Token refresh failed:', refreshError);
+            // If refresh fails, trigger logout
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('auth:logout'));
+            }
+          }
+        }
+        
         try {
           const handledError = this.handleError(error);
           return Promise.reject(handledError);

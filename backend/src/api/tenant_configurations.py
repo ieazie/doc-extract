@@ -387,7 +387,9 @@ async def check_llm_health(
 ):
     """Check the health of the configured LLM provider"""
     infrastructure_service = TenantInfrastructureService(db)
-    llm_config = infrastructure_service.get_llm_config(current_user.tenant_id)
+    # Get the environment from the user's tenant or default to development
+    environment = getattr(current_user.tenant, 'environment', 'development') if current_user.tenant else 'development'
+    llm_config = infrastructure_service.get_llm_config(current_user.tenant_id, environment)
     
     if not llm_config:
         raise HTTPException(
@@ -416,8 +418,14 @@ async def check_llm_health(
         )
     
     try:
+        # Debug logging
+        print(f"🔍 Health check for {config_type}: provider={config_to_check.provider}, model={config_to_check.model_name}")
+        print(f"🔍 API key present: {hasattr(config_to_check, 'api_key') and bool(config_to_check.api_key)}")
+        
         llm_service = LLMProviderService.from_config(config_to_check)
-        is_healthy = await llm_service.health_check()
+        is_healthy = llm_service.health_check()
+        
+        print(f"🔍 Health check result: {is_healthy}")
         
         return {
             "provider": config_to_check.provider,
@@ -426,6 +434,7 @@ async def check_llm_health(
             "checked_at": datetime.utcnow().isoformat()
         }
     except Exception as e:
+        print(f"🔍 Health check error: {str(e)}")
         return {
             "provider": config_to_check.provider,
             "model": config_to_check.model_name,
