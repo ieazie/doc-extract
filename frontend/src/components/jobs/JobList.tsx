@@ -380,10 +380,32 @@ export const JobList: React.FC<JobListProps> = ({
       sortable: true,
       width: '300px', // Increased width for better readability
       render: (value, job) => (
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 4, fontSize: '14px' }}>{value}</div>
+        <div style={{ 
+          minWidth: 0,
+          overflow: 'hidden',
+          width: '100%'
+        }}>
+          <div style={{ 
+            fontWeight: 600, 
+            marginBottom: 4, 
+            fontSize: '14px',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: '100%'
+          }} title={value}>
+            {value}
+          </div>
           {job.description && (
-            <div style={{ fontSize: '12px', color: '#6b7280', lineHeight: '1.4' }}>
+            <div style={{ 
+              fontSize: '12px', 
+              color: '#6b7280', 
+              lineHeight: '1.4',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: '100%'
+            }} title={job.description}>
               {job.description.length > 80 
                 ? `${job.description.substring(0, 80)}...` 
                 : job.description}
@@ -409,7 +431,15 @@ export const JobList: React.FC<JobListProps> = ({
       label: 'Template',
       width: '160px',
       render: (value, job) => (
-        <div style={{ fontWeight: 500, color: '#374151', fontSize: '12px' }}>
+        <div style={{ 
+          fontWeight: 500, 
+          color: '#374151', 
+          fontSize: '12px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          maxWidth: '100%'
+        }} title={job.template?.name || job.execution_config?.template_id || '-'}>
           {job.template?.name || job.execution_config?.template_id || '-'}
         </div>
       )

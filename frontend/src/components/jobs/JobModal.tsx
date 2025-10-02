@@ -124,6 +124,34 @@ const FormTextarea = styled.textarea`
   }
 `;
 
+const DateTimeInput = styled.input`
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #1e293b;
+  background-color: white;
+  font-family: inherit;
+  transition: border-color 0.2s;
+
+  &:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+  }
+
+  &::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+`;
+
+const FormHelpText = styled.div`
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+  line-height: 1.4;
+`;
+
 const ScheduleSection = styled.div`
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -323,7 +351,8 @@ export const JobModal: React.FC<JobModalProps> = ({
     schedule_config: {
       cron: '',
       cron_expression: '', // For UI compatibility
-      timezone: 'UTC'
+      timezone: 'UTC',
+      run_at: undefined
     },
     execution_config: {
       template_id: '',
@@ -370,7 +399,8 @@ export const JobModal: React.FC<JobModalProps> = ({
             schedule_config: {
               cron: job.schedule_config?.cron || job.schedule_config?.cron_expression || '',
               cron_expression: job.schedule_config?.cron || job.schedule_config?.cron_expression || '', // For UI compatibility
-              timezone: job.schedule_config?.timezone || 'UTC'
+              timezone: job.schedule_config?.timezone || 'UTC',
+              run_at: job.schedule_config?.run_at
             },
             execution_config: {
               template_id: job.execution_config?.template_id || job.template_id || '',
@@ -400,7 +430,8 @@ export const JobModal: React.FC<JobModalProps> = ({
             schedule_config: {
               cron: '',
               cron_expression: '', // For UI compatibility
-              timezone: 'UTC'
+              timezone: 'UTC',
+              run_at: undefined
             },
             execution_config: {
               template_id: '',
@@ -479,6 +510,20 @@ export const JobModal: React.FC<JobModalProps> = ({
     }));
   };
 
+  // Helper functions for timezone handling
+  const toLocalDateTimeInput = (isoString?: string) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const offsetMs = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  };
+
+  const getMinDateTimeLocal = () => {
+    const now = new Date();
+    const offsetMs = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+  };
+
   const handleScheduleTypeChange = (scheduleType: 'immediate' | 'scheduled' | 'recurring') => {
     setFormData(prev => ({
       ...prev,
@@ -486,7 +531,8 @@ export const JobModal: React.FC<JobModalProps> = ({
       schedule_config: {
         cron: scheduleType === 'recurring' ? (prev.schedule_config.cron || prev.schedule_config.cron_expression) : '',
         cron_expression: scheduleType === 'recurring' ? (prev.schedule_config.cron || prev.schedule_config.cron_expression) : '', // For UI compatibility
-        timezone: prev.schedule_config.timezone || 'UTC'
+        timezone: prev.schedule_config.timezone || 'UTC',
+        run_at: scheduleType === 'scheduled' ? (prev.schedule_config.run_at || undefined) : undefined
       }
     }));
   };
@@ -496,6 +542,12 @@ export const JobModal: React.FC<JobModalProps> = ({
     
     if (!formData.name || !formData.execution_config?.template_id || !formData.execution_config?.category_id) {
       setError('validation_failed', 'Please fill in all required fields');
+      return;
+    }
+
+    // Validate scheduled time for scheduled jobs
+    if (formData.schedule_type === 'scheduled' && !formData.schedule_config?.run_at) {
+      setError('validation_failed', 'Please select a date and time for scheduled jobs');
       return;
     }
 
@@ -673,6 +725,39 @@ export const JobModal: React.FC<JobModalProps> = ({
                       timezone: formData.schedule_config?.timezone || 'UTC'
                     })}
                   />
+                </FormGroup>
+              )}
+
+              {formData.schedule_type === 'scheduled' && (
+                <FormGroup>
+                  <FormLabel>Schedule Date & Time *</FormLabel>
+                  <DateTimeInput
+                    type="datetime-local"
+                    value={toLocalDateTimeInput(formData.schedule_config?.run_at)}
+                    onChange={(e) => {
+                      const datetimeValue = e.target.value;
+                      if (datetimeValue) {
+                        // Convert to UTC ISO string for backend
+                        const isoDateTime = new Date(datetimeValue).toISOString();
+                        handleInputChange('schedule_config', {
+                          ...formData.schedule_config,
+                          run_at: isoDateTime,
+                          timezone: formData.schedule_config?.timezone || 'UTC'
+                        });
+                      } else {
+                        handleInputChange('schedule_config', {
+                          ...formData.schedule_config,
+                          run_at: undefined,
+                          timezone: formData.schedule_config?.timezone || 'UTC'
+                        });
+                      }
+                    }}
+                    min={getMinDateTimeLocal()} // Prevent scheduling in the past (local)
+                    required
+                  />
+                  <FormHelpText>
+                    Select the date and time when this job should run. Must be in the future.
+                  </FormHelpText>
                 </FormGroup>
               )}
             </ScheduleSection>

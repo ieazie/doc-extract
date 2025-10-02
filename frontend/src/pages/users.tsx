@@ -71,6 +71,9 @@ const UserInfo = styled.div`
   display: flex;
   align-items: center;
   gap: ${props => props.theme.spacing.sm};
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 `;
 
 const UserAvatar = styled.div`
@@ -88,16 +91,31 @@ const UserAvatar = styled.div`
 const UserDetails = styled.div`
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 `;
 
 const UserName = styled.span`
   font-weight: ${props => props.theme.typography.weights.medium};
   color: ${props => props.theme.colors.text.primary};
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
 `;
 
 const UserEmail = styled.span`
   font-size: ${props => props.theme.typography.sizes.sm};
   color: ${props => props.theme.colors.text.secondary};
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
 `;
 
 const RoleBadge = styled.span<{ $role: string }>`
@@ -389,16 +407,20 @@ const UsersPage: React.FC = () => {
     {
       key: 'user',
       label: 'User',
-      width: '2fr',
+      width: '3fr',
       align: 'left' as const,
       render: (_, user) => (
         <UserInfo>
-          <UserAvatar>
+          <UserAvatar style={{ flexShrink: 0 }}>
             {getUserInitials(user.first_name, user.last_name)}
           </UserAvatar>
           <UserDetails>
-            <UserName>{user.first_name} {user.last_name}</UserName>
-            <UserEmail>{user.email}</UserEmail>
+            <UserName title={`${user.first_name} ${user.last_name}`}>
+              {user.first_name} {user.last_name}
+            </UserName>
+            <UserEmail title={user.email}>
+              {user.email}
+            </UserEmail>
           </UserDetails>
         </UserInfo>
       )

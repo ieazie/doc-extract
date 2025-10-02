@@ -157,12 +157,14 @@ export const SortIcon = styled.span<{ $active?: boolean; $direction?: 'asc' | 'd
 
 export const TableRow = styled.div<{ $columns: number; $gridTemplate?: string }>`
   display: grid;
-  gap: 1rem;
+  gap: 0.5rem;
   padding: 1rem;
   border-bottom: 1px solid #f3f4f6;
-  align-items: center;
+  align-items: start;
   transition: background-color 0.2s;
-  ${props => props.$gridTemplate && `grid-template-columns: ${props.$gridTemplate};`}
+  ${props => props.$gridTemplate && `grid-template-columns: ${props.$gridTemplate} !important;`}
+  min-width: 0;
+  overflow: hidden;
   
   &:hover {
     background: #f9fafb;
@@ -175,12 +177,18 @@ export const TableRow = styled.div<{ $columns: number; $gridTemplate?: string }>
 
 export const TableCell = styled.div`
   display: flex;
-  align-items: center;
+  align-items: start;
   min-height: 1.5rem;
-  height: 1.5rem;
   line-height: 1.5rem;
   font-size: 0.875rem;
   font-weight: 400;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  flex: 1;
+  width: 100%;
+  height: auto;
 `;
 
 // Status Badge Component

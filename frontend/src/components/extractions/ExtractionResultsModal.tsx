@@ -483,16 +483,133 @@ const LoadingState = styled.div`
   color: #6b7280;
 `;
 
-const ErrorState = styled.div`
+
+const EmptyState = styled.div`
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 200px;
-  color: #ef4444;
-  background: #fee2e2;
-  border: 1px solid #fecaca;
-  border-radius: 0.375rem;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
   margin: 1rem;
+  padding: 2rem;
+  text-align: center;
+`;
+
+const EmptyStateIcon = styled.div`
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  color: #9ca3af;
+`;
+
+const EmptyStateTitle = styled.div`
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.5rem;
+`;
+
+const EmptyStateDescription = styled.div`
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.5;
+  max-width: 300px;
+`;
+
+const ProcessingState = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #3b82f6;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.5rem;
+  margin: 1rem;
+  padding: 2rem;
+  text-align: center;
+`;
+
+const ProcessingIcon = styled.div`
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #dbeafe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  color: #3b82f6;
+  animation: pulse 2s infinite;
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+`;
+
+const ErrorState = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  margin: 1rem;
+  padding: 2rem;
+  text-align: center;
+`;
+
+const ErrorIcon = styled.div`
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fee2e2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  color: #dc2626;
+`;
+
+const ErrorTitle = styled.div`
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #dc2626;
+  margin-bottom: 0.5rem;
+`;
+
+const ErrorDescription = styled.div`
+  font-size: 0.875rem;
+  color: #7f1d1d;
+  line-height: 1.5;
+  max-width: 300px;
+  margin-bottom: 1rem;
+`;
+
+const ErrorDetails = styled.div`
+  font-size: 0.75rem;
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+  font-family: monospace;
+  max-width: 400px;
+  word-break: break-word;
 `;
 
 interface ExtractionResultsModalProps {
@@ -602,13 +719,23 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   } = useQuery(
     ['template', extraction?.template_id],
     () => {
+      console.log('Fetching template with ID:', extraction?.template_id);
       const templateService = serviceFactory.get<TemplateService>('templates');
       return templateService.getTemplate(extraction!.template_id);
     },
     {
-      enabled: isOpen && !!extraction?.template_id,
+      enabled: isOpen && !!extraction?.template_id && !extractionLoading,
+      onSuccess: (data) => {
+        console.log('Template loaded successfully:', data);
+        console.log('Template schema:', data?.schema);
+      },
       onError: (error) => {
         console.error('Failed to load template:', error);
+        console.error('Template error details:', {
+          message: (error as any)?.message || 'Unknown error',
+          status: (error as any)?.status,
+          data: (error as any)?.data
+        });
       }
     }
   );
@@ -940,8 +1067,17 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
             </PanelHeader>
             
             <PanelContent collapsed={collapsedPanels.schema}>
-              {templateLoading ? (
+              {extractionLoading ? (
+                <LoadingState>Loading extraction...</LoadingState>
+              ) : templateLoading ? (
                 <LoadingState>Loading schema...</LoadingState>
+              ) : templateError ? (
+                <ErrorState>
+                  <div>Failed to load template</div>
+                  <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                    {(templateError as any)?.message || 'Unable to load template schema'}
+                  </div>
+                </ErrorState>
               ) : template?.schema ? (
                 <SchemaSection>
                   {Object.entries(template.schema).map(([fieldId, fieldDef]: [string, any]) => (
@@ -1116,35 +1252,59 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                 </>
               ) : extraction?.error_message ? (
                 <ErrorState>
-                  <div>Extraction Failed</div>
-                  <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                  <ErrorIcon>
+                    <XCircle size={24} />
+                  </ErrorIcon>
+                  <ErrorTitle>Extraction Failed</ErrorTitle>
+                  <ErrorDescription>
+                    We encountered an issue while processing your document. Please try again or contact support if the problem persists.
+                  </ErrorDescription>
+                  <ErrorDetails>
                     {extraction.error_message}
-                  </div>
+                  </ErrorDetails>
                 </ErrorState>
               ) : extraction ? (
-                <ErrorState>
-                  <div>No Results Available</div>
-                  <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                    {extraction.status === 'processing' ? 'Extraction is still in progress...' :
-                     extraction.status === 'failed' ? 'Extraction failed to complete' :
-                     'No data was extracted from this document'}
-                  </div>
-                  {extraction.status && (
-                    <div style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#6b7280' }}>
-                      Status: {extraction.status}
-                    </div>
-                  )}
-                  <div style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#6b7280' }}>
-                    Debug: results is {extraction?.results ? 'present' : 'missing'}
-                  </div>
-                </ErrorState>
+                extraction.status === 'processing' ? (
+                  <ProcessingState>
+                    <ProcessingIcon>
+                      <Clock size={24} />
+                    </ProcessingIcon>
+                    <EmptyStateTitle>Processing Document</EmptyStateTitle>
+                    <EmptyStateDescription>
+                      We're analyzing your document and extracting data. This may take a few moments.
+                    </EmptyStateDescription>
+                  </ProcessingState>
+                ) : extraction.status === 'failed' ? (
+                  <EmptyState>
+                    <EmptyStateIcon>
+                      <XCircle size={24} />
+                    </EmptyStateIcon>
+                    <EmptyStateTitle>Extraction Failed</EmptyStateTitle>
+                    <EmptyStateDescription>
+                      The extraction process encountered an error and could not complete. Please try again or contact support if the problem persists.
+                    </EmptyStateDescription>
+                  </EmptyState>
+                ) : (
+                  <EmptyState>
+                    <EmptyStateIcon>
+                      <FileText size={24} />
+                    </EmptyStateIcon>
+                    <EmptyStateTitle>No Data Extracted</EmptyStateTitle>
+                    <EmptyStateDescription>
+                      We couldn't extract any structured data from this document. This might be due to the document format or content.
+                    </EmptyStateDescription>
+                  </EmptyState>
+                )
               ) : (
-                <ErrorState>
-                  <div>No Extraction Data</div>
-                  <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                    Unable to load extraction information
-                  </div>
-                </ErrorState>
+                <EmptyState>
+                  <EmptyStateIcon>
+                    <AlertCircle size={24} />
+                  </EmptyStateIcon>
+                  <EmptyStateTitle>Unable to Load</EmptyStateTitle>
+                  <EmptyStateDescription>
+                    We couldn't load the extraction information. Please try refreshing or contact support if the issue persists.
+                  </EmptyStateDescription>
+                </EmptyState>
               )}
             </PanelContent>
           </Panel>

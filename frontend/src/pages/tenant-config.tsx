@@ -22,7 +22,7 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { SuccessMessage } from '@/components/common/SuccessMessage';
 import Button from '@/components/ui/Button';
 import Dropdown from '@/components/ui/Dropdown';
-import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, ApiTenant, TenantEnvironmentInfo } from '@/services/api/index';
+import { TenantService, HealthService, serviceFactory, LLMConfig, RateLimitsConfig, TenantLLMConfigs, ApiTenant, TenantEnvironmentInfo, AvailableModelsResponse } from '@/services/api/index';
 import InfrastructureManagement from '@/components/tenants/InfrastructureManagement';
 import { LanguageConfiguration } from '@/components/tenants/LanguageConfiguration';
 import { AuthenticationConfigForm } from '@/components/tenants/AuthenticationConfigForm';
@@ -294,6 +294,29 @@ const TenantConfigPage: React.FC = () => {
       }
     }));
   };
+
+  // Function to load available models for a provider
+  const loadAvailableModels = async (provider: string) => {
+    if (availableModels[provider] || loadingModels[provider]) {
+      return; // Already loaded or loading
+    }
+
+    setLoadingModels(prev => ({ ...prev, [provider]: true }));
+    
+    try {
+      const tenantService = serviceFactory.get<TenantService>('tenants');
+      const response = await tenantService.getAvailableModels(provider);
+      
+      setAvailableModels(prev => ({
+        ...prev,
+        [provider]: response.models
+      }));
+    } catch (error) {
+      console.error(`Failed to load models for ${provider}:`, error);
+    } finally {
+      setLoadingModels(prev => ({ ...prev, [provider]: false }));
+    }
+  };
   const [fieldExtractionMessage, setFieldExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [documentExtractionMessage, setDocumentExtractionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
@@ -301,6 +324,23 @@ const TenantConfigPage: React.FC = () => {
   const [tenantConfig, setTenantConfig] = useState<TenantLLMConfigs | null>(null);
   const [fieldLlmHealth, setFieldLlmHealth] = useState<'healthy' | 'unhealthy' | 'unknown'>('unknown');
   const [documentLlmHealth, setDocumentLlmHealth] = useState<'healthy' | 'unhealthy' | 'unknown'>('unknown');
+
+  // Load models when provider changes
+  useEffect(() => {
+    if (tenantConfig?.field_extraction?.provider) {
+      loadAvailableModels(tenantConfig.field_extraction.provider);
+    }
+  }, [tenantConfig?.field_extraction?.provider]);
+
+  useEffect(() => {
+    if (tenantConfig?.document_extraction?.provider) {
+      loadAvailableModels(tenantConfig.document_extraction.provider);
+    }
+  }, [tenantConfig?.document_extraction?.provider]);
+  
+  // Available models state
+  const [availableModels, setAvailableModels] = useState<{[provider: string]: string[]}>({});
+  const [loadingModels, setLoadingModels] = useState<{[provider: string]: boolean}>({});
   const [testingField, setTestingField] = useState(false);
   const [testingDocument, setTestingDocument] = useState(false);
 
@@ -386,6 +426,14 @@ const TenantConfigPage: React.FC = () => {
       }
       
       setTenantConfig(config);
+      
+      // Load available models for the configured providers
+      if (config.field_extraction?.provider) {
+        loadAvailableModels(config.field_extraction.provider);
+      }
+      if (config.document_extraction?.provider) {
+        loadAvailableModels(config.document_extraction.provider);
+      }
       
       // Test health of both configurations
       try {
@@ -645,13 +693,17 @@ const TenantConfigPage: React.FC = () => {
             <Label>LLM Provider</Label>
             <Dropdown
               value={tenantConfig?.field_extraction?.provider || 'openai'}
-              onChange={(value: string) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                field_extraction: {
-                  ...prev.field_extraction!,
-                  provider: value as any
-                }
-              } : null)}
+              onChange={(value: string) => {
+                setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+                  ...prev,
+                  field_extraction: {
+                    ...prev.field_extraction!,
+                    provider: value as any
+                  }
+                } : null);
+                // Load available models for the new provider
+                loadAvailableModels(value);
+              }}
               options={[
                 { value: 'openai', label: 'OpenAI' },
                 { value: 'ollama', label: 'Ollama' },
@@ -662,16 +714,30 @@ const TenantConfigPage: React.FC = () => {
           </div>
           <div>
             <Label>Model</Label>
-            <Input 
+            <Dropdown
               value={tenantConfig?.field_extraction?.model_name || ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              onChange={(value: string) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 field_extraction: {
                   ...prev.field_extraction!,
-                  model_name: e.target.value
+                  model_name: value
                 }
               } : null)}
-              placeholder="e.g., gpt-4, llama2"
+              options={[
+                ...(availableModels[tenantConfig?.field_extraction?.provider || ''] || []).map(model => ({
+                  value: model,
+                  label: model
+                })),
+                // Include current model if it's not in the available models list
+                ...(tenantConfig?.field_extraction?.model_name && 
+                    !(availableModels[tenantConfig?.field_extraction?.provider || ''] || []).includes(tenantConfig.field_extraction.model_name) ? 
+                    [{
+                      value: tenantConfig.field_extraction.model_name,
+                      label: `${tenantConfig.field_extraction.model_name} (current)`
+                    }] : [])
+              ]}
+              placeholder={loadingModels[tenantConfig?.field_extraction?.provider || ''] ? "Loading models..." : "Select Model"}
+              disabled={loadingModels[tenantConfig?.field_extraction?.provider || '']}
             />
           </div>
         </ConfigRow>
@@ -754,13 +820,17 @@ const TenantConfigPage: React.FC = () => {
             <Label>LLM Provider</Label>
             <Dropdown
               value={tenantConfig?.document_extraction?.provider || 'ollama'}
-              onChange={(value: string) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
-                ...prev,
-                document_extraction: {
-                  ...prev.document_extraction!,
-                  provider: value as any
-                }
-              } : null)}
+              onChange={(value: string) => {
+                setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+                  ...prev,
+                  document_extraction: {
+                    ...prev.document_extraction!,
+                    provider: value as any
+                  }
+                } : null);
+                // Load available models for the new provider
+                loadAvailableModels(value);
+              }}
               options={[
                 { value: 'openai', label: 'OpenAI' },
                 { value: 'ollama', label: 'Ollama' },
@@ -771,16 +841,30 @@ const TenantConfigPage: React.FC = () => {
           </div>
           <div>
             <Label>Model</Label>
-            <Input 
+            <Dropdown
               value={tenantConfig?.document_extraction?.model_name || ''}
-              onChange={(e) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
+              onChange={(value: string) => setTenantConfig((prev: TenantLLMConfigs | null) => prev ? {
                 ...prev,
                 document_extraction: {
                   ...prev.document_extraction!,
-                  model_name: e.target.value
+                  model_name: value
                 }
               } : null)}
-              placeholder="e.g., gpt-4, llama2"
+              options={[
+                ...(availableModels[tenantConfig?.document_extraction?.provider || ''] || []).map(model => ({
+                  value: model,
+                  label: model
+                })),
+                // Include current model if it's not in the available models list
+                ...(tenantConfig?.document_extraction?.model_name && 
+                    !(availableModels[tenantConfig?.document_extraction?.provider || ''] || []).includes(tenantConfig.document_extraction.model_name) ? 
+                    [{
+                      value: tenantConfig.document_extraction.model_name,
+                      label: `${tenantConfig.document_extraction.model_name} (current)`
+                    }] : [])
+              ]}
+              placeholder={loadingModels[tenantConfig?.document_extraction?.provider || ''] ? "Loading models..." : "Select Model"}
+              disabled={loadingModels[tenantConfig?.document_extraction?.provider || '']}
             />
           </div>
         </ConfigRow>

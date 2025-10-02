@@ -289,9 +289,17 @@ export const Table = <T extends Record<string, any>>({
                   justifyContent: column.align === 'center' ? 'center' : 
                                  column.align === 'right' ? 'flex-end' : 'flex-start',
                   display: 'flex',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  minWidth: 0,
+                  overflow: 'hidden'
                 }}>
-                  {renderCell(column, row, index)}
+                  <div style={{
+                    width: '100%',
+                    minWidth: 0,
+                    overflow: 'hidden'
+                  }}>
+                    {renderCell(column, row, index)}
+                  </div>
                 </TableCell>
               ))}
               {actions && (

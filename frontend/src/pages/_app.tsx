@@ -10,6 +10,8 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Layout } from '@/components/Layout';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { useErrorState } from '@/stores/globalStore';
+import { useEffect } from 'react';
 
 function MyApp({ Component, pageProps, router }: AppProps) {
   // Create a new QueryClient instance for each app instance
@@ -36,7 +38,16 @@ function MyApp({ Component, pageProps, router }: AppProps) {
 }
 
 function AppContent({ Component, pageProps }: { Component: NextComponentType<any, any, any>; pageProps: any }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, logout } = useAuth();
+  const errorState = useErrorState();
+
+  // Global error handler for authentication failures
+  useEffect(() => {
+    if (errorState.hasError && errorState.errorType === 'auth_failed') {
+      console.log('🔄 Global error handler: Authentication failed, triggering logout');
+      logout();
+    }
+  }, [errorState.hasError, errorState.errorType, logout]);
 
   if (isLoading) {
     return (

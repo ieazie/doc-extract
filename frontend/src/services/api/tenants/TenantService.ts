@@ -251,8 +251,8 @@ export class TenantService extends BaseApiClient {
   }
 
   // Available Models
-  async getAvailableModels(): Promise<AvailableModelsResponse[]> {
-    return this.get<AvailableModelsResponse[]>('/api/models/available');
+  async getAvailableModels(provider: string): Promise<AvailableModelsResponse> {
+    return this.get<AvailableModelsResponse>(`/api/tenant/available-models/${provider}`);
   }
 
 
