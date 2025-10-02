@@ -462,4 +462,4 @@ describe('{Domain}Service', () => {
 - **Code review** must verify compliance with these styling guidelines
 
 ## Backend Development Rules
-Backend-specific rules are defined in `.cursor/rules/backend-development.mdc` and apply to all Python/FastAPI code in the `backend/` directory.
+Backend-specific rules are defined in `backend/.cursor/rules/backend.mdc` and apply to all Python/FastAPI code in the `backend/` directory.
