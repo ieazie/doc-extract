@@ -3,11 +3,7 @@
  * Tests the review action button functionality and API integration
  */
 
-// @ts-ignore - Jest globals
-declare const describe: any, it: any, expect: any, beforeEach: any, afterEach: any;
-declare global {
-  const jest: any;
-}
+// Jest globals are available via setupTests.ts
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';

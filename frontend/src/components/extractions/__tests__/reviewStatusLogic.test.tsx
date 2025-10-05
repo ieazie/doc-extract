@@ -2,6 +2,8 @@
  * Review Status Logic Tests
  * Tests the review status initialization logic that was fixed in ExtractionResultsModal
  */
+
+import '@testing-library/jest-dom';
 describe('Review Status Initialization Logic', () => {
   // This tests the logic that was implemented in the useEffect in ExtractionResultsModal
   const initializeReviewStatus = (extraction: any) => {
