@@ -1,4 +1,5 @@
 // Jest setup file for testing
+import '@testing-library/jest-dom';
 
 // Mock Next.js router
 jest.mock('next/router', () => ({
@@ -49,7 +50,15 @@ jest.mock('styled-components', () => {
   const React = require('react');
   const styled = (tag: any) => (strings: any, ...values: any[]) => {
     const StyledComponent = React.forwardRef((props: any, ref: any) => {
-      return React.createElement(tag, { ...props, ref });
+      // Filter out $ prefixed props to avoid DOM warnings
+      const filteredProps = Object.keys(props).reduce((acc, key) => {
+        if (!key.startsWith('$')) {
+          acc[key] = props[key];
+        }
+        return acc;
+      }, {} as any);
+      
+      return React.createElement(tag, { ...filteredProps, ref });
     });
     StyledComponent.displayName = `Styled(${tag})`;
     return StyledComponent;
@@ -59,6 +68,7 @@ jest.mock('styled-components', () => {
   styled.button = styled('button');
   styled.span = styled('span');
   styled.input = styled('input');
+  styled.textarea = styled('textarea');
   styled.form = styled('form');
   styled.h1 = styled('h1');
   styled.h2 = styled('h2');
@@ -144,9 +154,12 @@ const originalError = console.error;
 // Known noisy React messages that are safe to suppress
 const SUPPRESSED_WARNINGS: string[] = [
   'Warning: ReactDOM.render is no longer supported',
+  'Warning: React does not recognize the `$',
+  'Warning: Invalid attribute name: `$',
 ];
 
 const SUPPRESSED_ERRORS: string[] = [
+  'Failed to update review status', // Expected error from error handling tests
 ];
 
 beforeAll(() => {

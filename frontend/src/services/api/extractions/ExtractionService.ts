@@ -63,18 +63,24 @@ export class ExtractionService extends BaseApiClient {
 
   // Extraction Review
   async startReview(extractionId: string, request: {
-    action: 'start' | 'approve' | 'reject';
-    notes?: string;
-    corrections?: Record<string, any>;
+    action: 'start_review' | 'approve' | 'reject' | 'needs_correction';
+    comments?: string;
+    reviewer?: string;
   }): Promise<{
-    status: string;
-    message: string;
-    review_id: string;
+    extraction_id: string;
+    review_status: string;
+    assigned_reviewer?: string;
+    review_comments?: string;
+    review_completed_at?: string;
+    updated_at: string;
   }> {
     return this.post<{
-      status: string;
-      message: string;
-      review_id: string;
+      extraction_id: string;
+      review_status: string;
+      assigned_reviewer?: string;
+      review_comments?: string;
+      review_completed_at?: string;
+      updated_at: string;
     }>(`/api/extractions/${extractionId}/review`, request);
   }
 
