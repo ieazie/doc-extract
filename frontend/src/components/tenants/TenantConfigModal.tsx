@@ -327,16 +327,16 @@ export default function TenantConfigModal({ tenant, onClose }: TenantConfigModal
     try {
       console.log(`Loading models for provider: ${provider}`);
       const tenantService = serviceFactory.get<TenantService>('tenants');
-      const response = await tenantService.getAvailableModels();
-      const providerResponse = response.find(r => r.provider === provider);
-      if (!providerResponse) {
+      const response = await tenantService.getAvailableModels(provider);
+      
+      if (!response || response.provider !== provider) {
         console.warn(`No models found for provider: ${provider}`);
         return;
       }
-      console.log(`Loaded models for ${provider}:`, providerResponse.models);
+      console.log(`Loaded models for ${provider}:`, response.models);
       
       // Clean and filter the models to ensure we have complete, valid names
-      const cleanedModels = providerResponse.models
+      const cleanedModels = response.models
         .filter(model => model && model.trim().length > 0) // Remove empty/invalid models
         .map(model => model.trim())
         .filter((model, index, arr) => arr.indexOf(model) === index); // Remove duplicates
