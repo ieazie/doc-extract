@@ -1,3 +1,299 @@
 ---
+globs: backend/src/**/*.py
+description: Backend development guidelines for Python and FastAPI
 alwaysApply: true
 ---
+
+# Backend Development Guidelines
+
+## Core Principles
+
+### 1. Avoid Code Duplication
+- **MANDATORY**: Never duplicate functionality or features
+- Extract common logic into reusable functions, classes, or services
+- Use inheritance, composition, and dependency injection to share code
+- Create utility modules for common operations
+- Example:
+  ```python
+  # ❌ BAD - Duplicated validation
+  def validate_user_email(email: str) -> bool:
+      return "@" in email and "." in email.split("@")[1]
+  
+  def validate_admin_email(email: str) -> bool:
+      return "@" in email and "." in email.split("@")[1]
+  
+  # ✅ GOOD - Single reusable function
+  def validate_email(email: str) -> bool:
+      return "@" in email and "." in email.split("@")[1]
+  ```
+
+### 2. Object-Oriented Programming (OOP)
+- **Follow SOLID principles**:
+  - **S**ingle Responsibility Principle
+  - **O**pen/Closed Principle  
+  - **L**iskov Substitution Principle
+  - **I**nterface Segregation Principle
+  - **D**ependency Inversion Principle
+
+- **Use proper class design**:
+  ```python
+  # ✅ GOOD - Proper OOP design
+  class BaseService:
+      def __init__(self, db: Session):
+          self.db = db
+  
+  class UserService(BaseService):
+      def create_user(self, user_data: UserCreate) -> User:
+          # Implementation
+          pass
+  
+  class EmailService(BaseService):
+      def send_email(self, to: str, subject: str, body: str) -> bool:
+          # Implementation
+          pass
+  ```
+
+### 3. Python Best Practices
+- **Follow PEP 8** style guidelines
+- **Use type hints** for all function parameters and return types
+- **Use dataclasses or Pydantic models** for data structures
+- **Implement proper error handling** with custom exceptions
+- **Use context managers** for resource management
+
+## Code Organization
+
+### 4. Project Structure
+Follow the established structure in [backend/src](mdc:backend/src):
+- `api/` - FastAPI route handlers
+- `services/` - Business logic services
+- `models/` - Database models and schemas
+- `core/` - Core functionality and utilities
+- `utils/` - Utility functions
+
+### 5. Service Layer Pattern
+- **Services contain business logic**
+- **APIs are thin wrappers** around services
+- **Services handle database operations**
+- **APIs handle HTTP concerns**
+
+```python
+# ✅ GOOD - Service layer pattern
+class DocumentService:
+    def __init__(self, db: Session, s3_service: S3Service):
+        self.db = db
+        self.s3_service = s3_service
+    
+    def upload_document(self, file_data: bytes, filename: str) -> Document:
+        # Business logic here
+        pass
+
+@router.post("/documents/upload")
+async def upload_document(
+    file: UploadFile,
+    service: DocumentService = Depends(get_document_service)
+):
+    # Thin API wrapper
+    return await service.upload_document(file, filename)
+```
+
+### 6. Dependency Injection
+- **Use FastAPI's dependency injection**
+- **Create dependency providers** for services
+- **Avoid global state** and singletons
+- **Make dependencies explicit** in function signatures
+
+## Error Handling
+
+### 7. Exception Handling
+- **Create custom exception classes**
+- **Use proper HTTP status codes**
+- **Log errors appropriately**
+- **Return meaningful error messages**
+
+```python
+# ✅ GOOD - Custom exceptions
+class DocumentNotFoundError(Exception):
+    def __init__(self, document_id: str):
+        self.document_id = document_id
+        super().__init__(f"Document {document_id} not found")
+
+@router.get("/documents/{document_id}")
+async def get_document(document_id: str, db: Session = Depends(get_db)):
+    try:
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            raise DocumentNotFoundError(document_id)
+        return document
+    except DocumentNotFoundError:
+        raise HTTPException(status_code=404, detail="Document not found")
+```
+
+## Database & Data Management
+
+### 8. Database Best Practices
+- **Use SQLAlchemy ORM** properly
+- **Implement proper relationships** between models
+- **Use database migrations** for schema changes
+- **Handle database transactions** correctly
+- **Use connection pooling**
+
+### 9. Data Validation
+- **Use Pydantic models** for request/response validation
+- **Validate all input data**
+- **Sanitize user inputs**
+- **Use appropriate field types** and constraints
+
+```python
+# ✅ GOOD - Pydantic validation
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    name: str = Field(..., min_length=2, max_length=100)
+    
+    @validator('password')
+    def validate_password(cls, v):
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain uppercase letter')
+        return v
+```
+
+## Performance & Scalability
+
+### 10. Performance Optimization
+- **Use async/await** for I/O operations
+- **Implement proper caching** strategies
+- **Use database indexes** appropriately
+- **Optimize database queries** (avoid N+1 problems)
+- **Use connection pooling**
+
+### 11. Background Tasks
+- **Use Celery** for long-running tasks
+- **Implement proper task monitoring**
+- **Handle task failures** gracefully
+- **Use task queues** for scalability
+
+## Security
+
+### 12. Security Best Practices
+- **Validate all inputs**
+- **Use proper authentication** and authorization
+- **Implement rate limiting**
+- **Sanitize file uploads**
+- **Use environment variables** for secrets
+- **Implement proper logging** (avoid logging sensitive data)
+
+### 13. API Security
+- **Use HTTPS** in production
+- **Implement CORS** properly
+- **Use API versioning**
+- **Implement proper error handling** (don't leak internal details)
+
+## Testing
+
+### 14. Testing Guidelines
+- **Write unit tests** for all services
+- **Write integration tests** for APIs
+- **Use pytest** for testing framework
+- **Mock external dependencies**
+- **Achieve good test coverage**
+
+```python
+# ✅ GOOD - Test structure
+class TestUserService:
+    def test_create_user_success(self):
+        # Arrange
+        user_data = UserCreate(email="test@example.com", name="Test User")
+        
+        # Act
+        result = self.user_service.create_user(user_data)
+        
+        # Assert
+        assert result.email == user_data.email
+        assert result.id is not None
+```
+
+## Documentation
+
+### 15. Code Documentation
+- **Write docstrings** for all public methods
+- **Use type hints** everywhere
+- **Document API endpoints** with FastAPI
+- **Keep README updated**
+- **Document environment setup**
+
+```python
+# ✅ GOOD - Proper documentation
+def process_document(
+    self, 
+    document_id: str, 
+    template_id: str
+) -> ExtractionResult:
+    """
+    Process a document with the specified template.
+    
+    Args:
+        document_id: UUID of the document to process
+        template_id: UUID of the template to use
+        
+    Returns:
+        ExtractionResult containing extracted data
+        
+    Raises:
+        DocumentNotFoundError: If document doesn't exist
+        TemplateNotFoundError: If template doesn't exist
+    """
+    # Implementation
+    pass
+```
+
+## Code Quality
+
+### 16. Code Review Standards
+- **Review for duplication**
+- **Check OOP principles**
+- **Verify error handling**
+- **Ensure proper testing**
+- **Validate security practices**
+
+### 17. Refactoring Guidelines
+- **Refactor when duplication is found**
+- **Extract common functionality**
+- **Improve class design**
+- **Optimize performance bottlenecks**
+- **Update documentation**
+
+## Environment & Configuration
+
+### 18. Configuration Management
+- **Use environment variables** for configuration
+- **Separate configs** by environment (dev, staging, prod)
+- **Use Pydantic Settings** for configuration validation
+- **Keep secrets secure**
+
+```python
+# ✅ GOOD - Configuration with Pydantic
+class Settings(BaseSettings):
+    database_url: str
+    redis_url: str
+    jwt_secret_key: str
+    environment: str = "development"
+    
+    class Config:
+        env_file = ".env"
+```
+
+## Enforcement
+
+### 19. Quality Gates
+- **No code duplication** allowed
+- **All functions must have type hints**
+- **All public methods must have docstrings**
+- **All services must have tests**
+- **All APIs must have proper error handling**
+
+### 20. Continuous Improvement
+- **Regular code reviews**
+- **Refactor legacy code**
+- **Update dependencies**
+- **Monitor performance**
+- **Improve documentation**
