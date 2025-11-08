@@ -312,10 +312,10 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-const PanelContent = styled.div<{ collapsed?: boolean }>`
+const PanelContent = styled.div<{ $collapsed?: boolean }>`
   flex: 1;
   overflow-y: auto;
-  ${props => props.collapsed && 'display: none;'}
+  ${props => props.$collapsed && 'display: none;'}
 `;
 
 // Schema Panel Components
@@ -616,6 +616,7 @@ interface ExtractionResultsModalProps {
   extractionId: string;
   isOpen: boolean;
   onClose: () => void;
+  onDataChange?: () => void;
 }
 
 // Language Validation Info Component
@@ -661,7 +662,8 @@ const LanguageValidationInfoComponent: React.FC<{ template: any; document: any }
 const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
   extractionId,
   isOpen,
-  onClose
+  onClose,
+  onDataChange
 }) => {
   const [activeTab, setActiveTab] = useState<'formatted' | 'raw'>('raw');
   const [collapsedPanels, setCollapsedPanels] = useState<{
@@ -836,9 +838,11 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
 
   // Update review status when extraction data loads
   useEffect(() => {
-    // Note: review_status is handled separately through ExtractionReview interface
-    // For now, we'll use a default status
-    if (extraction) {
+    if (extraction && extraction.review_status) {
+      // Use the actual review status from the extraction data
+      setReviewStatus(extraction.review_status as 'pending' | 'in_review' | 'approved' | 'rejected' | 'needs_correction');
+    } else if (extraction) {
+      // Default to pending if no review status is set
       setReviewStatus('pending');
     }
   }, [extraction]);
@@ -1066,7 +1070,7 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
               </CollapseButton>
             </PanelHeader>
             
-            <PanelContent collapsed={collapsedPanels.schema}>
+            <PanelContent $collapsed={collapsedPanels.schema}>
               {extractionLoading ? (
                 <LoadingState>Loading extraction...</LoadingState>
               ) : templateLoading ? (
@@ -1111,7 +1115,7 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
               </CollapseButton>
             </PanelHeader>
             
-            <PanelContent collapsed={collapsedPanels.document}>
+            <PanelContent $collapsed={collapsedPanels.document}>
               {documentLoading || previewLoading || imageLoading ? (
                 <LoadingState>Loading document...</LoadingState>
               ) : documentPreviewError || documentContentError ? (
@@ -1203,7 +1207,7 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
               </PanelHeaderRight>
             </PanelHeader>
             
-            <PanelContent collapsed={collapsedPanels.results}>
+            <PanelContent $collapsed={collapsedPanels.results}>
               {extractionLoading ? (
                 <LoadingState>Loading results...</LoadingState>
               ) : extractionError ? (
@@ -1235,6 +1239,7 @@ const ExtractionResultsModalContent: React.FC<ExtractionResultsModalProps> = ({
                     reviewStatus={reviewStatus}
                     showReviewActions={true}
                     onReviewStatusChange={handleReviewStatusChange}
+                    onDataChange={onDataChange}
                     isEditing={isEditing}
                     onToggleEdit={handleToggleEdit}
                     onFieldValueChange={handleFieldValueChange}

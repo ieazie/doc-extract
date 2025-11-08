@@ -32,6 +32,7 @@ email-validator==2.1.0
 python-jose[cryptography]>=3.4.0
 cryptography>=3.4.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1  # Pin to 4.x for passlib 1.7.4 compatibility
 python-multipart==0.0.6
 
 # Background tasks and caching

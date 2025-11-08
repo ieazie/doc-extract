@@ -256,8 +256,8 @@ services:
       /bin/sh -c "
       echo 'Waiting for Ollama to be ready...';
       sleep 15;
-      echo 'Pulling Gemma 3 4B model...';
-      curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"gemma3:4b\"}' || echo 'Model pull failed, will retry during backend startup';
+      echo 'Pulling Gemma 2 2B model...';
+      curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"gemma2:2b\"}' || echo 'Model pull failed, will retry during backend startup';
       echo 'Ollama setup completed';
       "
     restart: "no"

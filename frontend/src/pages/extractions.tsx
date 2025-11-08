@@ -256,6 +256,17 @@ const ExtractionsPage: React.FC = () => {
     setResultsModalOpen(true);
   };
 
+  const handleDataChange = async () => {
+    // Refresh the extractions data when changes occur in the modal
+    try {
+      const extractionService = serviceFactory.get<ExtractionService>('extractions');
+      const data = await extractionService.getExtractions(buildApiParams(filters));
+      setExtractionsData(data || { extractions: [], total: 0, page: 1, per_page: 10, total_pages: 0 });
+    } catch (err) {
+      console.error('Error refreshing extractions after data change:', err);
+    }
+  };
+
   const handleSort = (key: string, direction: 'asc' | 'desc') => {
     setFilters(prev => ({
       ...prev,
@@ -583,6 +594,7 @@ const ExtractionsPage: React.FC = () => {
           extractionId={selectedExtractionId}
           isOpen={resultsModalOpen}
           onClose={handleCloseResultsModal}
+          onDataChange={handleDataChange}
         />
       )}
     </PageContainer>

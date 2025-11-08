@@ -150,6 +150,7 @@ interface ExtractionResultsPanelProps {
   reviewStatus?: ReviewStatus;
   showReviewActions?: boolean;
   onReviewStatusChange?: (status: ReviewStatus) => void;
+  onDataChange?: () => void;
   // Field editing props
   isEditing?: boolean;
   onToggleEdit?: () => void;
@@ -177,6 +178,7 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
   reviewStatus = 'pending',
   showReviewActions = false,
   onReviewStatusChange,
+  onDataChange,
   // Field editing props
   isEditing = false,
   onToggleEdit,
@@ -320,6 +322,7 @@ export const ExtractionResultsPanel: React.FC<ExtractionResultsPanelProps> = ({
             onToggleEdit={onToggleEdit}
             hasPendingCorrections={hasPendingCorrections}
             onSaveCorrections={onSaveCorrections}
+            onDataChange={onDataChange}
           />
         )}
         </HeaderRight>

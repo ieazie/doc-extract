@@ -4,6 +4,7 @@
  */
 import React, { useState } from 'react';
 import styled from 'styled-components';
+import { useQueryClient } from 'react-query';
 import { 
   CheckCircle, 
   XCircle, 
@@ -30,6 +31,7 @@ interface ReviewActionButtonsProps {
   onSaveCorrections?: () => void;
   isEditing?: boolean;
   onToggleEdit?: () => void;
+  onDataChange?: () => void;
   className?: string;
 }
 
@@ -349,12 +351,14 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
   onSaveCorrections,
   isEditing = false,
   onToggleEdit,
+  onDataChange,
   className
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [commentAction, setCommentAction] = useState<'approve' | 'reject' | 'needs_correction' | null>(null);
   const [comments, setComments] = useState('');
+  const queryClient = useQueryClient();
   
   // Notification state
   const [notification, setNotification] = useState<{
@@ -379,8 +383,8 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
     setIsLoading(true);
     try {
       const request = {
-        action: (action === 'start_review' ? 'start' : action) as 'start' | 'approve' | 'reject',
-        notes: comments || undefined
+        action: action as 'start_review' | 'approve' | 'reject' | 'needs_correction',
+        comments: comments || undefined
       };
 
       const extractionService = serviceFactory.get<ExtractionService>('extractions');
@@ -411,7 +415,14 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
           break;
       }
       
-      console.log(`Review action "${action}" completed successfully`);
+      // Review action completed successfully
+      
+      // Invalidate queries to refresh data in the table
+      queryClient.invalidateQueries(['extraction', extractionId]);
+      queryClient.invalidateQueries(['extractions']);
+      
+      // Notify parent component of data change
+      onDataChange?.();
       
       // Show success notification
       setNotification({
@@ -442,8 +453,8 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
     setIsLoading(true);
     try {
       const request = {
-        action: (commentAction === 'needs_correction' ? 'reject' : commentAction) as 'start' | 'approve' | 'reject',
-        notes: comments.trim() || undefined
+        action: commentAction as 'start_review' | 'approve' | 'reject' | 'needs_correction',
+        comments: comments.trim() || undefined
       };
 
       const extractionService = serviceFactory.get<ExtractionService>('extractions');
@@ -473,6 +484,13 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
       setShowCommentModal(false);
       setComments('');
       setCommentAction(null);
+      
+      // Invalidate queries to refresh data in the table
+      queryClient.invalidateQueries(['extraction', extractionId]);
+      queryClient.invalidateQueries(['extractions']);
+      
+      // Notify parent component of data change
+      onDataChange?.();
     } catch (error) {
       console.error('Failed to update review status:', error);
       // TODO: Show error toast
@@ -525,7 +543,6 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
             $variant="start_review"
             $isLoading={isLoading}
             onClick={() => {
-              console.log('Start Review button clicked');
               handleAction('start_review');
             }}
             disabled={isLoading}
@@ -554,7 +571,6 @@ export const ReviewActionButtons: React.FC<ReviewActionButtonsProps> = ({
             $variant="approve"
             $isLoading={isLoading}
             onClick={() => {
-              console.log('Approve button clicked');
               handleAction('approve', true);
             }}
             disabled={isLoading}

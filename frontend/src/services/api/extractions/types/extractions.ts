@@ -190,6 +190,7 @@ export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed'
 export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'needs_correction' | 'in_review';
 
 export interface ReviewActionRequest {
-  action: 'approve' | 'reject' | 'start_review';
-  reason?: string;
+  action: 'start_review' | 'approve' | 'reject' | 'needs_correction';
+  comments?: string;
+  reviewer?: string;
 }

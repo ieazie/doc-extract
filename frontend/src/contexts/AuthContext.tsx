@@ -14,7 +14,7 @@
  * - Backend enforces proper token validation and rotation
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { AuthService, TenantService, serviceFactory } from '@/services/api/index';
 
@@ -89,6 +89,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null); // Stored in sessionStorage for React navigation compatibility
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Initialization lock to prevent concurrent refresh attempts
+  const isInitializing = useRef(false);
+  const initializationPromise = useRef<Promise<void> | null>(null);
 
   // Helper functions for access token persistence
   const getStoredAccessToken = (): string | null => {
@@ -215,20 +219,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
           }
         } else {
-          // No stored user – still attempt silent refresh (cookie-based)
-          const authService = serviceFactory.get<AuthService>('auth');
-          const refreshResult = await authService.silentRefreshToken();
-          if (refreshResult) {
-            setUser(refreshResult.user || null);
-            setTenant(null);
-            setAccessToken(refreshResult.access_token);
-            setStoredAccessToken(refreshResult.access_token);
-            serviceFactory.setAuthToken(refreshResult.access_token);
-            if (refreshResult.user?.tenant_id) {
-              serviceFactory.setTenantId(refreshResult.user.tenant_id);
-              localStorage.setItem('auth_user', JSON.stringify(refreshResult.user));
+          // No stored user – check if we have a refresh token cookie before attempting refresh
+          // This prevents unnecessary 401 errors on first-time visitors
+          const hasRefreshCookie = document.cookie.includes('refresh_token=');
+          
+          if (hasRefreshCookie) {
+            console.log('🔄 No stored user but refresh cookie found, attempting silent refresh...');
+            const authService = serviceFactory.get<AuthService>('auth');
+            const refreshResult = await authService.silentRefreshToken();
+            
+            if (refreshResult) {
+              console.log('✅ Silent refresh successful (cookie-based)');
+              setUser(refreshResult.user || null);
+              setTenant(null);
+              setAccessToken(refreshResult.access_token);
+              setStoredAccessToken(refreshResult.access_token);
+              serviceFactory.setAuthToken(refreshResult.access_token);
+              if (refreshResult.user?.tenant_id) {
+                serviceFactory.setTenantId(refreshResult.user.tenant_id);
+                localStorage.setItem('auth_user', JSON.stringify(refreshResult.user));
+              }
+            } else {
+              console.log('❌ Silent refresh failed - clearing auth');
+              clearAuthData();
             }
           } else {
+            // No stored user and no refresh cookie - this is a fresh visitor
+            console.log('👤 No stored user and no refresh cookie - fresh visitor');
             clearAuthData();
           }
         }
@@ -241,7 +258,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     };
 
-    initializeAuth();
+    // Prevent concurrent initialization attempts (RACE CONDITION FIX)
+    if (isInitializing.current || initializationPromise.current) {
+      console.log('⏭️ Initialization already in progress, skipping...');
+      return;
+    }
+
+    isInitializing.current = true;
+    initializationPromise.current = initializeAuth().finally(() => {
+      isInitializing.current = false;
+      initializationPromise.current = null;
+    });
 
     // Listen for auth logout events from API client
     const handleAuthLogout = () => {
@@ -254,7 +281,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       window.removeEventListener('auth:logout', handleAuthLogout);
     };
-  }, []); // Run once on mount
+  }, [clearAuthData]); // Run once on mount
 
   // Simple token refresh on 401 errors (handled by API interceptor)
 
