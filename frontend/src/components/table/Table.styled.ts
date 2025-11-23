@@ -164,7 +164,7 @@ export const TableRow = styled.div<{ $columns: number; $gridTemplate?: string }>
   transition: background-color 0.2s;
   ${props => props.$gridTemplate && `grid-template-columns: ${props.$gridTemplate} !important;`}
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   
   &:hover {
     background: #f9fafb;

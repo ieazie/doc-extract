@@ -616,11 +616,12 @@ class RateLimitService:
         now = datetime.now(timezone.utc)
         window_duration = self._get_window_duration(limit_type)
         if now - rl.window_start > window_duration:
-            rl.current_count = 0
+            rl.current_usage = 0  # Fixed: use current_usage instead of current_count
             rl.window_start = now
+            rl.window_end = now + window_duration
             self.db.commit()
 
-        return rl.current_count < limit_value
+        return rl.current_usage < limit_value  # Fixed: use current_usage instead of current_count
     
     def increment_rate_limit(self, tenant_id: UUID, limit_type: str) -> None:
         """Increment rate limit counter"""
@@ -632,15 +633,19 @@ class RateLimitService:
         ).first()
         
         if rate_limit:
-            rate_limit.current_count += 1
+            rate_limit.current_usage += 1  # Fixed: use current_usage instead of current_count
         else:
             # Create new rate limit record
             from datetime import timezone
+            now = datetime.now(timezone.utc)
+            window_duration = self._get_window_duration(limit_type)
             rate_limit = TenantRateLimit(
                 tenant_id=tenant_id,
                 limit_type=limit_type,
-                current_count=1,
-                window_start=datetime.now(timezone.utc)
+                limit_value=1000,  # Default limit value
+                current_usage=1,  # Fixed: use current_usage instead of current_count
+                window_start=now,
+                window_end=now + window_duration
             )
             self.db.add(rate_limit)
         
@@ -649,13 +654,17 @@ class RateLimitService:
     def reset_rate_limits(self, tenant_id: UUID) -> bool:
         """Reset all rate limits for tenant"""
         try:
+            from datetime import timezone
             rate_limits = self.db.query(TenantRateLimit).filter(
                 TenantRateLimit.tenant_id == tenant_id
             ).all()
             
+            now = datetime.now(timezone.utc)
             for rate_limit in rate_limits:
-                rate_limit.current_count = 0
-                rate_limit.window_start = datetime.utcnow()
+                rate_limit.current_usage = 0  # Fixed: use current_usage instead of current_count
+                rate_limit.window_start = now
+                window_duration = self._get_window_duration(rate_limit.limit_type)
+                rate_limit.window_end = now + window_duration
             
             self.db.commit()
             return True

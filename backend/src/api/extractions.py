@@ -157,7 +157,43 @@ async def create_extraction(
         ).first()
         
         if existing_extraction:
-            # Return the existing extraction instead of creating a new one
+            # If the existing extraction failed, allow retry by resetting it to pending
+            if existing_extraction.status == "failed":
+                existing_extraction.status = "pending"
+                existing_extraction.error_message = None
+                existing_extraction.results = None
+                existing_extraction.confidence_scores = None
+                db.commit()
+                db.refresh(existing_extraction)
+                
+                # Restart background extraction task
+                prompt_config = {
+                    "prompt": template.extraction_prompt,
+                    "language": template.language,
+                    "auto_detect_language": template.auto_detect_language,
+                    "validation_rules": template.validation_rules
+                }
+                
+                background_tasks.add_task(
+                    process_extraction,
+                    str(existing_extraction.id),
+                    document.raw_content,
+                    template.extraction_schema,
+                    prompt_config
+                )
+                
+                return ExtractionResponse(
+                    id=str(existing_extraction.id),
+                    document_id=str(existing_extraction.document_id),
+                    template_id=str(existing_extraction.template_id),
+                    status=existing_extraction.status,
+                    document_name=document.original_filename,
+                    template_name=template.name,
+                    created_at=existing_extraction.created_at.isoformat(),
+                    updated_at=existing_extraction.updated_at.isoformat()
+                )
+            
+            # Return the existing extraction if it's not failed (pending, processing, or completed)
             return ExtractionResponse(
                 id=str(existing_extraction.id),
                 document_id=str(existing_extraction.document_id),
