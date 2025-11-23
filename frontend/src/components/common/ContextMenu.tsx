@@ -135,8 +135,15 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ actions, className }) => {
     };
 
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      // Add a small delay before attaching the listener to prevent immediate closure
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 0);
+      
+      return () => {
+        clearTimeout(timeoutId);
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
     }
   }, [isOpen]);
 
@@ -215,13 +222,20 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ actions, className }) => {
     <MenuContainer className={className}>
       <MenuButton
         ref={buttonRef}
-        onClick={handleToggle}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleToggle();
+        }}
         aria-label="Open context menu"
       >
         <MoreVertical size={16} />
       </MenuButton>
       
-      <MenuDropdown ref={menuRef} $isOpen={isOpen} $position={position}>
+      <MenuDropdown 
+        ref={menuRef} 
+        $isOpen={isOpen} 
+        $position={position}
+      >
         {visibleActions.map((action) => (
           <MenuItem
             key={action.id}

@@ -183,7 +183,6 @@ export const TableCell = styled.div`
   font-size: 0.875rem;
   font-weight: 400;
   min-width: 0 !important;
-  overflow: hidden !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
   flex: 1;
