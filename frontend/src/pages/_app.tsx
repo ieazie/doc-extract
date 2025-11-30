@@ -67,9 +67,11 @@ function AppContent({
   // Global error handler for authentication failures
   useEffect(() => {
     if (errorState.hasError && errorState.errorType === "auth_failed") {
-      console.log(
-        "Global error handler: Authentication failed, triggering logout"
-      );
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          "Global error handler: Authentication failed, triggering logout"
+        );
+      }
       logout();
     }
   }, [errorState.hasError, errorState.errorType, logout]);
