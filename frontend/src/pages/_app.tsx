@@ -1,9 +1,9 @@
 import type { AppProps } from "next/app";
 import type { NextComponentType } from "next";
 import React, { useState, useEffect } from "react";
-import { ThemeProvider } from "styled-components";
+import styled, { ThemeProvider } from "styled-components";
 import { QueryClient, QueryClientProvider } from "react-query";
-import type { ErrorInfo } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 
 import { GlobalStyle } from "@/styles/GlobalStyle";
 import { theme } from "@/styles/theme";
@@ -12,17 +12,14 @@ import { Layout } from "@/components/Layout";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { useErrorState } from "@/stores/globalStore";
-import ErrorBoundary from "@/components/ErrorBoundary";
 import ErrorFallback from "@/components/ErrorFallback";
 
-const renderErrorFallback = ({
-  error,
-  reset,
-}: {
-  error: Error;
-  reset: () => void;
-  info: React.ErrorInfo;
-}) => <ErrorFallback error={error} reset={reset} />;
+const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+`;
 
 function MyApp({ Component, pageProps, router }: AppProps) {
   // Create a new QueryClient instance for each app instance
@@ -71,7 +68,7 @@ function AppContent({
   useEffect(() => {
     if (errorState.hasError && errorState.errorType === "auth_failed") {
       console.log(
-        "🔄 Global error handler: Authentication failed, triggering logout"
+        "Global error handler: Authentication failed, triggering logout"
       );
       logout();
     }
@@ -79,16 +76,9 @@ function AppContent({
 
   if (isLoading) {
     return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-        }}
-      >
+      <LoadingContainer>
         <LoadingSpinner size={48} />
-      </div>
+      </LoadingContainer>
     );
   }
 
@@ -96,21 +86,31 @@ function AppContent({
     return <LoginForm />;
   }
 
+  const content = (
+    <Layout>
+      <Component {...pageProps} />
+    </Layout>
+  );
+
+  if (process.env.NODE_ENV === "development") {
+    return content;
+  }
+
   return (
     <ErrorBoundary
-      key={currentPath}
-      onError={(error: Error, info: ErrorInfo) => {
-        // Hook for observability; integrate Sentry or similar here
-        if (process.env.NODE_ENV !== "production") {
-          // eslint-disable-next-line no-console
-          console.error("[App ErrorBoundary]", error, info);
-        }
+      FallbackComponent={ErrorFallback}
+      onReset={() => {
+        // Reset any state when error boundary resets
+        globalThis.location.reload();
       }}
-      fallback={renderErrorFallback}
+      onError={(error, info) => {
+        // TODO: integrate Sentry or similar here
+        // eslint-disable-next-line no-console
+        console.error("[App ErrorBoundary]", error, info);
+      }}
+      resetKeys={[currentPath]}
     >
-      <Layout>
-        <Component {...pageProps} />
-      </Layout>
+      {content}
     </ErrorBoundary>
   );
 }
