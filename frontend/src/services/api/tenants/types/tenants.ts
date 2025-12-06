@@ -410,8 +410,10 @@ export interface TenantRateLimit {
   id: string;
   tenant_id: string;
   limit_type: string;
-  current_count: number;
+  limit_value: number;
   window_start: string;
+  window_end: string;
+  current_usage: number;
   created_at: string;
   updated_at: string;
 }

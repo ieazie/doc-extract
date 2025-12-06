@@ -79,8 +79,10 @@ class TenantRateLimitResponse(BaseModel):
     id: UUID
     tenant_id: UUID
     limit_type: str
-    current_count: int
+    limit_value: int
     window_start: datetime
+    window_end: datetime
+    current_usage: int
     created_at: datetime
     updated_at: datetime
 
