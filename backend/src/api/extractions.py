@@ -5,7 +5,7 @@ Handles document extraction using LangExtract + Gemma
 from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func, Float
+from sqlalchemy import and_, or_, func, Float, update
 from sqlalchemy.types import Text
 import uuid
 import logging
@@ -114,7 +114,7 @@ def build_prompt_config(template: Template) -> dict:
         Dictionary with prompt configuration including all required fields
     """
     return {
-        "prompt": template.extraction_prompt,
+        "system_prompt": template.extraction_prompt,  # Fixed: LLM providers expect "system_prompt", not "prompt"
         "language": template.language,
         "auto_detect_language": template.auto_detect_language,
         "require_language_match": template.require_language_match,
@@ -180,19 +180,47 @@ async def create_extraction(
         if existing_extraction:
             # If the existing extraction failed, allow retry by resetting it to pending
             if existing_extraction.status == "failed":
-                # Reset extraction status and results
-                existing_extraction.status = "pending"
-                existing_extraction.error_message = None
-                existing_extraction.results = None
-                existing_extraction.confidence_scores = None
+                # ATOMIC UPDATE: Use compare-and-swap to prevent race conditions
+                # Only update if status is still "failed" - prevents concurrent retries
                 
-                # Reset review metadata to ensure clean state on retry
-                existing_extraction.review_status = "pending"
-                existing_extraction.assigned_reviewer = None
-                existing_extraction.review_comments = None
-                existing_extraction.review_completed_at = None
+                rows_updated = db.execute(
+                    update(Extraction)
+                    .where(
+                        and_(
+                            Extraction.id == existing_extraction.id,
+                            Extraction.status == "failed"  # Only update if still failed
+                        )
+                    )
+                    .values(
+                        status="pending",
+                        error_message=None,
+                        results=None,
+                        confidence_scores=None,
+                        review_status="pending",
+                        assigned_reviewer=None,
+                        review_comments=None,
+                        review_completed_at=None
+                    )
+                ).rowcount
                 
                 db.commit()
+                
+                # Check if we won the race - rowcount will be 1 if we updated, 0 if another request got there first
+                if rows_updated == 0:
+                    # Another request already started the retry - return existing state
+                    db.refresh(existing_extraction)
+                    return ExtractionResponse(
+                        id=str(existing_extraction.id),
+                        document_id=str(existing_extraction.document_id),
+                        template_id=str(existing_extraction.template_id),
+                        status=existing_extraction.status,
+                        document_name=document.original_filename,
+                        template_name=template.name,
+                        created_at=existing_extraction.created_at.isoformat(),
+                        updated_at=existing_extraction.updated_at.isoformat()
+                    )
+                
+                # We won the race - refresh to get updated values
                 db.refresh(existing_extraction)
                 
                 # Build prompt config using helper to ensure consistency with new extraction path
