@@ -231,39 +231,118 @@ class TestRateLimitValueFix:
         assert rate_limit2.limit_value != 1000, "Should not use hardcoded 1000"
 
     def test_increment_rate_limit_signature(self):
-        """Test that increment_rate_limit accepts limit_value parameter"""
-        # This test verifies the method signature
-        def increment_rate_limit(tenant_id: UUID, limit_type: str, limit_value: int = 1000) -> None:
-            """Mock implementation"""
-            pass
+        """Test that the actual RateLimitService.increment_rate_limit accepts limit_value parameter"""
+        import inspect
+        import ast
+        from pathlib import Path
         
-        # Test that method accepts limit_value parameter
-        tenant_id = uuid.uuid4()
+        # Read the source file directly without importing (to avoid database connection)
+        service_file = Path(__file__).parent.parent / 'src' / 'services' / 'tenant_config_service.py'
+        source_code = service_file.read_text()
         
-        # Should not raise TypeError
-        try:
-            increment_rate_limit(tenant_id, "api_requests_per_minute", limit_value=150)
-            signature_correct = True
-        except TypeError:
-            signature_correct = False
+        # Parse the source code
+        tree = ast.parse(source_code)
         
-        assert signature_correct, "increment_rate_limit should accept limit_value parameter"
+        # Find the RateLimitService class and increment_rate_limit method
+        rate_limit_service = None
+        increment_method = None
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == 'RateLimitService':
+                rate_limit_service = node
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef) and item.name == 'increment_rate_limit':
+                        increment_method = item
+                        break
+                break
+        
+        assert rate_limit_service is not None, "RateLimitService class should exist"
+        assert increment_method is not None, "increment_rate_limit method should exist"
+        
+        # Extract parameter names and defaults
+        args = increment_method.args
+        param_names = [arg.arg for arg in args.args]
+        
+        # Verify required parameters exist
+        assert 'self' in param_names, "Method should have self parameter"
+        assert 'tenant_id' in param_names, "Method should accept tenant_id parameter"
+        assert 'limit_type' in param_names, "Method should accept limit_type parameter"
+        assert 'limit_value' in param_names, "Method should accept limit_value parameter"
+        
+        # Verify limit_value has a default value
+        # defaults are stored in reverse order from the end of args
+        limit_value_idx = param_names.index('limit_value')
+        num_defaults = len(args.defaults)
+        num_params = len(param_names)
+        
+        # Check if limit_value has a default (it should be in the defaults list)
+        has_default = (num_params - limit_value_idx) <= num_defaults
+        assert has_default, "limit_value should have a default value"
+        
+        # Get the default value for limit_value
+        default_idx = num_defaults - (num_params - limit_value_idx)
+        default_value_node = args.defaults[default_idx]
+        
+        # Verify the default value is 1000
+        assert isinstance(default_value_node, ast.Constant), "Default should be a constant"
+        assert default_value_node.value == 1000, "limit_value default should be 1000 for backward compatibility"
 
     def test_backward_compatibility_default_parameter(self):
-        """Test that default parameter maintains backward compatibility"""
-        def increment_rate_limit(tenant_id: UUID, limit_type: str, limit_value: int = 1000) -> None:
-            """Mock implementation"""
-            return limit_value
+        """Test that the actual method signature maintains backward compatibility with default parameter"""
+        import ast
+        from pathlib import Path
         
-        tenant_id = uuid.uuid4()
+        # Read the source file directly without importing (to avoid database connection)
+        service_file = Path(__file__).parent.parent / 'src' / 'services' / 'tenant_config_service.py'
+        source_code = service_file.read_text()
         
-        # Call without limit_value should use default 1000
-        result = increment_rate_limit(tenant_id, "api_requests_per_minute")
-        assert result == 1000, "Should use default value of 1000 when not provided"
+        # Parse the source code
+        tree = ast.parse(source_code)
         
-        # Call with limit_value should use provided value
-        result = increment_rate_limit(tenant_id, "api_requests_per_minute", limit_value=250)
-        assert result == 250, "Should use provided value when specified"
+        # Find the RateLimitService class and increment_rate_limit method
+        increment_method = None
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == 'RateLimitService':
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef) and item.name == 'increment_rate_limit':
+                        increment_method = item
+                        break
+                break
+        
+        assert increment_method is not None, "increment_rate_limit method should exist"
+        
+        # Extract parameters
+        args = increment_method.args
+        param_names = [arg.arg for arg in args.args]
+        
+        # Find index of limit_type
+        assert 'limit_type' in param_names, "limit_type parameter should exist"
+        limit_type_idx = param_names.index('limit_type')
+        
+        # All parameters after limit_type should have defaults (for backward compatibility)
+        num_params = len(param_names)
+        num_defaults = len(args.defaults)
+        
+        # Parameters with defaults start at index: num_params - num_defaults
+        first_default_idx = num_params - num_defaults
+        
+        # All parameters after limit_type should have defaults
+        for idx in range(limit_type_idx + 1, num_params):
+            assert idx >= first_default_idx, \
+                f"Parameter '{param_names[idx]}' after 'limit_type' should have a default value for backward compatibility"
+        
+        # Specifically verify limit_value exists and has default of 1000
+        assert 'limit_value' in param_names, "limit_value parameter should exist"
+        limit_value_idx = param_names.index('limit_value')
+        
+        # Get the default value for limit_value
+        default_idx = num_defaults - (num_params - limit_value_idx)
+        default_value_node = args.defaults[default_idx]
+        
+        assert isinstance(default_value_node, ast.Constant), "Default should be a constant"
+        assert default_value_node.value == 1000, \
+            "limit_value should default to 1000 for backward compatibility"
 
     def test_check_rate_limit_uses_stored_limit(self):
         """Test that check_rate_limit compares against the correct limit value"""
