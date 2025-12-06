@@ -49,13 +49,14 @@ const MenuButton = styled.button`
 const MenuContainer = styled.div`
   position: relative;
   display: inline-block;
+  z-index: 100;
 `;
 
 const MenuDropdown = styled.div<{ $isOpen: boolean; $position: 'top' | 'bottom' }>`
   position: absolute;
   ${props => props.$position === 'top' ? 'bottom: 100%;' : 'top: 100%;'}
   right: 0;
-  z-index: 50;
+  z-index: 9999;
   ${props => props.$position === 'top' ? 'margin-bottom: 0.25rem;' : 'margin-top: 0.25rem;'}
   min-width: 12rem;
   background: white;
@@ -64,6 +65,7 @@ const MenuDropdown = styled.div<{ $isOpen: boolean; $position: 'top' | 'bottom' 
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   opacity: ${props => props.$isOpen ? 1 : 0};
   visibility: ${props => props.$isOpen ? 'visible' : 'hidden'};
+  display: ${props => props.$isOpen ? 'block' : 'none'};
   transform: ${props => {
     if (!props.$isOpen) {
       return props.$position === 'top' ? 'translateY(0.5rem)' : 'translateY(-0.5rem)';
@@ -133,8 +135,15 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ actions, className }) => {
     };
 
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      // Add a small delay before attaching the listener to prevent immediate closure
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 0);
+      
+      return () => {
+        clearTimeout(timeoutId);
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
     }
   }, [isOpen]);
 
@@ -213,13 +222,20 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ actions, className }) => {
     <MenuContainer className={className}>
       <MenuButton
         ref={buttonRef}
-        onClick={handleToggle}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleToggle();
+        }}
         aria-label="Open context menu"
       >
         <MoreVertical size={16} />
       </MenuButton>
       
-      <MenuDropdown ref={menuRef} $isOpen={isOpen} $position={position}>
+      <MenuDropdown 
+        ref={menuRef} 
+        $isOpen={isOpen} 
+        $position={position}
+      >
         {visibleActions.map((action) => (
           <MenuItem
             key={action.id}

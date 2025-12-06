@@ -241,7 +241,7 @@ export const Table = <T extends Record<string, any>>({
   const getGridTemplateColumns = () => {
     const columnWidths = columns.map(col => col.width || '1fr');
     if (actions) {
-      return [...columnWidths, '1fr'].join(' ');
+      return [...columnWidths, '80px'].join(' '); // Fixed width for actions column
     }
     return columnWidths.join(' ');
   };
@@ -303,8 +303,15 @@ export const Table = <T extends Record<string, any>>({
                 </TableCell>
               ))}
               {actions && (
-                <TableCell style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <TableCell style={{ 
+                  justifyContent: 'flex-start', 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  overflow: 'visible',
+                  position: 'relative',
+                  zIndex: 10
+                }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', width: '100%', overflow: 'visible' }}>
                     {actions(row, index)}
                   </div>
                 </TableCell>

@@ -255,10 +255,11 @@ export interface HealthTestResponse {
 export interface RateLimitStatus {
   endpoint: string;
   limit_type: string;
-  current_count: number;
+  current_usage: number;
   limit: number;
   reset_time: string;
   window_start: string;
+  window_end: string;
   remaining_requests: number;
   is_exceeded: boolean;
 }

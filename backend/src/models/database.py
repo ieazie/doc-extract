@@ -505,8 +505,10 @@ class TenantRateLimit(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     limit_type = Column(String(50), nullable=False)
-    current_count = Column(Integer, default=0)
-    window_start = Column(DateTime(timezone=True), server_default=func.now())
+    limit_value = Column(Integer, nullable=False)  # Maximum allowed value for this limit
+    window_start = Column(DateTime(timezone=True), nullable=False)
+    window_end = Column(DateTime(timezone=True), nullable=False)
+    current_usage = Column(Integer, default=0)  # Current usage count (renamed from current_count)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

@@ -260,10 +260,9 @@ async def create_template(
             language=template_data.language,
             auto_detect_language=template_data.auto_detect_language,
             require_language_match=template_data.require_language_match,
-            schema=template_data.schema,
-            prompt_config=template_data.prompt_config.dict(),
-            extraction_settings=template_data.extraction_settings.dict() if template_data.extraction_settings else {},
-            few_shot_examples=template_data.few_shot_examples or [],
+            extraction_schema=template_data.schema,  # Fixed: use extraction_schema instead of schema
+            extraction_prompt=template_data.prompt_config.instructions if template_data.prompt_config else None,
+            validation_rules={},  # Initialize with empty validation rules
             status=template_data.status
         )
         

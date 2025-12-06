@@ -9,8 +9,7 @@ from uuid import UUID
 import logging
 
 from ..models.database import get_db, User
-from ..services.rate_limit_service import RateLimitService
-from ..services.tenant_config_service import TenantConfigService
+from ..services.tenant_config_service import RateLimitService, TenantConfigService
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +65,11 @@ class RateLimitMiddleware:
                 logger.warning(f"Rate limit exceeded for tenant {user.tenant_id}, type: {limit_type}")
                 return False
             
-            # Increment counter
+            # Increment counter with the actual configured limit value
             rate_limit_service.increment_rate_limit(
                 tenant_id=user.tenant_id,
-                limit_type=limit_type
+                limit_type=limit_type,
+                limit_value=limit_value
             )
             
             return True
