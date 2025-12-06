@@ -171,10 +171,20 @@ class ExtractionService:
     def _increment_rate_limits(self, tenant_id: UUID) -> None:
         """Increment rate limit counters"""
         
-        # Increment extraction counter
+        # Get rate limits configuration to use actual configured limit value
+        rate_limits_config = self.config_service.get_rate_limits_config(tenant_id)
+        if not rate_limits_config:
+            logger.warning(f"No rate limits configured for tenant {tenant_id}, using default")
+            # Use default if no config found
+            limit_value = 20  # Default from RateLimitsConfig schema
+        else:
+            limit_value = rate_limits_config.extractions_per_hour
+        
+        # Increment extraction counter with actual configured limit
         self.rate_limit_service.increment_rate_limit(
             tenant_id=tenant_id,
-            limit_type="extractions_per_hour"
+            limit_type="extractions_per_hour",
+            limit_value=limit_value
         )
     
     def health_check(self, tenant_id: UUID) -> Dict[str, Any]:

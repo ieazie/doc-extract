@@ -100,6 +100,27 @@ class FieldCorrectionResponse(BaseModel):
 # UTILITY FUNCTIONS
 # ============================================================================
 
+def build_prompt_config(template: Template) -> dict:
+    """
+    Build prompt configuration from template.
+    
+    This helper ensures consistent prompt_config construction across
+    both new extractions and retry flows.
+    
+    Args:
+        template: Template object containing extraction configuration
+        
+    Returns:
+        Dictionary with prompt configuration including all required fields
+    """
+    return {
+        "prompt": template.extraction_prompt,
+        "language": template.language,
+        "auto_detect_language": template.auto_detect_language,
+        "require_language_match": template.require_language_match,
+        "validation_rules": template.validation_rules
+    }
+
 # get_tenant_id function removed - now using proper authentication
 
 # ============================================================================
@@ -159,21 +180,25 @@ async def create_extraction(
         if existing_extraction:
             # If the existing extraction failed, allow retry by resetting it to pending
             if existing_extraction.status == "failed":
+                # Reset extraction status and results
                 existing_extraction.status = "pending"
                 existing_extraction.error_message = None
                 existing_extraction.results = None
                 existing_extraction.confidence_scores = None
+                
+                # Reset review metadata to ensure clean state on retry
+                existing_extraction.review_status = "pending"
+                existing_extraction.assigned_reviewer = None
+                existing_extraction.review_comments = None
+                existing_extraction.review_completed_at = None
+                
                 db.commit()
                 db.refresh(existing_extraction)
                 
-                # Restart background extraction task
-                prompt_config = {
-                    "prompt": template.extraction_prompt,
-                    "language": template.language,
-                    "auto_detect_language": template.auto_detect_language,
-                    "validation_rules": template.validation_rules
-                }
+                # Build prompt config using helper to ensure consistency with new extraction path
+                prompt_config = build_prompt_config(template)
                 
+                # Restart background extraction task
                 background_tasks.add_task(
                     process_extraction,
                     str(existing_extraction.id),
@@ -217,14 +242,8 @@ async def create_extraction(
         db.commit()
         db.refresh(extraction)
         
-        # Create prompt configuration from template
-        prompt_config = {
-            "prompt": template.extraction_prompt,
-            "language": template.language,
-            "auto_detect_language": template.auto_detect_language,
-            "require_language_match": template.require_language_match,
-            "validation_rules": template.validation_rules
-        }
+        # Build prompt config using helper to ensure consistency
+        prompt_config = build_prompt_config(template)
         
         # Start background extraction task
         background_tasks.add_task(

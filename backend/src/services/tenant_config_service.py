@@ -623,8 +623,18 @@ class RateLimitService:
 
         return rl.current_usage < limit_value  # Fixed: use current_usage instead of current_count
     
-    def increment_rate_limit(self, tenant_id: UUID, limit_type: str) -> None:
-        """Increment rate limit counter"""
+    def increment_rate_limit(self, tenant_id: UUID, limit_type: str, limit_value: int = 1000) -> None:
+        """
+        Increment rate limit counter.
+        
+        Args:
+            tenant_id: UUID of the tenant
+            limit_type: Type of rate limit (e.g., 'api_requests_per_minute')
+            limit_value: The configured limit value for this tenant and limit type.
+                        Used when creating a new rate limit record. Defaults to 1000
+                        for backward compatibility, but should always be provided
+                        based on tenant configuration.
+        """
         rate_limit = self.db.query(TenantRateLimit).filter(
             and_(
                 TenantRateLimit.tenant_id == tenant_id,
@@ -635,14 +645,14 @@ class RateLimitService:
         if rate_limit:
             rate_limit.current_usage += 1  # Fixed: use current_usage instead of current_count
         else:
-            # Create new rate limit record
+            # Create new rate limit record with tenant's configured limit value
             from datetime import timezone
             now = datetime.now(timezone.utc)
             window_duration = self._get_window_duration(limit_type)
             rate_limit = TenantRateLimit(
                 tenant_id=tenant_id,
                 limit_type=limit_type,
-                limit_value=1000,  # Default limit value
+                limit_value=limit_value,  # Use actual configured limit for the tenant
                 current_usage=1,  # Fixed: use current_usage instead of current_count
                 window_start=now,
                 window_end=now + window_duration
