@@ -111,10 +111,31 @@ def build_prompt_config(template: Template) -> dict:
         template: Template object containing extraction configuration
         
     Returns:
-        Dictionary with prompt configuration including all required fields
+        Dictionary with prompt configuration including all required fields.
+        Note: system_prompt and instructions are guaranteed to be strings (never None)
+        to prevent issues with string formatting in LLM providers.
     """
+    import json
+    
+    # Parse the extraction_prompt field which contains JSON with system_prompt and instructions
+    system_prompt = ""
+    instructions = ""
+    
+    if template.extraction_prompt:
+        try:
+            # Try parsing as JSON (new format with both system_prompt and instructions)
+            parsed_prompt = json.loads(template.extraction_prompt)
+            # Use 'or ""' to handle None values from database - prevents "None" string in prompts
+            system_prompt = parsed_prompt.get("system_prompt") or ""
+            instructions = parsed_prompt.get("instructions") or ""
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            # Fallback for old format (plain text) - treat as instructions for backwards compatibility
+            instructions = template.extraction_prompt or ""
+            system_prompt = ""
+    
     return {
-        "system_prompt": template.extraction_prompt,  # Fixed: LLM providers expect "system_prompt", not "prompt"
+        "system_prompt": system_prompt,
+        "instructions": instructions,
         "language": template.language,
         "auto_detect_language": template.auto_detect_language,
         "require_language_match": template.require_language_match,
