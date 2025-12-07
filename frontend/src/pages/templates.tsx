@@ -155,7 +155,7 @@ const TemplatesPage: React.FC = () => {
     {
       key: 'name',
       label: 'Name',
-      width: '38%',
+      width: '2fr',
       sortable: true,
       render: (value, row) => (
         <div style={{ fontWeight: 600, color: '#1f2937' }}>
@@ -166,7 +166,7 @@ const TemplatesPage: React.FC = () => {
     {
       key: 'document_type_name',
       label: 'Document Type',
-      width: '15%',
+      width: '1fr',
       sortable: true,
       render: (value) => (
         <div style={{ color: '#6b7280' }}>
@@ -177,7 +177,7 @@ const TemplatesPage: React.FC = () => {
     {
       key: 'schema',
       label: 'Schema Fields',
-      width: '12%',
+      width: '1fr',
       render: (value) => {
         const fieldCount = Object.keys(value || {}).length;
         return (
@@ -211,7 +211,7 @@ const TemplatesPage: React.FC = () => {
     {
       key: 'version',
       label: 'Version',
-      width: '6%',
+      width: '80px',
       sortable: true,
       render: (value) => (
         <div style={{ color: '#6b7280', fontFamily: 'monospace' }}>
@@ -222,7 +222,7 @@ const TemplatesPage: React.FC = () => {
     {
       key: 'created_at',
       label: 'Created Date',
-      width: '12%',
+      width: '1fr',
       sortable: true,
       render: (value) => {
         const date = new Date(value);
@@ -239,7 +239,7 @@ const TemplatesPage: React.FC = () => {
     {
       key: 'status',
       label: 'Status',
-      width: '5%',
+      width: '100px',
       sortable: true,
       render: (value) => {
         const statusColors = {
@@ -319,7 +319,7 @@ const TemplatesPage: React.FC = () => {
       label: 'Edit',
       icon: <FileText size={16} />,
       onClick: () => handleEditTemplate(template),
-      hidden: template.status === 'published' // Hide edit for published templates
+      disabled: template.status === 'published' // Disable edit for published templates instead of hiding
     },
     {
       id: 'archive',

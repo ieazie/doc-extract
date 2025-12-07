@@ -20,6 +20,70 @@ router = APIRouter(tags=["templates"])
 logger = logging.getLogger(__name__)
 
 # ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def parse_prompt_config(extraction_prompt: Optional[str]) -> dict:
+    """
+    Parse prompt configuration from the extraction_prompt field.
+    
+    Handles both new JSON format (with system_prompt and instructions)
+    and legacy plain text format (backwards compatibility).
+    
+    Args:
+        extraction_prompt: JSON string or plain text from database
+        
+    Returns:
+        Dictionary with system_prompt, instructions, and output_format.
+        Note: All string fields are guaranteed to be strings (never None)
+        to prevent issues with string formatting in LLM providers.
+    """
+    default_config = {"instructions": "", "system_prompt": "", "output_format": "json"}
+    
+    if not extraction_prompt:
+        return default_config
+    
+    try:
+        # Try parsing as JSON first (new format)
+        parsed_prompt = json.loads(extraction_prompt)
+        # Use 'or ""' to handle None values from database - prevents "None" string in prompts
+        return {
+            "system_prompt": parsed_prompt.get("system_prompt") or "",
+            "instructions": parsed_prompt.get("instructions") or "",
+            "output_format": parsed_prompt.get("output_format") or "json"
+        }
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        # Fallback for old format (plain text) - treat as instructions
+        return {
+            "instructions": extraction_prompt or "",
+            "system_prompt": "",
+            "output_format": "json"
+        }
+
+def serialize_prompt_config(prompt_config: Optional['PromptConfig']) -> Optional[str]:
+    """
+    Serialize prompt configuration to JSON for database storage.
+    
+    Args:
+        prompt_config: PromptConfig object from request
+        
+    Returns:
+        JSON string containing system_prompt, instructions, and output_format
+    """
+    if not prompt_config:
+        return None
+    
+    return json.dumps({
+        "system_prompt": prompt_config.system_prompt,
+        "instructions": prompt_config.instructions,
+        "output_format": prompt_config.output_format
+    })
+
+# ============================================================================
+# REQUEST/RESPONSE MODELS
+# ============================================================================
+
+# ============================================================================
 # PYDANTIC MODELS FOR API
 # ============================================================================
 
@@ -260,10 +324,9 @@ async def create_template(
             language=template_data.language,
             auto_detect_language=template_data.auto_detect_language,
             require_language_match=template_data.require_language_match,
-            schema=template_data.schema,
-            prompt_config=template_data.prompt_config.dict(),
-            extraction_settings=template_data.extraction_settings.dict() if template_data.extraction_settings else {},
-            few_shot_examples=template_data.few_shot_examples or [],
+            extraction_schema=template_data.schema,
+            extraction_prompt=serialize_prompt_config(template_data.prompt_config),
+            validation_rules={},  # Initialize with empty validation rules
             status=template_data.status
         )
         
@@ -289,7 +352,7 @@ async def create_template(
             auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
             require_language_match=template.require_language_match if template.require_language_match is not None else False,
             schema=template.extraction_schema,
-            prompt_config={"instructions": template.extraction_prompt or "", "system_prompt": "", "output_format": "json"},
+            prompt_config=parse_prompt_config(template.extraction_prompt),
             extraction_settings={},
             few_shot_examples=[],
             is_active=template.is_active,
@@ -390,7 +453,7 @@ async def list_templates(
                 auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
                 require_language_match=template.require_language_match if template.require_language_match is not None else False,
                 schema=template.extraction_schema,
-                prompt_config={"instructions": template.extraction_prompt or "", "system_prompt": "", "output_format": "json"},
+                prompt_config=parse_prompt_config(template.extraction_prompt),
                 extraction_settings={},
                 few_shot_examples=[],
                 is_active=template.is_active,
@@ -452,7 +515,7 @@ async def get_template(
             auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
             require_language_match=template.require_language_match if template.require_language_match is not None else False,
             schema=template.extraction_schema,
-            prompt_config={"instructions": template.extraction_prompt or "", "system_prompt": "", "output_format": "json"},
+            prompt_config=parse_prompt_config(template.extraction_prompt),
             extraction_settings={},
             few_shot_examples=[],
             is_active=template.is_active,
@@ -526,8 +589,8 @@ async def update_template(
         if template_data.schema is not None:
             template.extraction_schema = template_data.schema
         if template_data.prompt_config is not None:
-            # Convert PromptConfig to simple text for database storage
-            template.extraction_prompt = template_data.prompt_config.instructions
+            # Store both system_prompt and instructions as JSON
+            template.extraction_prompt = serialize_prompt_config(template_data.prompt_config)
         # extraction_settings column doesn't exist in database - skip
         # few_shot_examples column doesn't exist in database - skip
         if template_data.is_active is not None:
@@ -555,7 +618,7 @@ async def update_template(
             auto_detect_language=template.auto_detect_language if template.auto_detect_language is not None else True,
             require_language_match=template.require_language_match if template.require_language_match is not None else False,
             schema=template.extraction_schema,
-            prompt_config={"instructions": template.extraction_prompt or "", "system_prompt": "", "output_format": "json"},
+            prompt_config=parse_prompt_config(template.extraction_prompt),
             extraction_settings={},
             few_shot_examples=[],
             is_active=template.is_active,
@@ -795,13 +858,17 @@ async def test_template(
                 if doc_type:
                     doc_type_name = doc_type.name
             
+            # Parse the stored prompt config
+            stored_prompt_config = parse_prompt_config(template.extraction_prompt)
+            
+            # Build extraction request with properly parsed prompt config
             extraction_request = ExtractionRequest(
                 document_text=test_document,
                 schema=template.extraction_schema,
                 prompt_config={
-                    "system_prompt": f"Extract data from this {doc_type_name} document according to the schema.",
-                    "instructions": template.extraction_prompt or "",
-                    "output_format": "json",
+                    "system_prompt": stored_prompt_config.get("system_prompt") or f"Extract data from this {doc_type_name} document according to the schema.",
+                    "instructions": stored_prompt_config.get("instructions") or "",
+                    "output_format": stored_prompt_config.get("output_format") or "json",
                     "few_shot_examples": [],
                     # Include template language configuration
                     "language": template.language or "en",

@@ -164,7 +164,7 @@ export const TableRow = styled.div<{ $columns: number; $gridTemplate?: string }>
   transition: background-color 0.2s;
   ${props => props.$gridTemplate && `grid-template-columns: ${props.$gridTemplate} !important;`}
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   
   &:hover {
     background: #f9fafb;
@@ -183,7 +183,6 @@ export const TableCell = styled.div`
   font-size: 0.875rem;
   font-weight: 400;
   min-width: 0 !important;
-  overflow: hidden !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
   flex: 1;

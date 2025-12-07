@@ -5,7 +5,7 @@ Handles document extraction using LangExtract + Gemma
 from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func, Float
+from sqlalchemy import and_, or_, func, Float, update
 from sqlalchemy.types import Text
 import uuid
 import logging
@@ -100,6 +100,48 @@ class FieldCorrectionResponse(BaseModel):
 # UTILITY FUNCTIONS
 # ============================================================================
 
+def build_prompt_config(template: Template) -> dict:
+    """
+    Build prompt configuration from template.
+    
+    This helper ensures consistent prompt_config construction across
+    both new extractions and retry flows.
+    
+    Args:
+        template: Template object containing extraction configuration
+        
+    Returns:
+        Dictionary with prompt configuration including all required fields.
+        Note: system_prompt and instructions are guaranteed to be strings (never None)
+        to prevent issues with string formatting in LLM providers.
+    """
+    import json
+    
+    # Parse the extraction_prompt field which contains JSON with system_prompt and instructions
+    system_prompt = ""
+    instructions = ""
+    
+    if template.extraction_prompt:
+        try:
+            # Try parsing as JSON (new format with both system_prompt and instructions)
+            parsed_prompt = json.loads(template.extraction_prompt)
+            # Use 'or ""' to handle None values from database - prevents "None" string in prompts
+            system_prompt = parsed_prompt.get("system_prompt") or ""
+            instructions = parsed_prompt.get("instructions") or ""
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            # Fallback for old format (plain text) - treat as instructions for backwards compatibility
+            instructions = template.extraction_prompt or ""
+            system_prompt = ""
+    
+    return {
+        "system_prompt": system_prompt,
+        "instructions": instructions,
+        "language": template.language,
+        "auto_detect_language": template.auto_detect_language,
+        "require_language_match": template.require_language_match,
+        "validation_rules": template.validation_rules
+    }
+
 # get_tenant_id function removed - now using proper authentication
 
 # ============================================================================
@@ -157,7 +199,75 @@ async def create_extraction(
         ).first()
         
         if existing_extraction:
-            # Return the existing extraction instead of creating a new one
+            # If the existing extraction failed, allow retry by resetting it to pending
+            if existing_extraction.status == "failed":
+                # ATOMIC UPDATE: Use compare-and-swap to prevent race conditions
+                # Only update if status is still "failed" - prevents concurrent retries
+                
+                rows_updated = db.execute(
+                    update(Extraction)
+                    .where(
+                        and_(
+                            Extraction.id == existing_extraction.id,
+                            Extraction.status == "failed"  # Only update if still failed
+                        )
+                    )
+                    .values(
+                        status="pending",
+                        error_message=None,
+                        results=None,
+                        confidence_scores=None,
+                        review_status="pending",
+                        assigned_reviewer=None,
+                        review_comments=None,
+                        review_completed_at=None
+                    )
+                ).rowcount
+                
+                db.commit()
+                
+                # Check if we won the race - rowcount will be 1 if we updated, 0 if another request got there first
+                if rows_updated == 0:
+                    # Another request already started the retry - return existing state
+                    db.refresh(existing_extraction)
+                    return ExtractionResponse(
+                        id=str(existing_extraction.id),
+                        document_id=str(existing_extraction.document_id),
+                        template_id=str(existing_extraction.template_id),
+                        status=existing_extraction.status,
+                        document_name=document.original_filename,
+                        template_name=template.name,
+                        created_at=existing_extraction.created_at.isoformat(),
+                        updated_at=existing_extraction.updated_at.isoformat()
+                    )
+                
+                # We won the race - refresh to get updated values
+                db.refresh(existing_extraction)
+                
+                # Build prompt config using helper to ensure consistency with new extraction path
+                prompt_config = build_prompt_config(template)
+                
+                # Restart background extraction task
+                background_tasks.add_task(
+                    process_extraction,
+                    str(existing_extraction.id),
+                    document.raw_content,
+                    template.extraction_schema,
+                    prompt_config
+                )
+                
+                return ExtractionResponse(
+                    id=str(existing_extraction.id),
+                    document_id=str(existing_extraction.document_id),
+                    template_id=str(existing_extraction.template_id),
+                    status=existing_extraction.status,
+                    document_name=document.original_filename,
+                    template_name=template.name,
+                    created_at=existing_extraction.created_at.isoformat(),
+                    updated_at=existing_extraction.updated_at.isoformat()
+                )
+            
+            # Return the existing extraction if it's not failed (pending, processing, or completed)
             return ExtractionResponse(
                 id=str(existing_extraction.id),
                 document_id=str(existing_extraction.document_id),
@@ -181,14 +291,8 @@ async def create_extraction(
         db.commit()
         db.refresh(extraction)
         
-        # Create prompt configuration from template
-        prompt_config = {
-            "prompt": template.extraction_prompt,
-            "language": template.language,
-            "auto_detect_language": template.auto_detect_language,
-            "require_language_match": template.require_language_match,
-            "validation_rules": template.validation_rules
-        }
+        # Build prompt config using helper to ensure consistency
+        prompt_config = build_prompt_config(template)
         
         # Start background extraction task
         background_tasks.add_task(
